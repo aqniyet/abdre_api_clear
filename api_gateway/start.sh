@@ -4,6 +4,7 @@
 export JWT_SECRET=${JWT_SECRET:-dev-secret-key}
 export FLASK_ENV=${FLASK_ENV:-development}
 export DEBUG=${DEBUG:-true}
+export PYTHONPATH=/app
 
 # Set rate limiting configuration
 export REQUESTS_PER_MINUTE=${REQUESTS_PER_MINUTE:-60}

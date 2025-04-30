@@ -94,6 +94,9 @@ coverage.xml
 
 # Docker
 .dockerignore
+.env
+.env.dev
+.env.prod
 
 # Deployment
 .vercel

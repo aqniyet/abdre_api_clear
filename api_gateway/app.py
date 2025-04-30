@@ -53,7 +53,7 @@ REALTIME_SERVICE_URL = os.environ.get('REALTIME_SERVICE_URL', 'http://realtime_s
 JWT_SECRET = os.environ.get('JWT_SECRET', 'dev-secret-key')
 
 # Initialize service discovery
-services_config = os.environ.get('SERVICES_CONFIG', '../shared/service-discovery/services.json')
+services_config = os.environ.get('SERVICES_CONFIG', '../shared/service_discovery/services.json')
 initialize_registry(config_file=services_config, start_health_checks=True)
 discovery = ServiceDiscovery()
 

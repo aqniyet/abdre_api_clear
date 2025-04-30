@@ -1,0 +1,92 @@
+name: ABDRE CD Pipeline
+
+on:
+  workflow_run:
+    workflows: ["ABDRE CI Pipeline"]
+    types:
+      - completed
+    branches:
+      - main
+      - develop
+
+jobs:
+  deploy-dev:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/develop' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+    
+    - name: Set up Kustomize
+      uses: imranismail/setup-kustomize@v2
+      with:
+        kustomize-version: "4.5.7"
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+    
+    - name: Update kubeconfig
+      run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+    
+    - name: Set environment variables
+      run: |
+        echo "DOCKER_REGISTRY=${{ secrets.DOCKERHUB_USERNAME }}" >> $GITHUB_ENV
+        echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+        echo "DOMAIN_NAME=${{ secrets.DEV_DOMAIN }}" >> $GITHUB_ENV
+    
+    - name: Deploy to dev environment
+      run: |
+        cd k8s/overlays/dev
+        kustomize edit set image ${DOCKER_REGISTRY}/abdre:${IMAGE_TAG}
+        kustomize build | kubectl apply -f -
+        kubectl rollout status deployment dev-abdre-app -n abdre
+  
+  deploy-prod:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+    
+    - name: Set up Kustomize
+      uses: imranismail/setup-kustomize@v2
+      with:
+        kustomize-version: "4.5.7"
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+    
+    - name: Update kubeconfig
+      run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+    
+    - name: Set environment variables
+      run: |
+        echo "DOCKER_REGISTRY=${{ secrets.DOCKERHUB_USERNAME }}" >> $GITHUB_ENV
+        echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+        echo "DOMAIN_NAME=${{ secrets.PROD_DOMAIN }}" >> $GITHUB_ENV
+    
+    - name: Deploy to production environment
+      run: |
+        cd k8s/overlays/prod
+        kustomize edit set image ${DOCKER_REGISTRY}/abdre:${IMAGE_TAG}
+        kustomize build | kubectl apply -f -
+        kubectl rollout status deployment prod-abdre-app -n abdre 

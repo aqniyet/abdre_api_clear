@@ -8,7 +8,6 @@ A microservices-based application that includes various services:
 - OAuth Service
 - Realtime Service
 - User Service
-- Simple App
 
 ## Getting Started
 
@@ -24,5 +23,4 @@ A microservices-based application that includes various services:
 - `oauth_service/`: OAuth integration
 - `realtime_service/`: Real-time functionality
 - `user_service/`: User management
-- `simple_app/`: Simple application example
 - `docker-compose.yml`: Docker configuration
