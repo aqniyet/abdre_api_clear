@@ -4,7 +4,7 @@
 certifi==2025.4.26
 charset-normalizer==2.0.4
 idna==3.2
-urllib3==1.26.6
+urllib3==1.26.6 
 prometheus-client==0.14.1
 qrcode==7.3
 pillow==8.3.2 

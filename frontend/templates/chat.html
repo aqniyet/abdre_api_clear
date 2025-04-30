@@ -4,184 +4,93 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat - ABDRE</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-        .header {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .main-container {
-            display: flex;
-            flex-direction: column;
-            flex-grow: 1;
-            height: calc(100vh - 60px);
-        }
-        .chat-container {
-            flex-grow: 1;
-            padding: 20px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-        }
-        .message {
-            max-width: 70%;
-            margin-bottom: 15px;
-            padding: 10px 15px;
-            border-radius: 10px;
-            clear: both;
-        }
-        .message-sent {
-            align-self: flex-end;
-            background-color: #dcf8c6;
-        }
-        .message-received {
-            align-self: flex-start;
-            background-color: #f1f0f0;
-        }
-        .message-time {
-            font-size: 0.8em;
-            color: #666;
-            margin-top: 5px;
-            text-align: right;
-        }
-        .input-container {
-            display: flex;
-            padding: 10px;
-            background-color: #f5f5f5;
-            border-top: 1px solid #ddd;
-        }
-        .input-container input {
-            flex-grow: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 20px;
-            margin-right: 10px;
-        }
-        .input-container button {
-            padding: 10px 20px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 20px;
-            cursor: pointer;
-        }
-        .input-container button:hover {
-            background-color: #45a049;
-        }
-    </style>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div class="header">
-        <h2>Chat Room</h2>
-        <a href="/" style="color: white;">Exit</a>
-    </div>
-    
-    <div class="main-container">
-        <div class="chat-container" id="chat-container">
-            <!-- Messages will be added here dynamically -->
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">ABDRE Chat</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarContent">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item" data-auth-required>
+                        <a class="nav-link" href="/my-chats">My Chats</a>
+                    </li>
+                    <li class="nav-item" data-auth-required>
+                        <a class="nav-link" href="/settings">Settings</a>
+                    </li>
+                    <li class="nav-item" data-auth-required>
+                        <a class="nav-link" href="#" data-action="logout">Logout</a>
+                    </li>
+                    <li class="nav-item" data-non-auth-only>
+                        <a class="nav-link" href="/login">Login</a>
+                    </li>
+                </ul>
+            </div>
         </div>
-        
-        <div class="input-container">
-            <input type="text" id="message-input" placeholder="Type a message..." />
-            <button id="send-button">Send</button>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h4 id="chat-title">Chat Room</h4>
+                        <div class="d-flex align-items-center">
+                            <div class="me-3">
+                                <span class="me-1">Status:</span>
+                                <span id="user-status" class="away">Away</span>
+                            </div>
+                            <a href="/my-chats" class="btn btn-secondary btn-sm">
+                                <i class="bi bi-arrow-left"></i> Back
+                            </a>
+                        </div>
+                    </div>
+                    <div class="chat-container" id="chat-container">
+                        <!-- Messages will be added here dynamically -->
+                    </div>
+                    <div class="input-container">
+                        <input type="text" id="message-input" class="form-control" placeholder="Type a message..." aria-label="Message" />
+                        <button id="send-button" class="btn btn-primary">
+                            <i class="bi bi-send"></i> Send
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-    <script>
-        // Get room ID from URL path
-        const pathParts = window.location.pathname.split('/');
-        const roomId = pathParts[pathParts.length - 1];
-        
-        // Get user info from localStorage
-        const userId = localStorage.getItem('user_id');
-        const accessToken = localStorage.getItem('access_token');
-        
-        if (!userId || !accessToken) {
-            window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
-        }
-        
-        // Connect to Socket.IO server
-        const socket = io({
-            auth: {
-                token: accessToken
-            }
-        });
-        
-        // Join the room
-        socket.on('connect', () => {
-            socket.emit('join', {
-                room_id: roomId,
-                user_id: userId,
-                token: accessToken
-            });
-        });
-        
-        // Handle incoming messages
-        socket.on('message', (data) => {
-            addMessage(data);
-        });
-        
-        // Add message to chat
-        function addMessage(data) {
-            const chatContainer = document.getElementById('chat-container');
-            const messageDiv = document.createElement('div');
-            
-            // Check if message is from current user
-            const isSentByUser = data.sender_id === userId;
-            messageDiv.className = `message ${isSentByUser ? 'message-sent' : 'message-received'}`;
-            
-            messageDiv.innerHTML = `
-                <div>${data.content}</div>
-                <div class="message-time">${formatTime(data.created_at)}</div>
-            `;
-            
-            chatContainer.appendChild(messageDiv);
-            
-            // Scroll to bottom
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
-        
-        // Format timestamp
-        function formatTime(timestamp) {
-            const date = new Date(timestamp);
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-        
-        // Send message
-        document.getElementById('send-button').addEventListener('click', sendMessage);
-        document.getElementById('message-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
-        });
-        
-        function sendMessage() {
-            const input = document.getElementById('message-input');
-            const message = input.value.trim();
-            
-            if (message) {
-                socket.emit('message', {
-                    room_id: roomId,
-                    user_id: userId,
-                    content: message,
-                    token: accessToken
-                });
-                
-                input.value = '';
-            }
-        }
-    </script>
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Utilities -->
+    <script src="/static/js/utils/auth-helper.js"></script>
+    <script src="/static/js/utils/date-formatter.js"></script>
+    <script src="/static/js/utils/state-manager.js"></script>
+    
+    <!-- Services -->
+    <script src="/static/js/services/api-client.js"></script>
+    <script src="/static/js/services/socket-client.js"></script>
+    
+    <!-- Components -->
+    <script src="/static/js/components/chat-message.js"></script>
+    
+    <!-- Page Module -->
+    <script src="/static/js/modules/chat-page.js"></script>
+    
+    <!-- Main JS -->
+    <script src="/static/js/main.js"></script>
 </body>
 </html> 

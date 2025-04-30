@@ -522,16 +522,16 @@ def proxy_request(url, service_name):
     data = g.sanitized_data if hasattr(g, 'sanitized_data') else request.get_data()
     
     try:
-        resp = requests.request(
-            method=request.method,
-            url=url,
+    resp = requests.request(
+        method=request.method,
+        url=url,
             headers=headers,
             data=data,
-            cookies=request.cookies,
+        cookies=request.cookies,
             allow_redirects=False,
             timeout=5  # Set timeout to prevent long-running requests
-        )
-        
+    )
+    
         # Record circuit breaker success
         circuit_success(service_name)
         
@@ -543,15 +543,15 @@ def proxy_request(url, service_name):
             # Not JSON response
             response = Response(resp.content)
             
-        response.status_code = resp.status_code
-        
+    response.status_code = resp.status_code
+    
         # Add headers, but remove sensitive ones
         safe_headers = remove_sensitive_headers(resp.headers)
         for key, value in safe_headers.items():
-            if key.lower() not in ('content-length', 'connection', 'content-encoding'):
-                response.headers[key] = value
-                
-        return response
+        if key.lower() not in ('content-length', 'connection', 'content-encoding'):
+            response.headers[key] = value
+            
+    return response
     except requests.RequestException as e:
         # Record circuit breaker failure
         circuit_failure(service_name)

@@ -2,444 +2,98 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Messages - ABDRE</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Chats - ABDRE</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div class="app-header">
-        <div class="btn" style="visibility: hidden;"><i class="bi bi-arrow-left"></i></div>
-        <div class="app-logo">ABDRE</div>
-        <a href="{{ url_for('settings') }}" class="btn">
-            <i class="bi bi-gear"></i>
-        </a>
-    </div>
-    
-    <div class="container">
-        {% if session.visitor_name and session.visitor_name.startswith('Guest') %}
-        <div class="alert alert-info mb-3">
-            <i class="bi bi-info-circle"></i> 
-            You're using a temporary name: <strong>{{ session.visitor_name }}</strong>
-            <a href="{{ url_for('settings') }}" class="alert-link">Change your name</a>
-        </div>
-        {% endif %}
-        
-        <div class="card">
-            <div class="card-header">
-                <h2>Messages</h2>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">ABDRE Chat</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarContent">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item" data-auth-required>
+                        <a class="nav-link active" href="/my-chats">My Chats</a>
+                    </li>
+                    <li class="nav-item" data-auth-required>
+                        <a class="nav-link" href="/settings">Settings</a>
+                    </li>
+                    <li class="nav-item" data-auth-required>
+                        <a class="nav-link" href="#" data-action="logout">Logout</a>
+                    </li>
+                    <li class="nav-item" data-non-auth-only>
+                        <a class="nav-link" href="/login">Login</a>
+                    </li>
+                </ul>
             </div>
-            <div class="card-body p-0">
-                <!-- Create new chat box -->
-                <div class="p-3 border-bottom">
-                    <a href="{{ url_for('new_chat') }}" class="d-flex align-items-center text-decoration-none text-reset">
-                        <div class="chat-avatar bg-light text-dark">
-                            <i class="bi bi-plus"></i>
-                        </div>
-                        <div class="ms-3">
-                            <div class="fw-semibold">Create new chat</div>
-                            <div class="text-muted small">Start a private conversation</div>
-                        </div>
-                    </a>
-                </div>
-                
-                {% if rooms %}
-                    <div class="chat-list">
-                        {% for room in rooms %}
-                            <a href="{{ url_for('chat', room_id=room.room_id) }}" class="text-decoration-none text-reset">
-                                <div class="chat-list-item" data-room-id="{{ room.room_id }}">
-                                    <div class="chat-avatar">
-                                        {% if room.display_name %}
-                                            {{ room.display_name[:1].upper() }}
-                                        {% else %}
-                                            ?
-                                        {% endif %}
-                                    </div>
-                                    <div class="chat-info">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <div class="chat-name">{{ room.display_name or "Unnamed Chat" }}</div>
-                                            <small class="text-muted">{{ room.expiry_text }}</small>
-                                        </div>
-                                        <div class="chat-status">
-                                            {% if room.is_online %}
-                                                <span class="online-indicator"></span>Active now
-                                            {% else %}
-                                                <span class="offline-indicator"></span>Offline
-                                            {% endif %}
-                                            
-                                            {% if room.unread_count > 0 %}
-                                                <span class="badge rounded-pill bg-danger ms-2">
-                                                {% if room.unread_count > 99 %}
-                                                    99+
-                                                {% else %}
-                                                    {{ room.unread_count }}
-                                                {% endif %}
-                                                </span>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h4>My Chats</h4>
+                        <div>
+                            <button id="refresh-button" class="btn btn-outline-secondary btn-sm me-2">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                            <a href="/new" id="create-chat-button" class="btn btn-primary btn-sm">
+                                <i class="bi bi-plus-lg"></i> New Chat
                             </a>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="text-center my-4 py-4">
-                        <div class="mb-4">
-                            <i class="bi bi-chat-right-text" style="font-size: 3rem; color: #888;"></i>
                         </div>
-                        <h3 class="h5 mb-3">No messages yet</h3>
-                        <p class="text-muted mb-4">Your conversations will appear here</p>
                     </div>
-                {% endif %}
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text" id="search-input" class="form-control" placeholder="Search chats...">
+                            </div>
+                        </div>
+                        <div id="chat-list-container" class="chat-list-container">
+                            <!-- Chat list items will be populated here -->
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
+
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     
-    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
-    <script>
-        // Help ensure viewport height works on mobile
-        function setViewportHeight() {
-            let vh = window.innerHeight * 0.01;
-            document.documentElement.style.setProperty('--vh', `${vh}px`);
-        }
-        
-        setViewportHeight();
-        window.addEventListener('resize', setViewportHeight);
-        
-        // Socket connection for real-time status updates
-        const socket = io({
-            transports: ['websocket', 'polling'],
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000,
-            timeout: 60000
-        });
-        
-        // Function to update the online status indicator
-        function updateOnlineStatus(roomId, isOnline) {
-            const chatItem = document.querySelector(`.chat-list-item[data-room-id="${roomId}"]`);
-            if (chatItem) {
-                const statusElement = chatItem.querySelector('.chat-status');
-                if (statusElement) {
-                    // Get current unread count from existing badge before making any changes
-                    const unreadBadge = statusElement.querySelector('.badge');
-                    let unreadCount = 0;
-                    if (unreadBadge) {
-                        // Extract number from badge text (handles "99+" case)
-                        const badgeText = unreadBadge.textContent.trim();
-                        unreadCount = badgeText.endsWith('+') ? parseInt(badgeText) : parseInt(badgeText);
-                        if (isNaN(unreadCount)) unreadCount = 0;
-                    }
-
-                    // Find status indicator and update it
-                    const statusIndicator = statusElement.querySelector('.online-indicator, .offline-indicator');
-                    if (statusIndicator) {
-                        statusIndicator.className = isOnline ? 'online-indicator' : 'offline-indicator';
-                        
-                        // Find text node and update it
-                        let textNode = Array.from(statusElement.childNodes).find(node => 
-                            node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0
-                        );
-                        
-                        if (textNode) {
-                            textNode.textContent = isOnline ? 'Active now' : 'Offline';
-                        } else {
-                            // If no text node found, create one
-                            const textNodeContent = isOnline ? 'Active now' : 'Offline';
-                            const newTextNode = document.createTextNode(textNodeContent);
-                            if (unreadBadge) {
-                                statusElement.insertBefore(newTextNode, unreadBadge);
-                            } else {
-                                statusElement.appendChild(newTextNode);
-                            }
-                        }
-                    } else {
-                        // No status indicator found, recreate the entire status
-                        // Save any existing elements that aren't the status indicator
-                        const nonStatusNodes = Array.from(statusElement.childNodes).filter(node => {
-                            // Keep badge and any non-text, non-indicator nodes
-                            return (node.nodeType !== Node.TEXT_NODE) && 
-                                  (!node.classList || (!node.classList.contains('online-indicator') && 
-                                                     !node.classList.contains('offline-indicator')));
-                        });
-                        
-                        // Clear status element
-                        statusElement.innerHTML = '';
-                        
-                        // Add new status indicator and text
-                        const indicator = document.createElement('span');
-                        indicator.className = isOnline ? 'online-indicator' : 'offline-indicator';
-                        statusElement.appendChild(indicator);
-                        statusElement.appendChild(document.createTextNode(isOnline ? 'Active now' : 'Offline'));
-                        
-                        // Restore all non-status elements (like badges)
-                        nonStatusNodes.forEach(node => {
-                            statusElement.appendChild(node);
-                        });
-                    }
-                    
-                    // Restore the unread badge if count > 0
-                    if (unreadCount > 0 && !statusElement.querySelector('.badge')) {
-                        updateUnreadCount(roomId, unreadCount, true);
-                    }
-                }
-            }
-        }
-        
-        // Function to update unread message count
-        function updateUnreadCount(roomId, count, preserveExisting = false) {
-            const chatItem = document.querySelector(`.chat-list-item[data-room-id="${roomId}"]`);
-            if (chatItem) {
-                const statusElement = chatItem.querySelector('.chat-status');
-                if (statusElement) {
-                    // If preserveExisting is true and count is 0, don't remove existing badge
-                    if (preserveExisting && count === 0) {
-                        const existingBadge = statusElement.querySelector('.badge');
-                        if (existingBadge) {
-                            return; // Keep existing badge if preserveExisting is true
-                        }
-                    }
-                    
-                    // Remove existing badge
-                    const existingBadge = statusElement.querySelector('.badge');
-                    if (existingBadge) {
-                        existingBadge.remove();
-                    }
-                    
-                    // Add new badge if count > 0
-                    if (count > 0) {
-                        // Prevent overflow - cap at 99+
-                        const displayCount = count > 99 ? "99+" : count;
-                        
-                        const badge = document.createElement('span');
-                        badge.className = 'badge rounded-pill bg-danger ms-2';
-                        badge.textContent = displayCount;
-                        
-                        // Make sure badge is added at the end
-                        statusElement.appendChild(badge);
-                    }
-                }
-            }
-        }
-        
-        // Connect to socket
-        socket.on('connect', function() {
-            console.log("Socket connected for status updates");
-            
-            // Get all room IDs from the page
-            const chatItems = document.querySelectorAll('.chat-list-item');
-            chatItems.forEach(function(item) {
-                const roomId = item.getAttribute('data-room-id');
-                if (roomId) {
-                    // Join the room
-                    socket.emit('join', {
-                        room_id: roomId,
-                        visitor_id: '{{ session.visitor_id }}',
-                        visitor_name: '{{ session.visitor_name }}'
-                    });
-                    
-                    // Request fresh unread count immediately
-                    socket.emit('request_unread_count', {
-                        room_id: roomId,
-                        visitor_id: '{{ session.visitor_id }}'
-                    });
-                    
-                    // Set up periodic status checks
-                    setInterval(function() {
-                        socket.emit('check_status', {
-                            room_id: roomId
-                        });
-                    }, 10000); // Check every 10 seconds
-                }
-            });
-        });
-        
-        // Handle connection errors
-        socket.on('connect_error', function() {
-            console.log("Socket connection error - will retry automatically");
-        });
-        
-        // Handle reconnection
-        socket.on('reconnect', function() {
-            console.log("Socket reconnected");
-            
-            // Re-request unread counts after reconnection
-            const chatItems = document.querySelectorAll('.chat-list-item');
-            chatItems.forEach(function(item) {
-                const roomId = item.getAttribute('data-room-id');
-                if (roomId) {
-                    // Re-join the room
-                    socket.emit('join', {
-                        room_id: roomId,
-                        visitor_id: '{{ session.visitor_id }}',
-                        visitor_name: '{{ session.visitor_name }}'
-                    });
-                    
-                    // Get fresh unread count
-                    socket.emit('request_unread_count', {
-                        room_id: roomId,
-                        visitor_id: '{{ session.visitor_id }}'
-                    });
-                }
-            });
-        });
-        
-        // Handle user joined events
-        socket.on('user_joined', function(data) {
-            console.log("User joined room:", data);
-            // The room_id might be in different places depending on the event
-            const roomId = data.room_id;
-            if (roomId) {
-                updateOnlineStatus(roomId, true);
-                
-                // Re-request unread count to ensure it's correct
-                socket.emit('request_unread_count', {
-                    room_id: roomId,
-                    visitor_id: '{{ session.visitor_id }}'
-                });
-            }
-        });
-        
-        // Handle user left events
-        socket.on('user_left', function(data) {
-            console.log("User left room:", data);
-            // The room_id might be in different places depending on the event
-            const roomId = data.room_id;
-            if (roomId) {
-                updateOnlineStatus(roomId, false);
-                
-                // Don't request unread count here as it shouldn't change when user leaves
-                // But preserve any existing unread count badges
-            }
-        });
-        
-        // Handle status updates
-        socket.on('status_update', function(data) {
-            console.log("Status update:", data);
-            if (data.room_id) {
-                updateOnlineStatus(data.room_id, data.is_online);
-                
-                // For safety, periodically refresh unread counts
-                if (Math.random() < 0.2) { // 20% chance to refresh (avoid too many requests)
-                    socket.emit('request_unread_count', {
-                        room_id: data.room_id,
-                        visitor_id: '{{ session.visitor_id }}'
-                    });
-                }
-            }
-        });
-        
-        // Listen for new messages to update unread count
-        socket.on('message', function(data) {
-            console.log("New message received:", data);
-            if (data.room_id) {
-                // Increment unread count for this room unless we're the sender
-                if (data.sender_id !== '{{ session.visitor_id }}') {
-                    // Instead of manually incrementing, fetch the actual count from server
-                    socket.emit('request_unread_count', {
-                        room_id: data.room_id,
-                        visitor_id: '{{ session.visitor_id }}'
-                    });
-                    
-                    // Move the chat to the top of the list
-                    const chatItem = document.querySelector(`.chat-list-item[data-room-id="${data.room_id}"]`);
-                    if (chatItem) {
-                        const chatList = chatItem.closest('.chat-list');
-                        if (chatList && chatItem.parentNode) {
-                            const chatItemWrapper = chatItem.closest('a');
-                            if (chatItemWrapper && chatList.firstChild !== chatItemWrapper) {
-                                chatList.insertBefore(chatItemWrapper, chatList.firstChild);
-                            }
-                        }
-                    }
-                }
-            }
-        });
-        
-        // Listen for unread count updates
-        socket.on('unread_update', function(data) {
-            console.log("Unread count update:", data);
-            if (data.room_id) {
-                updateUnreadCount(data.room_id, data.count);
-            }
-        });
-
-        // Handle page visibility changes
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden) {
-                console.log("Page is now visible, refreshing unread counts");
-                
-                // Request fresh unread counts for all chats
-                const chatItems = document.querySelectorAll('.chat-list-item');
-                chatItems.forEach(function(item) {
-                    const roomId = item.getAttribute('data-room-id');
-                    if (roomId) {
-                        // Request unread count update
-                        socket.emit('request_unread_count', {
-                            room_id: roomId,
-                            visitor_id: '{{ session.visitor_id }}'
-                        });
-                        
-                        // Mark user as active in all rooms
-                        socket.emit('user_active', {
-                            room_id: roomId,
-                            visitor_id: '{{ session.visitor_id }}'
-                        });
-                    }
-                });
-            } else {
-                console.log("Page is now hidden, marking user as away");
-                // Mark user as away in all rooms
-                const chatItems = document.querySelectorAll('.chat-list-item');
-                chatItems.forEach(function(item) {
-                    const roomId = item.getAttribute('data-room-id');
-                    if (roomId) {
-                        socket.emit('user_away', {
-                            room_id: roomId,
-                            visitor_id: '{{ session.visitor_id }}'
-                        });
-                    }
-                });
-            }
-        });
-
-        // Handle pageshow event (captures back/forward navigation)
-        window.addEventListener('pageshow', function(event) {
-            // If navigated using back/forward button (from browser cache)
-            if (event.persisted) {
-                console.log("Page restored from cache, refreshing unread counts");
-                // Request fresh unread counts for all chats
-                const chatItems = document.querySelectorAll('.chat-list-item');
-                chatItems.forEach(function(item) {
-                    const roomId = item.getAttribute('data-room-id');
-                    if (roomId && socket.connected) {
-                        socket.emit('request_unread_count', {
-                            room_id: roomId,
-                            visitor_id: '{{ session.visitor_id }}'
-                        });
-                    }
-                });
-            }
-        });
-
-        // Handle before unload event (browser/tab close)
-        window.addEventListener('beforeunload', function() {
-            console.log("Page is being unloaded, marking user as away");
-            // Use synchronous approach for beforeunload to attempt to notify server
-            const chatItems = document.querySelectorAll('.chat-list-item');
-            const roomIds = Array.from(chatItems).map(item => item.getAttribute('data-room-id')).filter(Boolean);
-            
-            if (roomIds.length > 0) {
-                // Use synchronous approach for beforeunload
-                const xhr = new XMLHttpRequest();
-                xhr.open('POST', '/api/user-away-multiple', false);
-                xhr.setRequestHeader('Content-Type', 'application/json');
-                xhr.send(JSON.stringify({
-                    room_ids: roomIds,
-                    visitor_id: '{{ session.visitor_id }}'
-                }));
-            }
-        });
-    </script>
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    
+    <!-- Utilities -->
+    <script src="/static/js/utils/auth-helper.js"></script>
+    <script src="/static/js/utils/date-formatter.js"></script>
+    <script src="/static/js/utils/state-manager.js"></script>
+    
+    <!-- Services -->
+    <script src="/static/js/services/api-client.js"></script>
+    <script src="/static/js/services/socket-client.js"></script>
+    
+    <!-- Components -->
+    <script src="/static/js/components/chat-list.js"></script>
+    
+    <!-- Page Module -->
+    <script src="/static/js/modules/my-chats-page.js"></script>
+    
+    <!-- Main JS -->
+    <script src="/static/js/main.js"></script>
 </body>
 </html> 
