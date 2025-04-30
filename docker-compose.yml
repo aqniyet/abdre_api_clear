@@ -140,10 +140,14 @@ services:
       - USER_SERVICE_URL=http://user_service:5002
       - OAUTH_SERVICE_URL=http://oauth_service:5003
       - CHAT_SERVICE_URL=http://chat_service:5004
-      - PRESENCE_SERVICE_URL=http://presence_service:5005
       - REALTIME_SERVICE_URL=http://realtime_service:5006
+      - REQUESTS_PER_MINUTE=60
+      - BURST_LIMIT=20
+      - CIRCUIT_FAILURE_THRESHOLD=5
+      - CIRCUIT_RESET_TIMEOUT=30
     ports:
       - "5000:5000"
+      - "9090:9090"  # Prometheus metrics port
     depends_on:
       - auth_service
       - user_service
@@ -152,6 +156,12 @@ services:
       - realtime_service
     networks:
       - abdre-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   abdre-network:
