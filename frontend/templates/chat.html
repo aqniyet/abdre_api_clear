@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat - ABDRE</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            height: calc(100vh - 60px);
+        }
+        .chat-container {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .message {
+            max-width: 70%;
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 10px;
+            clear: both;
+        }
+        .message-sent {
+            align-self: flex-end;
+            background-color: #dcf8c6;
+        }
+        .message-received {
+            align-self: flex-start;
+            background-color: #f1f0f0;
+        }
+        .message-time {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 5px;
+            text-align: right;
+        }
+        .input-container {
+            display: flex;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-top: 1px solid #ddd;
+        }
+        .input-container input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            margin-right: 10px;
+        }
+        .input-container button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+        .input-container button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>Chat Room</h2>
+        <a href="/" style="color: white;">Exit</a>
+    </div>
+    
+    <div class="main-container">
+        <div class="chat-container" id="chat-container">
+            <!-- Messages will be added here dynamically -->
+        </div>
+        
+        <div class="input-container">
+            <input type="text" id="message-input" placeholder="Type a message..." />
+            <button id="send-button">Send</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        // Get room ID from URL path
+        const pathParts = window.location.pathname.split('/');
+        const roomId = pathParts[pathParts.length - 1];
+        
+        // Get user info from localStorage
+        const userId = localStorage.getItem('user_id');
+        const accessToken = localStorage.getItem('access_token');
+        
+        if (!userId || !accessToken) {
+            window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+        }
+        
+        // Connect to Socket.IO server
+        const socket = io({
+            auth: {
+                token: accessToken
+            }
+        });
+        
+        // Join the room
+        socket.on('connect', () => {
+            socket.emit('join', {
+                room_id: roomId,
+                user_id: userId,
+                token: accessToken
+            });
+        });
+        
+        // Handle incoming messages
+        socket.on('message', (data) => {
+            addMessage(data);
+        });
+        
+        // Add message to chat
+        function addMessage(data) {
+            const chatContainer = document.getElementById('chat-container');
+            const messageDiv = document.createElement('div');
+            
+            // Check if message is from current user
+            const isSentByUser = data.sender_id === userId;
+            messageDiv.className = `message ${isSentByUser ? 'message-sent' : 'message-received'}`;
+            
+            messageDiv.innerHTML = `
+                <div>${data.content}</div>
+                <div class="message-time">${formatTime(data.created_at)}</div>
+            `;
+            
+            chatContainer.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // Format timestamp
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        
+        // Send message
+        document.getElementById('send-button').addEventListener('click', sendMessage);
+        document.getElementById('message-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            
+            if (message) {
+                socket.emit('message', {
+                    room_id: roomId,
+                    user_id: userId,
+                    content: message,
+                    token: accessToken
+                });
+                
+                input.value = '';
+            }
+        }
+    </script>
+</body>
+</html> 

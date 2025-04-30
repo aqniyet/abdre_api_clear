@@ -1,0 +1,59 @@
+{
+  "services": {
+    "auth_service": {
+      "dependencies": ["database_service"],
+      "external_dependencies": ["qrcode"],
+      "functionality": ["user_management", "session_management", "qr_code_generation"]
+    },
+    "database_service": {
+      "dependencies": [],
+      "external_dependencies": ["psycopg2"],
+      "functionality": ["user_operations", "room_operations", "message_operations", "online_user_operations"]
+    },
+    "oauth_service": {
+      "dependencies": ["database_service"],
+      "external_dependencies": ["flask_dance"],
+      "functionality": ["google_oauth"]
+    },
+    "app": {
+      "dependencies": ["auth_service", "database_service", "oauth_service"],
+      "external_dependencies": ["flask", "flask_socketio", "eventlet"],
+      "functionality": ["web_server", "routing", "chat_management", "real_time_messaging"]
+    }
+  },
+  "core_features": {
+    "user_management": {
+      "components": ["auth_service", "database_service", "oauth_service"],
+      "data_access": ["users"]
+    },
+    "chat_management": {
+      "components": ["app", "database_service"],
+      "data_access": ["rooms", "room_participants"]
+    },
+    "messaging": {
+      "components": ["app", "database_service"],
+      "data_access": ["messages"]
+    },
+    "presence": {
+      "components": ["app", "database_service"],
+      "data_access": ["online_users"]
+    }
+  },
+  "data_entities": {
+    "users": {
+      "accessed_by": ["auth_service", "database_service", "oauth_service"]
+    },
+    "rooms": {
+      "accessed_by": ["app", "database_service", "auth_service"]
+    },
+    "room_participants": {
+      "accessed_by": ["app", "database_service"]
+    },
+    "messages": {
+      "accessed_by": ["app", "database_service", "auth_service"]
+    },
+    "online_users": {
+      "accessed_by": ["app", "database_service"]
+    }
+  }
+} 

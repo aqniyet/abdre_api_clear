@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Chat - ABDRE</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f5f5f5;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 500px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .button {
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+            margin: 10px;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #45a049;
+        }
+        .qr-code {
+            margin: 20px auto;
+            max-width: 200px;
+            display: none;
+        }
+        #share-section {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Create Chat Room</h1>
+        <div id="create-form">
+            <form id="roomForm">
+                <div class="form-group">
+                    <label for="room_name">Room Name</label>
+                    <input type="text" id="room_name" name="room_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="partner_name">Partner Name (Optional)</label>
+                    <input type="text" id="partner_name" name="partner_name">
+                </div>
+                <button type="submit" class="button">Create Room</button>
+            </form>
+            <p><a href="/">Back to Home</a></p>
+        </div>
+        
+        <div id="share-section">
+            <h2>Room Created!</h2>
+            <p>Share this QR code with your chat partner:</p>
+            <div class="qr-code">
+                <img id="qr-image" src="" alt="QR Code">
+            </div>
+            <p>Or share this link:</p>
+            <p><strong id="join-link"></strong></p>
+            <button id="copy-link" class="button">Copy Link</button>
+            <div>
+                <button id="go-to-chat" class="button">Go to Chat</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('roomForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get access token
+            const accessToken = localStorage.getItem('access_token');
+            if (!accessToken) {
+                window.location.href = '/login?next=/new';
+                return;
+            }
+            
+            const roomName = document.getElementById('room_name').value;
+            const partnerName = document.getElementById('partner_name').value;
+            
+            fetch('/api/chats', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`
+                },
+                body: JSON.stringify({
+                    room_name: roomName,
+                    partner_name: partnerName || ''
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.room_id) {
+                    // Show QR code and join link
+                    document.getElementById('create-form').style.display = 'none';
+                    document.getElementById('share-section').style.display = 'block';
+                    
+                    const joinUrl = `${window.location.origin}/join/${data.qr_token}`;
+                    document.getElementById('join-link').textContent = joinUrl;
+                    
+                    // Display QR code
+                    document.getElementById('qr-image').src = data.qr_image_url || `/api/auth/qr/${data.qr_token}`;
+                    document.querySelector('.qr-code').style.display = 'block';
+                    
+                    // Set up copy link button
+                    document.getElementById('copy-link').addEventListener('click', function() {
+                        navigator.clipboard.writeText(joinUrl)
+                            .then(() => alert('Link copied to clipboard!'))
+                            .catch(err => console.error('Could not copy text: ', err));
+                    });
+                    
+                    // Set up go to chat button
+                    document.getElementById('go-to-chat').addEventListener('click', function() {
+                        window.location.href = `/chat/${data.room_id}`;
+                    });
+                } else {
+                    alert('Error creating room: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to create room. Please try again.');
+            });
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,161 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: abdre
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "15432:5432"
+    networks:
+      - abdre-network
+
+  redis:
+    image: redis:6
+    ports:
+      - "16379:6379"
+    networks:
+      - abdre-network
+
+  auth_service:
+    build:
+      context: .
+      dockerfile: auth_service/Dockerfile
+    environment:
+      - FLASK_ENV=development
+      - DEBUG=true
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=abdre
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - REDIS_HOST=redis
+      - JWT_SECRET=dev-secret-key
+    ports:
+      - "5001:5001"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - abdre-network
+
+  user_service:
+    build:
+      context: .
+      dockerfile: user_service/Dockerfile
+    environment:
+      - FLASK_ENV=development
+      - DEBUG=true
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=abdre
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - JWT_SECRET=dev-secret-key
+    ports:
+      - "5002:5002"
+    depends_on:
+      - postgres
+      - auth_service
+    networks:
+      - abdre-network
+
+  oauth_service:
+    build:
+      context: .
+      dockerfile: oauth_service/Dockerfile
+    environment:
+      - FLASK_ENV=development
+      - DEBUG=true
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=abdre
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - JWT_SECRET=dev-secret-key
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+    ports:
+      - "5003:5003"
+    depends_on:
+      - postgres
+      - auth_service
+    networks:
+      - abdre-network
+
+  chat_service:
+    build:
+      context: .
+      dockerfile: chat_service/Dockerfile
+    environment:
+      - FLASK_ENV=development
+      - DEBUG=true
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=abdre
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - JWT_SECRET=dev-secret-key
+    ports:
+      - "5004:5004"
+    depends_on:
+      - postgres
+      - auth_service
+      - user_service
+    networks:
+      - abdre-network
+
+  realtime_service:
+    build:
+      context: .
+      dockerfile: realtime_service/Dockerfile
+    environment:
+      - FLASK_ENV=development
+      - DEBUG=true
+      - JWT_SECRET=dev-secret-key
+      - REDIS_HOST=redis
+    ports:
+      - "5006:5006"
+    depends_on:
+      - redis
+      - chat_service
+      - user_service
+    networks:
+      - abdre-network
+
+  api_gateway:
+    build:
+      context: .
+      dockerfile: api_gateway/Dockerfile
+    environment:
+      - FLASK_ENV=development
+      - DEBUG=true
+      - JWT_SECRET=dev-secret-key
+      - CORS_ALLOWED_ORIGINS=http://localhost:8080,https://abdre.kz
+      - AUTH_SERVICE_URL=http://auth_service:5001
+      - USER_SERVICE_URL=http://user_service:5002
+      - OAUTH_SERVICE_URL=http://oauth_service:5003
+      - CHAT_SERVICE_URL=http://chat_service:5004
+      - PRESENCE_SERVICE_URL=http://presence_service:5005
+      - REALTIME_SERVICE_URL=http://realtime_service:5006
+    ports:
+      - "5000:5000"
+    depends_on:
+      - auth_service
+      - user_service
+      - oauth_service
+      - chat_service
+      - realtime_service
+    networks:
+      - abdre-network
+
+networks:
+  abdre-network:
+    driver: bridge
+
+volumes:
+  postgres-data: 

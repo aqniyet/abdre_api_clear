@@ -1,0 +1,107 @@
+{
+  "microservices": {
+    "auth_service": {
+      "description": "Handles user authentication, session management, and QR code generation",
+      "source_files": ["abdre_deployed/services/auth_service.py"],
+      "api_endpoints": [
+        "/api/auth/login",
+        "/api/auth/logout",
+        "/api/auth/set-name",
+        "/api/auth/generate-qr"
+      ],
+      "database_access": ["users"],
+      "communications": ["user_service", "chat_service"],
+      "dependencies": ["flask", "qrcode"]
+    },
+    "user_service": {
+      "description": "Manages user data, profiles, and presence",
+      "source_files": ["abdre_deployed/services/database_service.py:UserService"],
+      "api_endpoints": [
+        "/api/users",
+        "/api/users/:id",
+        "/api/users/presence"
+      ],
+      "database_access": ["users"],
+      "communications": ["auth_service", "chat_service"],
+      "dependencies": ["flask", "psycopg2"]
+    },
+    "oauth_service": {
+      "description": "Handles OAuth authentication with third-party providers",
+      "source_files": ["abdre_deployed/services/oauth_service.py"],
+      "api_endpoints": [
+        "/api/oauth/google",
+        "/api/oauth/google/callback"
+      ],
+      "database_access": ["users"],
+      "communications": ["auth_service", "user_service"],
+      "dependencies": ["flask", "flask_dance", "oauthlib"]
+    },
+    "chat_service": {
+      "description": "Manages chat rooms, participants, and messages",
+      "source_files": [
+        "abdre_deployed/services/database_service.py:RoomService",
+        "abdre_deployed/services/database_service.py:MessageService"
+      ],
+      "api_endpoints": [
+        "/api/chats",
+        "/api/chats/:id",
+        "/api/chats/:id/participants",
+        "/api/chats/:id/messages"
+      ],
+      "database_access": ["rooms", "room_participants", "messages"],
+      "communications": ["user_service", "auth_service", "realtime_service"],
+      "dependencies": ["flask", "psycopg2"]
+    },
+    "presence_service": {
+      "description": "Tracks user online/offline status",
+      "source_files": ["abdre_deployed/services/database_service.py:OnlineUserService"],
+      "api_endpoints": [
+        "/api/presence",
+        "/api/presence/:room_id",
+        "/api/presence/:room_id/:user_id"
+      ],
+      "database_access": ["online_users"],
+      "communications": ["chat_service", "realtime_service", "user_service"],
+      "dependencies": ["flask", "psycopg2"]
+    },
+    "realtime_service": {
+      "description": "Handles WebSocket connections for real-time messaging",
+      "source_files": [
+        "abdre_deployed/app.py:socketio",
+        "abdre_deployed/app.py:on_connect",
+        "abdre_deployed/app.py:on_disconnect",
+        "abdre_deployed/app.py:on_join",
+        "abdre_deployed/app.py:on_leave",
+        "abdre_deployed/app.py:on_message"
+      ],
+      "api_endpoints": [
+        "/api/socket.io"
+      ],
+      "communications": ["chat_service", "presence_service", "user_service"],
+      "dependencies": ["flask_socketio", "eventlet"]
+    },
+    "api_gateway": {
+      "description": "API Gateway for client-server communication",
+      "source_files": ["abdre_deployed/app.py:routes"],
+      "api_endpoints": [
+        "/"
+      ],
+      "communications": ["auth_service", "user_service", "chat_service", "presence_service", "realtime_service", "oauth_service"],
+      "dependencies": ["flask", "flask_cors"]
+    },
+    "frontend": {
+      "description": "Web client for the chat application",
+      "source_files": ["abdre_deployed/templates", "abdre_deployed/static"],
+      "dependencies": []
+    }
+  },
+  "shared": {
+    "database": {
+      "description": "Shared database schema and migrations",
+      "entities": ["users", "rooms", "room_participants", "messages", "online_users"]
+    },
+    "utils": {
+      "description": "Shared utilities and helpers"
+    }
+  }
+} 
