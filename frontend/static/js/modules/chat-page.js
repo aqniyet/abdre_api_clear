@@ -103,6 +103,61 @@ const ChatPage = {
         this.sendMessage();
       }
     });
+
+    // Add share link functionality
+    this.addShareLinkButton();
+  },
+  
+  /**
+   * Add a button to share the chat link
+   */
+  addShareLinkButton() {
+    // Get the header section
+    const header = document.querySelector('.card-header');
+    if (!header) return;
+
+    // Create share button
+    const shareButton = document.createElement('button');
+    shareButton.className = 'btn btn-outline-primary btn-sm ms-2';
+    shareButton.innerHTML = '<i class="bi bi-share"></i> Share Link';
+    
+    // Create share link container (hidden initially)
+    const shareContainer = document.createElement('div');
+    shareContainer.className = 'share-container d-none mt-2 p-2 border rounded';
+    shareContainer.innerHTML = `
+      <div class="input-group input-group-sm">
+        <input type="text" id="share-link" class="form-control form-control-sm" value="${window.location.href}" readonly>
+        <button class="btn btn-sm btn-outline-secondary" id="copy-link-btn">
+          <i class="bi bi-clipboard"></i> Copy
+        </button>
+      </div>
+      <small class="text-muted">Share this link with others to join this chat room</small>
+    `;
+    
+    // Add click event to share button
+    shareButton.addEventListener('click', () => {
+      shareContainer.classList.toggle('d-none');
+    });
+    
+    // Add the elements to the DOM
+    const statusContainer = header.querySelector('div');
+    statusContainer.prepend(shareButton);
+    header.appendChild(shareContainer);
+    
+    // Add copy functionality
+    const copyBtn = shareContainer.querySelector('#copy-link-btn');
+    copyBtn.addEventListener('click', () => {
+      const shareLink = shareContainer.querySelector('#share-link');
+      shareLink.select();
+      document.execCommand('copy');
+      
+      // Show copied notification
+      const originalText = copyBtn.innerHTML;
+      copyBtn.innerHTML = '<i class="bi bi-check"></i> Copied!';
+      setTimeout(() => {
+        copyBtn.innerHTML = originalText;
+      }, 2000);
+    });
   },
   
   /**
@@ -200,11 +255,72 @@ const ChatPage = {
       const roomId = stateManager.get('roomId');
       const response = await apiClient.getChatMessages(roomId);
       
-      if (response.messages) {
-        stateManager.set('messages', response.messages);
+      if (response.messages && Array.isArray(response.messages) && response.messages.length > 0) {
+        console.log(`Loaded ${response.messages.length} messages from history`);
         
-        const userId = stateManager.get('userId');
-        ChatMessage.renderMessages(this.chatContainer, response.messages, userId);
+        // Create a map of existing messages by message_id to avoid duplicates
+        const existingMessages = {};
+        const messages = stateManager.get('messages') || [];
+        messages.forEach(msg => {
+          if (msg.message_id) {
+            existingMessages[msg.message_id] = true;
+          }
+        });
+        
+        // Add only new messages to the state
+        const newMessages = [];
+        response.messages.forEach(msg => {
+          // Skip messages that are already in state
+          if (msg.message_id && existingMessages[msg.message_id]) {
+            return;
+          }
+          
+          // Format message to match our expected structure
+          const messageObj = {
+            message_id: msg.message_id,
+            room_id: msg.room_id || roomId,
+            sender_id: msg.sender_id,
+            content: msg.content,
+            created_at: msg.created_at
+          };
+          
+          newMessages.push(messageObj);
+          existingMessages[msg.message_id] = true;
+        });
+        
+        if (newMessages.length > 0) {
+          // Add to existing messages
+          const updatedMessages = [...messages, ...newMessages];
+          
+          // Sort by created_at
+          updatedMessages.sort((a, b) => {
+            const dateA = new Date(a.created_at || 0);
+            const dateB = new Date(b.created_at || 0);
+            return dateA - dateB;
+          });
+          
+          // Update state
+          stateManager.set('messages', updatedMessages);
+          
+          // Render only the new messages to avoid duplicates
+          const userId = stateManager.get('userId');
+          
+          // Clear the container if this is the first render
+          if (messages.length === 0) {
+            this.chatContainer.innerHTML = '';
+          }
+          
+          // Render the new messages
+          newMessages.forEach(msg => {
+            ChatMessage.addToContainer(this.chatContainer, msg, userId);
+          });
+          
+          console.log(`Added ${newMessages.length} new messages from history`);
+        } else {
+          console.log('No new messages from history');
+        }
+      } else {
+        console.log('No messages in history');
       }
     } catch (error) {
       console.error('Failed to load chat messages:', error);
