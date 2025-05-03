@@ -1,0 +1,18 @@
+[Unit]
+Description=ABDRE Microservices Chat Application
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/aqniyet/Desktop/abdre
+ExecStart=/home/aqniyet/Desktop/abdre/deploy.sh
+ExecStop=/usr/bin/docker-compose down
+StandardOutput=journal
+StandardError=journal
+User=aqniyet
+Group=aqniyet
+
+[Install]
+WantedBy=multi-user.target 

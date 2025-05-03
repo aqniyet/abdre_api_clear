@@ -6,6 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy base requirements first
@@ -16,31 +17,30 @@ RUN pip install --no-cache-dir -r requirements-base.txt
 COPY api_gateway/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy API Gateway code first
+# Copy service code and shared modules
 COPY api_gateway /app/api_gateway
-
-# Copy frontend files - ensure they override any existing files
 COPY frontend/templates /app/api_gateway/templates
 COPY frontend/static /app/api_gateway/static
-
-# Create required directories if they don't exist
-RUN mkdir -p /app/api_gateway/static/js/utils
-
-# Copy required auth-helper.js directly to the expected paths
-COPY frontend/static/js/utils/auth-helper.js /app/api_gateway/static/js/utils/
-COPY frontend/static/js/utils/auth-helper.js /app/api_gateway/static/js/utils/auth_helper.js
-
-# Copy shared modules
 COPY shared /app/shared
+
+# Create the directory structure needed
+RUN mkdir -p /app/api_gateway/static/js/utils \
+    && mkdir -p /app/api_gateway/static/js/services \
+    && mkdir -p /app/api_gateway/static/js/components \
+    && mkdir -p /app/api_gateway/static/js/modules
 
 # Set working directory to service directory
 WORKDIR /app/api_gateway
 
-# Make startup script executable
-RUN chmod +x start.sh
-
 # Expose port
 EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:5000/health || exit 1
+
+# Make startup script executable
+RUN chmod +x start.sh
 
 # Use startup script
 CMD ["./start.sh"] 

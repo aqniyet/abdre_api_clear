@@ -36,15 +36,44 @@ The system consists of the following microservices:
    cd abdre_api
    ```
 
-2. Start the system:
+2. Start the system using the management script:
    ```
-   docker-compose up -d
+   ./abdre-manage.sh start
    ```
 
 3. Verify health status:
    ```
-   curl http://localhost:5000/health
+   ./abdre-manage.sh status
    ```
+
+### Management Script
+
+The `abdre-manage.sh` script provides a convenient way to manage the application:
+
+```
+Usage: ./abdre-manage.sh COMMAND
+
+Commands:
+  start           Start all services
+  stop            Stop all services
+  restart         Restart all services
+  status          Check status of all services
+  logs [service]  View logs (optional: specify service name)
+  test            Run connection tests
+  backup          Backup the database
+  install         Install as systemd service (requires sudo)
+  help            Show this help message
+```
+
+### Testing
+
+Use the test-connections script to verify all services are working properly:
+
+```
+./test-connections.sh
+```
+
+For detailed information about testing, see [TEST-README.md](TEST-README.md).
 
 ## Development
 
@@ -84,6 +113,34 @@ Check each service's health endpoint for basic verification:
 - OAuth Service: `GET http://localhost:5003/health`
 - Chat Service: `GET http://localhost:5004/health`
 - Realtime Service: `GET http://localhost:5006/health`
+
+## Troubleshooting
+
+If you encounter issues, try the following:
+
+1. Check service status: `./abdre-manage.sh status`
+2. View logs: `./abdre-manage.sh logs`
+3. Restart services: `./abdre-manage.sh restart`
+4. Run tests: `./abdre-manage.sh test`
+
+For more troubleshooting information, see [TEST-README.md](TEST-README.md).
+
+## Installing as a Service
+
+To install ABDRE as a systemd service (auto-start on boot):
+
+```
+sudo ./install-service.sh
+```
+
+After installation, you can manage the service with standard systemd commands:
+
+```
+sudo systemctl start abdre
+sudo systemctl stop abdre
+sudo systemctl status abdre
+sudo systemctl enable abdre  # Enable auto-start on boot
+```
 
 ## Contributing
 

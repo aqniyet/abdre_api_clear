@@ -153,7 +153,7 @@ def authenticate_token():
 def check_protected_route(path):
     """Check if a route requires authentication"""
     # Special test endpoints should bypass auth
-    if path == '/api/json-test' or path == '/api/test-json':
+    if path == '/api/json-test' or path == '/api/test-json' or path == '/api/ws-test':
         return False
         
     for pattern in PROTECTED_ROUTES:
@@ -284,8 +284,19 @@ def remove_sensitive_headers(headers):
 
 def should_compress_response(response):
     """Determine if a response should be compressed"""
+    # Skip compression for file responses or special response types
+    if not hasattr(response, 'data') or getattr(response, 'direct_passthrough', False):
+        return False
+        
     content_type = response.headers.get('Content-Type', '')
     content_length = len(response.data) if hasattr(response, 'data') else 0
+    
+    # Skip compression for images, icons, and binary files
+    if ('image/' in content_type or 
+        'icon' in content_type or 
+        'application/octet-stream' in content_type):
+        return False
+        
     return (
         content_length > 1024 and  # Only compress responses larger than 1KB
         ('text/' in content_type or 
@@ -296,14 +307,38 @@ def should_compress_response(response):
 
 def compress_response(response):
     """Compress response data if appropriate"""
-    if should_compress_response(response):
+    # Skip compression for static files or direct passthrough responses
+    if (getattr(response, 'direct_passthrough', False) or 
+        not hasattr(response, 'data') or
+        response.mimetype.startswith('image/') or
+        response.mimetype.startswith('font/') or
+        response.mimetype == 'application/octet-stream'):
+        return response
+        
+    # Safely get content type and check if it should be compressed
+    content_type = response.headers.get('Content-Type', '')
+    should_compress = (
+        hasattr(response, 'data') and 
+        len(response.data) > 1024 and
+        ('text/' in content_type or 
+         'application/json' in content_type or 
+         'application/xml' in content_type or 
+         'application/javascript' in content_type)
+    )
+    
+    if should_compress:
         # Check if client accepts gzip encoding
         accept_encoding = request.headers.get('Accept-Encoding', '')
         if 'gzip' in accept_encoding:
-            compressed_data = gzip.compress(response.data)
-            response.data = compressed_data
-            response.headers['Content-Encoding'] = 'gzip'
-            response.headers['Content-Length'] = str(len(compressed_data))
+            try:
+                compressed_data = gzip.compress(response.data)
+                response.data = compressed_data
+                response.headers['Content-Encoding'] = 'gzip'
+                response.headers['Content-Length'] = str(len(compressed_data))
+            except Exception as e:
+                # Log error but don't fail if compression fails
+                print(f"Compression error: {e}")
+    
     return response
 
 #------------------------------------------------------------------------------
@@ -402,8 +437,17 @@ def before_request():
 @app.after_request
 def after_request(response):
     """Run after each request to apply response middleware"""
-    # Skip middleware for non-API routes and metrics
+    # Skip middleware for metrics endpoint
     if request.path.startswith('/metrics'):
+        return response
+        
+    # Skip middleware for static resources
+    if (request.path.startswith('/static/') or 
+        request.path == '/favicon.ico' or
+        getattr(response, 'direct_passthrough', False)):
+        # Only add security headers for static content
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
         return response
         
     # Record metrics
@@ -428,10 +472,12 @@ def after_request(response):
         if key in ['Server', 'X-Powered-By']:
             del response.headers[key]
     
-    # Compress large responses
-    compress_response(response)
-    
-    return response
+    # Compress large responses (safely)
+    try:
+        return compress_response(response)
+    except Exception as e:
+        print(f"Error in compression middleware: {e}")
+        return response
 
 # Add comprehensive CORS headers
 @app.after_request
@@ -665,6 +711,11 @@ def websocket_test():
     """Render the WebSocket testing page"""
     return render_template('ws-test.html')
 
+@app.route('/favicon.ico')
+def favicon():
+    """Serve the favicon directly"""
+    return app.send_static_file('img/favicon.ico')
+
 #------------------------------------------------------------------------------
 # API Gateway Routes
 #------------------------------------------------------------------------------
@@ -852,12 +903,26 @@ def socketio_proxy():
     """Proxy WebSocket connections to realtime service"""
     return proxy_request(f"{REALTIME_SERVICE_URL}/socket.io/", 'REALTIME_SERVICE_URL')
 
-@app.route('/api/ws-test', methods=['POST'])
+@app.route('/api/ws-test', methods=['POST', 'OPTIONS'])
 def test_websocket():
-    """Test the WebSocket connection by sending a message"""
+    """Test the WebSocket connection by sending a message
+    This is a public test endpoint that does not require authentication
+    """
+    # Handle OPTIONS preflight request
+    if request.method == 'OPTIONS':
+        response = Response('')
+        response.headers.add('Access-Control-Allow-Origin', request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Max-Age', '86400')
+        return response
+        
     data = request.get_json()
     message = data.get('message', 'Test message from API Gateway')
     room = data.get('room')
+    
+    logger.info(f"WebSocket test with message: {message}")
     
     # Forward to realtime service
     headers = {'Content-Type': 'application/json'}
@@ -878,6 +943,8 @@ def test_websocket():
             json=test_data,
             timeout=5
         )
+        
+        logger.info(f"Realtime service response: {response.status_code} - {response.text[:100]}")
         
         return jsonify({
             'success': response.status_code == 200,
@@ -1009,7 +1076,7 @@ def proxy_request(url, service_name):
             allow_redirects=False,
             timeout=5  # Set timeout to prevent long-running requests
         )
-    
+        
         # Record circuit breaker success
         circuit_success(service_name)
         
@@ -1067,12 +1134,160 @@ def proxy_request(url, service_name):
 @app.route('/health')
 def health():
     """Health check endpoint"""
-    service_statuses = {name: 'healthy' if not info['open'] else 'unhealthy' 
-                       for name, info in service_health.items()}
+    # Check status of all services
+    services = {
+        'auth_service': AUTH_SERVICE_URL,
+        'user_service': USER_SERVICE_URL,
+        'chat_service': CHAT_SERVICE_URL,
+        'oauth_service': OAUTH_SERVICE_URL,
+        'realtime_service': REALTIME_SERVICE_URL
+    }
+    
+    service_statuses = {}
+    overall_status = 'healthy'
+    
+    # Check each service
+    for name, url in services.items():
+        service_status = 'unknown'
+        try:
+            resp = requests.get(f"{url}/health", timeout=2)
+            if resp.status_code == 200:
+                service_status = 'healthy'
+                # Check for healthy in response
+                try:
+                    resp_data = resp.json()
+                    if 'status' in resp_data and resp_data['status'] != 'healthy':
+                        service_status = resp_data['status']
+                        overall_status = 'degraded'
+                except Exception:
+                    pass
+            else:
+                service_status = 'unhealthy'
+                overall_status = 'degraded'
+        except requests.RequestException:
+            service_status = 'unreachable'
+            overall_status = 'degraded'
+        
+        # Consider circuit breaker state
+        if name in service_health and service_health[name]['open']:
+            service_status = 'circuit_open'
+            overall_status = 'degraded'
+            
+        service_statuses[name] = service_status
+    
+    # Get system information
+    uptime = int(time.time() - app.start_time)
+    
+    # Check WebSocket special handling
+    ws_status = 'unknown'
+    if service_statuses.get('realtime_service') in ['healthy', 'degraded']:
+        try:
+            # Test WebSocket connection via the test endpoint
+            ws_resp = requests.post(
+                f"{REALTIME_SERVICE_URL}/test-broadcast",
+                json={"message": "Health check test"},
+                timeout=2
+            )
+            if ws_resp.status_code == 200:
+                ws_status = 'healthy'
+            else:
+                ws_status = 'unhealthy'
+                overall_status = 'degraded'
+        except requests.RequestException:
+            ws_status = 'unreachable'
+            overall_status = 'degraded'
+    else:
+        ws_status = 'skipped'
+    
     return jsonify({
-        'status': 'healthy',
+        'status': overall_status,
+        'uptime_seconds': uptime,
+        'rate_limiting_enabled': ENABLE_RATE_LIMITING,
+        'environment': os.environ.get('FLASK_ENV', 'development'),
+        'version': os.environ.get('APP_VERSION', '1.0.0'),
         'services': service_statuses,
+        'websocket': ws_status,
         'timestamp': datetime.utcnow().isoformat()
+    })
+
+@app.route('/api/system/health-detailed')
+def health_detailed():
+    """Detailed system health check for admin/monitoring"""
+    # Only allow in development mode or for admin users
+    if not IS_DEVELOPMENT and (not hasattr(g, 'user') or 'role' not in g.user or g.user['role'] != 'admin'):
+        return jsonify({
+            'error': 'Forbidden',
+            'error_code': 'PERMISSION_DENIED',
+            'message': 'Admin access required'
+        }), 403
+    
+    # Gather detailed service status
+    service_details = {}
+    for name, url in {
+        'auth_service': AUTH_SERVICE_URL,
+        'user_service': USER_SERVICE_URL,
+        'chat_service': CHAT_SERVICE_URL,
+        'oauth_service': OAUTH_SERVICE_URL,
+        'realtime_service': REALTIME_SERVICE_URL
+    }.items():
+        try:
+            start_time = time.time()
+            resp = requests.get(f"{url}/health", timeout=3)
+            response_time = time.time() - start_time
+            
+            service_details[name] = {
+                'status': 'healthy' if resp.status_code == 200 else 'unhealthy',
+                'response_time_ms': round(response_time * 1000, 2),
+                'status_code': resp.status_code,
+                'circuit_state': 'open' if service_health[name]['open'] else 'closed',
+                'circuit_failures': service_health[name]['failures'],
+                'last_failure': datetime.fromtimestamp(service_health[name]['last_failure']).isoformat() if service_health[name]['last_failure'] else None
+            }
+            
+            # Include response body if available
+            try:
+                service_details[name]['response'] = resp.json()
+            except Exception:
+                service_details[name]['response'] = 'Non-JSON response'
+                
+        except requests.RequestException as e:
+            service_details[name] = {
+                'status': 'unreachable',
+                'error': str(e),
+                'circuit_state': 'open' if service_health[name]['open'] else 'closed',
+                'circuit_failures': service_health[name]['failures'],
+                'last_failure': datetime.fromtimestamp(service_health[name]['last_failure']).isoformat() if service_health[name]['last_failure'] else None
+            }
+    
+    # Get runtime statistics
+    memory_usage = {}
+    try:
+        import psutil
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        memory_usage = {
+            'rss_mb': round(memory_info.rss / (1024 * 1024), 2),
+            'vms_mb': round(memory_info.vms / (1024 * 1024), 2),
+            'percent': round(process.memory_percent(), 2)
+        }
+    except ImportError:
+        memory_usage = {'error': 'psutil not available'}
+    
+    return jsonify({
+        'timestamp': datetime.utcnow().isoformat(),
+        'uptime_seconds': int(time.time() - app.start_time),
+        'environment': os.environ.get('FLASK_ENV', 'development'),
+        'services': service_details,
+        'rate_limiting': {
+            'enabled': ENABLE_RATE_LIMITING,
+            'requests_per_minute': REQUESTS_PER_MINUTE,
+            'burst_limit': BURST_LIMIT
+        },
+        'circuit_breaker': {
+            'failure_threshold': CIRCUIT_FAILURE_THRESHOLD,
+            'reset_timeout': CIRCUIT_RESET_TIMEOUT
+        },
+        'memory': memory_usage
     })
 
 @app.route('/api/circuit-status')

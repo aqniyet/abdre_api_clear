@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
     libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy base requirements first
@@ -29,17 +30,9 @@ ENV PYTHONPATH=/app
 # Expose port
 EXPOSE 5006
 
-# Create a startup script
-RUN echo '#!/usr/bin/env python3\n\
-import os\n\
-import sys\n\
-sys.path.append("/app")\n\
-from realtime_service.app import app\n\
-\n\
-if __name__ == "__main__":\n\
-    app.run(host="0.0.0.0", port=5006)\n\
-' > /app/realtime_service/run.py \
-    && chmod +x /app/realtime_service/run.py
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:5006/health || exit 1
 
-# Run the startup script
-CMD ["python", "run.py"] 
+# Start the service
+CMD ["python", "app.py"] 

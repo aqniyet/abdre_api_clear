@@ -5,11 +5,18 @@ import os
 import json
 import jwt
 import datetime
+import eventlet
+
+# Use eventlet worker for better WebSocket performance
+eventlet.monkey_patch()
 
 app = Flask(__name__)
 
 # Configure CORS
 cors_allowed_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '*').split(',')
+if '*' in cors_allowed_origins:
+    cors_allowed_origins = '*'
+
 CORS(app, origins=cors_allowed_origins)
 
 # Initialize Socket.IO with CORS support
@@ -38,16 +45,32 @@ def verify_token(token):
 # Socket.IO event handlers
 @socketio.on('connect')
 def handle_connect():
-    token = request.args.get('token') or (request.headers.get('Authorization', '').replace('Bearer ', '') if 'Authorization' in request.headers else None)
+    print(f"Connection attempt from {request.sid}")
+    token = None
+    
+    # Check for token in auth data
+    if hasattr(request, 'args') and request.args.get('token'):
+        token = request.args.get('token')
+    elif hasattr(request, 'headers') and request.headers.get('Authorization'):
+        token = request.headers.get('Authorization').replace('Bearer ', '')
+    elif hasattr(request, '_query_string'):
+        # Try to extract from query string
+        qs = request._query_string.decode('utf-8')
+        if 'token=' in qs:
+            token = qs.split('token=')[1].split('&')[0]
     
     if not token:
+        print("No token found, rejecting connection")
         return False  # Reject connection
     
     user_data = verify_token(token)
     if not user_data:
+        print("Invalid token, rejecting connection")
         return False  # Reject connection
     
     user_id = user_data.get('user_id')
+    print(f"User {user_id} connected with session ID {request.sid}")
+    
     connected_clients[request.sid] = {
         'user_id': user_id,
         'rooms': []
@@ -59,6 +82,7 @@ def handle_connect():
 def handle_disconnect():
     client = connected_clients.get(request.sid)
     if client:
+        print(f"User {client['user_id']} disconnected")
         # Notify all rooms that user has left
         for room_id in client['rooms']:
             emit('user_away', {
@@ -77,6 +101,8 @@ def handle_join(data):
     
     room_id = data.get('room_id')
     visitor_id = data.get('visitor_id')
+    
+    print(f"User {visitor_id} joining room {room_id}")
     
     # Validate that the visitor_id matches the authenticated user or has permission
     if visitor_id != client['user_id']:
@@ -105,6 +131,8 @@ def handle_message(data):
     room_id = data.get('room_id')
     message = data.get('message', '')
     
+    print(f"Message in room {room_id} from {client['user_id']}: {message[:30]}...")
+    
     # Ensure client is in the room
     if room_id not in client['rooms']:
         return
@@ -114,7 +142,7 @@ def handle_message(data):
         'room_id': room_id,
         'sender_id': client['user_id'],
         'content': message,
-        'timestamp': data.get('timestamp')
+        'created_at': datetime.datetime.utcnow().isoformat()
     }
     
     emit('message', message_data, to=room_id)
@@ -173,7 +201,7 @@ def handle_ping(data):
 # HTTP Routes
 @app.route('/health', methods=['GET'])
 def health_check():
-    return jsonify({"status": "healthy", "service": "realtime_service"}), 200
+    return jsonify({"status": "healthy", "service": "realtime_service", "connections": len(connected_clients)}), 200
 
 @app.route('/connections', methods=['GET'])
 def get_connections():
@@ -185,10 +213,15 @@ def get_connections():
 
 @app.route('/test-broadcast', methods=['POST'])
 def test_broadcast():
-    """Test endpoint to broadcast a message to all connected clients"""
+    """Test endpoint to broadcast a message to all connected clients
+    This is a public test endpoint that does not require authentication
+    """
+    # For the test endpoint, we don't need to verify the token
     data = request.get_json()
     message = data.get('message', 'Test message')
     room = data.get('room')
+    
+    print(f"Test broadcast received: {message}")
     
     if room:
         # Broadcast to specific room
@@ -196,17 +229,18 @@ def test_broadcast():
             'room_id': room,
             'sender_id': 'system',
             'content': message,
-            'timestamp': datetime.datetime.utcnow().isoformat()
+            'created_at': datetime.datetime.utcnow().isoformat()
         }, to=room)
         return jsonify({"success": True, "message": f"Message broadcast to room {room}"})
     else:
         # Broadcast to all clients
-        socketio.emit('message', {
+        socketio.emit('broadcast', {
             'sender_id': 'system',
             'content': message,
-            'timestamp': datetime.datetime.utcnow().isoformat()
+            'created_at': datetime.datetime.utcnow().isoformat()
         })
         return jsonify({"success": True, "message": "Message broadcast to all clients"})
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5006, debug=True, allow_unsafe_werkzeug=True) 
+    # Use eventlet WSGI server
+    socketio.run(app, host='0.0.0.0', port=5006, debug=True) 

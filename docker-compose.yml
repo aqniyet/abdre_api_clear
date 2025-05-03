@@ -35,6 +35,7 @@ services:
       - DB_PASSWORD=postgres
       - REDIS_HOST=redis
       - JWT_SECRET=dev-secret-key
+      - CORS_ALLOWED_ORIGINS=http://localhost:5000,http://localhost:8080,https://abdre.kz
     ports:
       - "5001:5001"
     depends_on:
@@ -56,6 +57,7 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - JWT_SECRET=dev-secret-key
+      - CORS_ALLOWED_ORIGINS=http://localhost:5000,http://localhost:8080,https://abdre.kz
     ports:
       - "5002:5002"
     depends_on:
@@ -79,6 +81,7 @@ services:
       - JWT_SECRET=dev-secret-key
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - CORS_ALLOWED_ORIGINS=http://localhost:5000,http://localhost:8080,https://abdre.kz
     ports:
       - "5003:5003"
     depends_on:
@@ -100,6 +103,7 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - JWT_SECRET=dev-secret-key
+      - CORS_ALLOWED_ORIGINS=http://localhost:5000,http://localhost:8080,https://abdre.kz
     ports:
       - "5004:5004"
     depends_on:
@@ -118,6 +122,7 @@ services:
       - DEBUG=true
       - JWT_SECRET=dev-secret-key
       - REDIS_HOST=redis
+      - CORS_ALLOWED_ORIGINS=http://localhost:5000,http://localhost:8080,https://abdre.kz
     ports:
       - "5006:5006"
     depends_on:
@@ -131,6 +136,10 @@ services:
     build:
       context: .
       dockerfile: api_gateway/Dockerfile
+    volumes:
+      - ./frontend/static:/app/api_gateway/static
+      - ./frontend/templates:/app/api_gateway/templates
+      - ./api_gateway/app.py:/app/api_gateway/app.py
     environment:
       - FLASK_ENV=development
       - DEBUG=true
@@ -169,4 +178,4 @@ networks:
     driver: bridge
 
 volumes:
-  postgres-data: 
+  postgres-data: {}

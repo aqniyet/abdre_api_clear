@@ -1,0 +1,54 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Install required system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create directory structure
+RUN mkdir -p /app/api_gateway/static /app/api_gateway/templates /app/shared
+
+# Copy in shared code first (to leverage caching)
+COPY shared /app/shared/
+
+# Copy in service-specific code
+COPY api_gateway /app/api_gateway/
+
+# Set working directory
+WORKDIR /app/api_gateway
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Fix indentation in app.py
+RUN sed -i 's/try:\n            resp = requests/try:\n        resp = requests/g' app.py || echo "Sed replacement didn't match"
+
+# Create a more direct fix using python
+RUN python3 -c '
+import re
+with open("app.py", "r") as f:
+    content = f.read()
+if "    try:\n            resp = requests" in content:
+    fixed = content.replace("    try:\n            resp = requests", "    try:\n        resp = requests")
+    with open("app.py", "w") as f:
+        f.write(fixed)
+    print("Fixed indentation in app.py")
+else:
+    print("No indentation issues found")
+'
+
+# Make start script executable
+RUN chmod +x start.sh
+
+# Define health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:5000/health || exit 1
+
+# Expose port
+EXPOSE 5000
+
+# Run start script
+CMD ["./start.sh"] 
