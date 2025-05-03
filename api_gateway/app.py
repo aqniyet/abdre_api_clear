@@ -86,14 +86,15 @@ health_check.add_check('service_dependencies', check_service_dependencies)
 # Define protected and public routes
 PROTECTED_ROUTES = [
     r'^/api/users/.*$',
-    r'^/api/chats/.*$'
+    r'^/api/chats/.+$'  # Changed from r'^/api/chats/.*$' to only protect chat paths with IDs
 ]
 
 PUBLIC_ROUTES = [
     r'^/api/auth/login$',
     r'^/api/auth/register$',
     r'^/api/test-json$',
-    r'^/api/json-test$'
+    r'^/api/json-test$',
+    r'^/api/chats$'  # Add root chats endpoint as public
 ]
 
 # Rate limiting configuration
@@ -891,7 +892,7 @@ def chat_service_proxy(path):
 @app.route('/api/chats', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def chat_service_root_proxy():
     """Proxy requests to chat service root"""
-    return proxy_request(f"{CHAT_SERVICE_URL}/", 'CHAT_SERVICE_URL')
+    return proxy_request(f"{CHAT_SERVICE_URL}/chats", 'CHAT_SERVICE_URL')
 
 @app.route('/api/realtime/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def realtime_service_proxy(path):
