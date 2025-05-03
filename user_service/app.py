@@ -6,6 +6,7 @@ import os
 import logging
 import jwt
 from datetime import datetime
+from flask_cors import CORS
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -13,6 +14,10 @@ logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Configure CORS
+cors_allowed_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '*').split(',')
+CORS(app, origins=cors_allowed_origins)
 
 # Configuration
 JWT_SECRET = os.environ.get('JWT_SECRET', 'dev-secret-key')

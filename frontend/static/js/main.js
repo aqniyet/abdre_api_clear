@@ -116,10 +116,33 @@ function initGlobalErrorHandler() {
       
       // Handle authentication errors
       if (response.status === 401) {
-        // Clear authentication and redirect to login
-        AuthHelper.clearAuth();
-        window.location.href = '/login';
-        throw new Error('Authentication required');
+        // Try to refresh the token if available
+        if (localStorage.getItem('refresh_token')) {
+          try {
+            await AuthHelper.refreshToken();
+            
+            // Retry the original request with the new token
+            const newOptions = { ...options };
+            if (newOptions.headers) {
+              newOptions.headers = { ...newOptions.headers };
+              if (newOptions.headers.Authorization) {
+                newOptions.headers.Authorization = `Bearer ${AuthHelper.getToken()}`;
+              }
+            }
+            return await originalFetch(url, newOptions);
+          } catch (refreshError) {
+            console.error('Token refresh failed:', refreshError);
+            // Clear authentication and redirect to login
+            AuthHelper.clearAuth();
+            window.location.href = '/login';
+            throw new Error('Authentication required');
+          }
+        } else {
+          // No refresh token, clear auth and redirect
+          AuthHelper.clearAuth();
+          window.location.href = '/login';
+          throw new Error('Authentication required');
+        }
       }
       
       return response;

@@ -2,7 +2,7 @@
  * Authentication helper utilities for ABDRE Chat Application
  */
 
-console.log('Auth Helper loaded successfully');
+console.log('Auth Helper (auth_helper.js) loaded successfully');
 
 const AuthHelper = {
   /**

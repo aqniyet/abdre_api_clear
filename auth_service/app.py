@@ -6,6 +6,7 @@ import os
 import logging
 import jwt
 from datetime import datetime, timedelta
+from flask_cors import CORS
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -13,6 +14,10 @@ logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Configure CORS
+cors_allowed_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '*').split(',')
+CORS(app, origins=cors_allowed_origins)
 
 # Configuration
 JWT_SECRET = os.environ.get('JWT_SECRET', 'dev-secret-key')
@@ -69,12 +74,13 @@ def login():
     refresh_token = generate_token(user, REFRESH_TOKEN_EXPIRY, is_refresh=True)
     
     return jsonify({
-        'token': access_token,
+        'access_token': access_token,
         'refresh_token': refresh_token,
         'user': {
             'username': user['username'],
             'email': user['email'],
-            'role': user['role']
+            'role': user['role'],
+            'user_id': user['username']  # Include user_id for compatibility
         }
     })
 
@@ -110,12 +116,13 @@ def register():
     refresh_token = generate_token(users[username], REFRESH_TOKEN_EXPIRY, is_refresh=True)
     
     return jsonify({
-        'token': access_token,
+        'access_token': access_token,
         'refresh_token': refresh_token,
         'user': {
             'username': username,
             'email': email,
-            'role': 'user'
+            'role': 'user',
+            'user_id': username  # Include user_id for compatibility
         }
     }), 201
 
@@ -151,8 +158,9 @@ def refresh():
         new_refresh_token = generate_token(user, REFRESH_TOKEN_EXPIRY, is_refresh=True)
         
         return jsonify({
-            'token': access_token,
-            'refresh_token': new_refresh_token
+            'access_token': access_token,
+            'refresh_token': new_refresh_token,
+            'user_id': username
         })
         
     except jwt.InvalidTokenError as e:

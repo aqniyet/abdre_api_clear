@@ -23,6 +23,20 @@ class ApiClient {
   }
 
   /**
+   * Ensure auth headers are up to date before each request
+   */
+  ensureAuthHeaders() {
+    // Re-fetch the token in case it was refreshed
+    const accessToken = localStorage.getItem('access_token');
+    if (accessToken) {
+      this.headers['Authorization'] = `Bearer ${accessToken}`;
+    } else {
+      delete this.headers['Authorization'];
+    }
+    return this.headers;
+  }
+
+  /**
    * Make a GET request
    * @param {string} endpoint - API endpoint
    * @returns {Promise} - Promise with the response data
@@ -31,7 +45,7 @@ class ApiClient {
     try {
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
         method: 'GET',
-        headers: this.headers,
+        headers: this.ensureAuthHeaders(),
       });
       
       if (!response.ok) {
@@ -55,7 +69,7 @@ class ApiClient {
     try {
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
         method: 'POST',
-        headers: this.headers,
+        headers: this.ensureAuthHeaders(),
         body: JSON.stringify(data),
       });
       
@@ -80,7 +94,7 @@ class ApiClient {
     try {
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
         method: 'PUT',
-        headers: this.headers,
+        headers: this.ensureAuthHeaders(),
         body: JSON.stringify(data),
       });
       
@@ -104,7 +118,7 @@ class ApiClient {
     try {
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
         method: 'DELETE',
-        headers: this.headers,
+        headers: this.ensureAuthHeaders(),
       });
       
       if (!response.ok) {
@@ -125,9 +139,9 @@ class ApiClient {
 
   async login(credentials) {
     const response = await this.post('/api/auth/login', credentials);
-    if (response.access_token) {
-      localStorage.setItem('access_token', response.access_token);
-      localStorage.setItem('user_id', response.user_id);
+    if (response.access_token || response.token) {
+      // Use AuthHelper to save auth data consistently
+      AuthHelper.saveAuth(response);
       this.setupAuthHeaders();
     }
     return response;

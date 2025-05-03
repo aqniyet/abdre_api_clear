@@ -4,7 +4,9 @@ import os
 import json
 
 app = Flask(__name__)
-CORS(app)
+# Configure CORS
+cors_allowed_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '*').split(',')
+CORS(app, origins=cors_allowed_origins)
 
 # Configuration
 DB_HOST = os.environ.get('DB_HOST', 'localhost')

@@ -24,18 +24,20 @@ class SocketClient {
   init() {
     return new Promise((resolve, reject) => {
       try {
-        const accessToken = localStorage.getItem('access_token');
+        const accessToken = AuthHelper.getToken();
         
         if (!accessToken) {
           reject(new Error('No access token found'));
           return;
         }
 
-        // Initialize socket.io connection
-        this.socket = io({
+        // Initialize socket.io connection through the API Gateway
+        this.socket = io(window.location.origin, {
+          path: '/api/realtime/socket.io',
           auth: {
             token: accessToken
-          }
+          },
+          transports: ['websocket', 'polling']
         });
 
         // Set up event listeners
@@ -50,9 +52,25 @@ class SocketClient {
           this.connected = false;
         });
 
-        this.socket.on('connect_error', (error) => {
+        this.socket.on('connect_error', async (error) => {
           console.error('Socket connection error:', error);
-          reject(error);
+          
+          // Try to refresh token if connection error
+          if (error.message === 'Authentication failed' || error.message === 'jwt expired') {
+            try {
+              await AuthHelper.refreshToken();
+              // Try to reconnect with new token
+              if (this.socket) {
+                this.socket.auth.token = AuthHelper.getToken();
+                this.socket.connect();
+              }
+            } catch (refreshError) {
+              console.error('Token refresh failed:', refreshError);
+              reject(error);
+            }
+          } else {
+            reject(error);
+          }
         });
 
         // Set up event handlers for incoming messages
@@ -62,6 +80,11 @@ class SocketClient {
         this.socket.on('user_away', (data) => this._triggerEvent('user_away', data));
         this.socket.on('check_status', (data) => this._triggerEvent('check_status', data));
         this.socket.on('request_unread_count', (data) => this._triggerEvent('request_unread_count', data));
+        this.socket.on('pong', (data) => {
+          console.log('Pong received:', data);
+          const roundTripTime = new Date() - new Date(data.received_ping);
+          console.log(`Ping round-trip time: ${roundTripTime}ms`);
+        });
       } catch (error) {
         console.error('Socket initialization error:', error);
         reject(error);
@@ -205,6 +228,25 @@ class SocketClient {
       this.socket.disconnect();
       this.connected = false;
     }
+  }
+
+  /**
+   * Test the socket connection by sending a ping
+   * @returns {boolean} - Whether the socket is connected
+   */
+  testConnection() {
+    if (!this.connected) {
+      console.error('Socket not connected');
+      return false;
+    }
+    
+    console.log('Socket connection test - currently connected:', this.connected);
+    console.log('Socket ID:', this.socket.id);
+    
+    // Send a ping to test bidirectional communication
+    this.socket.emit('ping', { timestamp: new Date().toISOString() });
+    
+    return true;
   }
 }
 

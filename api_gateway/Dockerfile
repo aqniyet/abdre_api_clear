@@ -16,10 +16,21 @@ RUN pip install --no-cache-dir -r requirements-base.txt
 COPY api_gateway/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy service code and shared modules
+# Copy API Gateway code first
 COPY api_gateway /app/api_gateway
+
+# Copy frontend files - ensure they override any existing files
 COPY frontend/templates /app/api_gateway/templates
 COPY frontend/static /app/api_gateway/static
+
+# Create required directories if they don't exist
+RUN mkdir -p /app/api_gateway/static/js/utils
+
+# Copy required auth-helper.js directly to the expected paths
+COPY frontend/static/js/utils/auth-helper.js /app/api_gateway/static/js/utils/
+COPY frontend/static/js/utils/auth-helper.js /app/api_gateway/static/js/utils/auth_helper.js
+
+# Copy shared modules
 COPY shared /app/shared
 
 # Set working directory to service directory
