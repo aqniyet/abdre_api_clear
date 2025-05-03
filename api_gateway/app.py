@@ -3,7 +3,7 @@ API Gateway for Abdre microservices architecture
 Provides routing, authentication, rate limiting, circuit breaking,
 request/response transformation, and metrics tracking.
 """
-from flask import Flask, request, jsonify, render_template, redirect, g, Response
+from flask import Flask, request, jsonify, render_template, redirect, g, Response, send_from_directory
 from flask_cors import CORS
 import os
 import requests
@@ -312,6 +312,8 @@ def compress_response(response):
         not hasattr(response, 'data') or
         response.mimetype.startswith('image/') or
         response.mimetype.startswith('font/') or
+        request.path.startswith('/static/') or
+        request.path == '/favicon.ico' or
         response.mimetype == 'application/octet-stream'):
         return response
         
@@ -443,8 +445,7 @@ def after_request(response):
         
     # Skip middleware for static resources
     if (request.path.startswith('/static/') or 
-        request.path == '/favicon.ico' or
-        getattr(response, 'direct_passthrough', False)):
+        request.path == '/favicon.ico'):
         # Only add security headers for static content
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-Frame-Options'] = 'SAMEORIGIN'
@@ -714,7 +715,7 @@ def websocket_test():
 @app.route('/favicon.ico')
 def favicon():
     """Serve the favicon directly"""
-    return app.send_static_file('img/favicon.ico')
+    return send_from_directory(os.path.join(app.static_folder, 'img'), 'favicon.ico')
 
 #------------------------------------------------------------------------------
 # API Gateway Routes
