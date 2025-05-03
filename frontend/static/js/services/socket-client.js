@@ -31,9 +31,15 @@ class SocketClient {
           return;
         }
 
-        // Initialize socket.io connection through the API Gateway
-        this.socket = io(window.location.origin, {
-          path: '/api/realtime/socket.io',
+        // Connect directly to the realtime service instead of through the API Gateway
+        // Extract the hostname from the current URL
+        const hostname = window.location.hostname;
+        
+        // Use the same hostname but connect directly to the realtime service port
+        const socketUrl = `http://${hostname}:5006`;
+        
+        this.socket = io(socketUrl, {
+          path: '/socket.io',
           auth: {
             token: accessToken
           },

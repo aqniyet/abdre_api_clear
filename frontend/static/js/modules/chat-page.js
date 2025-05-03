@@ -262,6 +262,8 @@ const ChatPage = {
    * @param {string} message - Error message
    */
   showError(message) {
+    console.error('Chat error:', message);
+    
     // Check if there's already an error message
     let errorElement = document.querySelector('.error-message');
     
@@ -278,10 +280,23 @@ const ChatPage = {
       
       // Add it to the page
       const mainContainer = document.querySelector('.main-container');
-      mainContainer.insertBefore(errorElement, mainContainer.firstChild);
+      if (mainContainer) {
+        mainContainer.insertBefore(errorElement, mainContainer.firstChild);
+      } else {
+        // If main container not found, try adding to the chat container
+        const chatContainer = document.getElementById('chat-container');
+        if (chatContainer) {
+          chatContainer.insertBefore(errorElement, chatContainer.firstChild);
+        } else {
+          // Last resort - add to body
+          document.body.insertBefore(errorElement, document.body.firstChild);
+        }
+      }
     }
     
     // Set the message
-    errorElement.querySelector('span').textContent = message;
+    if (errorElement.querySelector('span')) {
+      errorElement.querySelector('span').textContent = message;
+    }
   }
 }; 

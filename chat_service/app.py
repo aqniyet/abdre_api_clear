@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
 import json
+import uuid
 
 app = Flask(__name__)
 # Configure CORS
@@ -34,7 +35,24 @@ def get_chat(chat_id):
 @app.route('/chats', methods=['POST'])
 def create_chat():
     # This would normally create a new chat in the database
-    return jsonify({"chat_id": "new-chat-id", "message": "Chat created successfully"}), 201
+    room_id = str(uuid.uuid4())
+    qr_token = str(uuid.uuid4())
+    
+    return jsonify({
+        "room_id": room_id,
+        "qr_token": qr_token,
+        "message": "Chat created successfully"
+    }), 201
+
+@app.route('/chats/<chat_id>/messages', methods=['GET'])
+def get_chat_messages(chat_id):
+    # This would normally query a database for chat messages
+    # For now, return empty messages array
+    return jsonify({
+        "chat_id": chat_id,
+        "messages": [],
+        "message": "Messages retrieved successfully"
+    }), 200
 
 @app.route('/chats/<chat_id>/messages', methods=['POST'])
 def add_message(chat_id):

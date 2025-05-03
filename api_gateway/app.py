@@ -903,6 +903,18 @@ def realtime_service_proxy(path):
 @app.route('/api/realtime/socket.io/', methods=['GET', 'POST', 'OPTIONS'])
 def socketio_proxy():
     """Proxy WebSocket connections to realtime service"""
+    # Check for WebSocket upgrade request
+    if request.headers.get('Upgrade', '').lower() == 'websocket':
+        # For WebSocket connections, we need to use a different approach
+        # This is handled by special reverse proxy config in Nginx/production
+        # For development, return a clear error to help debugging
+        return jsonify({
+            'error': 'WebSocket connection not supported directly by API Gateway',
+            'message': 'Please use a direct connection to the realtime service or configure a WebSocket-capable proxy',
+            'connection_url': REALTIME_SERVICE_URL
+        }), 502
+        
+    # For regular HTTP requests, use the standard proxy
     return proxy_request(f"{REALTIME_SERVICE_URL}/socket.io/", 'REALTIME_SERVICE_URL')
 
 @app.route('/api/ws-test', methods=['POST', 'OPTIONS'])
