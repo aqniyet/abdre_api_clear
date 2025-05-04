@@ -43,9 +43,16 @@ class ApiClient {
    */
   async get(endpoint) {
     try {
+      // For GET requests, don't include Content-Type header to avoid issues with empty bodies
+      const headers = {};
+      const token = localStorage.getItem('access_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
         method: 'GET',
-        headers: this.ensureAuthHeaders(),
+        headers: headers,
       });
       
       if (!response.ok) {
@@ -164,8 +171,37 @@ class ApiClient {
     return this.post('/api/chats', chatData);
   }
 
+  /**
+   * Get chat messages for a specific chat
+   * @param {string} chatId - Chat ID
+   * @returns {Promise} - Promise with the response data
+   */
   async getChatMessages(chatId) {
-    return this.get(`/api/chats/${chatId}/messages`);
+    try {
+      // For GET requests with no body, don't set Content-Type header
+      const headers = {};
+      
+      const token = localStorage.getItem('access_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      console.log('Using headers for getChatMessages:', headers);
+      
+      const response = await fetch(`${this.baseUrl}/api/chats/${chatId}/messages`, {
+        method: 'GET',
+        headers: headers
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('API getChatMessages error:', error);
+      throw error;
+    }
   }
 
   async setUserAway(userData) {
