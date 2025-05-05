@@ -3,407 +3,132 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - ABDRE</title>
-    <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background-color: #f5f5f5;
-        }
-        .container {
-            text-align: center;
-            padding: 2rem;
-            max-width: 400px;
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            color: #333;
-        }
-        .form-group {
-            margin-bottom: 15px;
-            text-align: left;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        .button {
-            display: inline-block;
-            background-color: #4CAF50;
-            color: white;
-            padding: 12px 24px;
-            text-decoration: none;
-            border-radius: 4px;
-            font-weight: bold;
-            margin: 10px;
-            border: none;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        .button:hover {
-            background-color: #45a049;
-        }
-        .oauth-button {
-            background-color: #4285F4;
-        }
-        .oauth-button:hover {
-            background-color: #357ae8;
-        }
-        .tabs {
-            display: flex;
-            margin-bottom: 20px;
-            border-bottom: 1px solid #ddd;
-        }
-        .tab {
-            padding: 10px 20px;
-            cursor: pointer;
-            flex: 1;
-        }
-        .tab.active {
-            border-bottom: 2px solid #4CAF50;
-            font-weight: bold;
-        }
-        .form-container {
-            margin-top: 20px;
-        }
-        .error-message {
-            color: #d9534f;
-            margin: 10px 0;
-            display: none;
-        }
-    </style>
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Login - ABDRE Chat</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    
+    <!-- Security headers -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http: https: ws: wss: data:; connect-src 'self' http: https: ws: wss:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com https://appleid.apple.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data:; font-src 'self' data: https://cdnjs.cloudflare.com; frame-src https://accounts.google.com https://appleid.apple.com;">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
 </head>
-<body>
-    <div class="container">
-        <h1>Welcome to ABDRE</h1>
-        
-        <div class="tabs">
-            <div class="tab active" id="login-tab">Login</div>
-            <div class="tab" id="register-tab">Register</div>
+<body class="login-page">
+    <div class="container-fluid">
+        <div class="row min-vh-100">
+            <!-- Left side - Brand showcase -->
+            <div class="col-lg-6 d-none d-lg-flex auth-showcase">
+                <div class="auth-showcase-content">
+                    <h1 class="display-4 mb-4">ABDRE Chat</h1>
+                    <p class="lead">Secure, encrypted messaging with blockchain verification.</p>
+                </div>
+            </div>
+            
+            <!-- Right side - Login form -->
+            <div class="col-lg-6 d-flex align-items-center justify-content-center">
+                <div class="auth-form-container">
+                    <div class="text-center mb-4">
+                        <a href="/my-chats" class="d-inline-block mb-3">
+                            <h2 class="h3 mb-0">ABDRE Chat</h2>
+                        </a>
+                        <h3 class="h4 mb-3">Welcome Back</h3>
+                        <p class="text-muted">Sign in to continue to ABDRE Chat</p>
+                    </div>
+                    
+                    <!-- OAuth Buttons -->
+                    <div class="oauth-buttons mb-4">
+                        <button type="button" id="google-login" class="btn btn-oauth btn-google w-100 mb-2">
+                            <i class="fab fa-google"></i>
+                            <span>Continue with Google</span>
+                        </button>
+                        <button type="button" id="apple-login" class="btn btn-oauth btn-apple w-100">
+                            <i class="fab fa-apple"></i>
+                            <span>Continue with Apple</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Divider -->
+                    <div class="divider mb-4">
+                        <span>OR</span>
+                    </div>
+                    
+                    <!-- Manual Login Form -->
+                    <form id="login-form" class="mb-4">
+                        <div class="alert alert-danger d-none" id="login-error"></div>
+                        
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Email or Username</label>
+                            <input type="text" class="form-control" id="username" name="username" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <div class="password-input-container">
+                                <input type="password" class="form-control" id="password" name="password" required>
+                                <button type="button" class="password-toggle" aria-label="Toggle password visibility">
+                                    <i class="far fa-eye"></i>
+                                </button>
+                            </div>
+                            <div class="d-flex justify-content-end mt-1">
+                                <a href="/forgot-password" class="small text-decoration-none">Forgot password?</a>
+                            </div>
+                        </div>
+                        
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="remember-me" name="remember">
+                            <label class="form-check-label" for="remember-me">
+                                Remember me
+                            </label>
+                        </div>
+                        
+                        <div class="d-grid mb-3">
+                            <button type="submit" class="btn btn-primary">Sign In</button>
+                        </div>
+                        
+                        <div class="d-grid">
+                            <a href="/register" class="btn btn-outline-primary">Create Account</a>
+                        </div>
+                    </form>
+                    
+                    <!-- Guest Access -->
+                    <div class="guest-access text-center mb-4">
+                        <p class="small mb-2">Don't want to create an account?</p>
+                        <button type="button" id="guest-access" class="btn btn-link">
+                            Continue as Guest
+                        </button>
+                    </div>
+                    
+                    <!-- Terms and Privacy -->
+                    <div class="terms-privacy text-center small text-muted mb-3">
+                        By signing in, you agree to our 
+                        <a href="/terms" class="text-decoration-none">Terms of Service</a> and 
+                        <a href="/privacy" class="text-decoration-none">Privacy Policy</a>
+                    </div>
+                    
+                    <!-- Mobile Sign Up Link -->
+                    <div class="sign-up-link d-lg-none text-center">
+                        <p class="small mb-0">
+                            Don't have an account? <a href="/register" class="text-decoration-none">Sign up</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
         </div>
-        
-        <div class="form-container" id="login-form-container">
-            <form id="loginForm">
-                <div class="form-group">
-                    <label for="login-username">Username</label>
-                    <input type="text" id="login-username" name="username" required>
-                </div>
-                <div class="form-group">
-                    <label for="login-password">Password</label>
-                    <input type="password" id="login-password" name="password" required>
-                </div>
-                <div class="error-message" id="login-error"></div>
-                <button type="submit" class="button">Login</button>
-            </form>
-        </div>
-        
-        <div class="form-container" id="register-form-container" style="display: none;">
-            <form id="registerForm">
-                <div class="form-group">
-                    <label for="register-username">Username</label>
-                    <input type="text" id="register-username" name="username" required>
-                </div>
-                <div class="form-group">
-                    <label for="register-email">Email</label>
-                    <input type="email" id="register-email" name="email" required>
-                </div>
-                <div class="form-group">
-                    <label for="register-password">Password</label>
-                    <input type="password" id="register-password" name="password" required>
-                </div>
-                <div class="error-message" id="register-error"></div>
-                <button type="submit" class="button">Create Account</button>
-            </form>
-        </div>
-        
-        <div>
-            <p>Or continue with</p>
-            <a href="/api/oauth/google" class="button oauth-button">Google</a>
-        </div>
-        <p><a href="/">Back to Home</a></p>
     </div>
 
-    <script>
-        // Embed the AuthHelper directly to avoid loading issues
-        console.log('Embedded Auth Helper initialized');
-        
-        const AuthHelper = {
-            /**
-             * Check if the user is authenticated
-             * @returns {boolean} - True if the user is authenticated
-             */
-            isAuthenticated() {
-                console.log('AuthHelper.isAuthenticated called');
-                return !!localStorage.getItem('access_token');
-            },
-            
-            /**
-             * Get the current user ID
-             * @returns {string|null} - User ID or null if not authenticated
-             */
-            getUserId() {
-                console.log('AuthHelper.getUserId called');
-                return localStorage.getItem('user_id');
-            },
-            
-            /**
-             * Get the access token
-             * @returns {string|null} - Access token or null if not authenticated
-             */
-            getToken() {
-                console.log('AuthHelper.getToken called');
-                return localStorage.getItem('access_token');
-            },
-            
-            /**
-             * Save authentication data
-             * @param {Object} data - Authentication data
-             */
-            saveAuth(data) {
-                console.log('AuthHelper.saveAuth called with data:', JSON.stringify(data));
-                
-                if (data.access_token || data.token) {
-                    localStorage.setItem('access_token', data.access_token || data.token);
-                }
-                
-                if (data.user_id) {
-                    localStorage.setItem('user_id', data.user_id);
-                } else if (data.user && data.user.username) {
-                    localStorage.setItem('user_id', data.user.username);
-                }
-                
-                if (data.refresh_token) {
-                    localStorage.setItem('refresh_token', data.refresh_token);
-                }
-                
-                if (data.user) {
-                    localStorage.setItem('user_role', data.user.role || 'user');
-                    if (data.user.email) {
-                        localStorage.setItem('user_email', data.user.email);
-                    }
-                    if (data.user.username) {
-                        localStorage.setItem('user_name', data.user.username);
-                    }
-                }
-            },
-            
-            /**
-             * Clear authentication data
-             */
-            clearAuth() {
-                console.log('AuthHelper.clearAuth called');
-                localStorage.removeItem('access_token');
-                localStorage.removeItem('user_id');
-                localStorage.removeItem('refresh_token');
-                localStorage.removeItem('user_role');
-                localStorage.removeItem('user_email');
-                localStorage.removeItem('user_name');
-            },
-            
-            /**
-             * Redirect to login if not authenticated
-             * @param {string} redirectUrl - URL to redirect to after login
-             * @returns {boolean} - True if redirected, false if already authenticated
-             */
-            requireAuth(redirectUrl) {
-                console.log('AuthHelper.requireAuth called with redirectUrl:', redirectUrl);
-                if (!this.isAuthenticated()) {
-                    const loginUrl = redirectUrl 
-                        ? `/login?next=${encodeURIComponent(redirectUrl)}`
-                        : '/login';
-                    
-                    window.location.href = loginUrl;
-                    return true;
-                }
-                
-                return false;
-            }
-        };
-
-        // Switch between login and register tabs
-        document.getElementById('login-tab').addEventListener('click', function() {
-            this.classList.add('active');
-            document.getElementById('register-tab').classList.remove('active');
-            document.getElementById('login-form-container').style.display = 'block';
-            document.getElementById('register-form-container').style.display = 'none';
-        });
-        
-        document.getElementById('register-tab').addEventListener('click', function() {
-            this.classList.add('active');
-            document.getElementById('login-tab').classList.remove('active');
-            document.getElementById('login-form-container').style.display = 'none';
-            document.getElementById('register-form-container').style.display = 'block';
-        });
-        
-        // Handle login form submission
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const username = document.getElementById('login-username').value;
-            const password = document.getElementById('login-password').value;
-            const errorElement = document.getElementById('login-error');
-            
-            // Show the form data in console for debugging
-            console.log('Login form submitted with:', { username, password });
-            
-            fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    username: username,
-                    password: password
-                })
-            })
-            .then(response => {
-                console.log('Login response status:', response.status);
-                
-                // First check if the response is ok
-                if (!response.ok) {
-                    throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
-                }
-                
-                // Try to parse JSON, but handle parsing errors gracefully
-                const contentType = response.headers.get('content-type');
-                console.log('Response content type:', contentType);
-                
-                if (contentType && contentType.includes('application/json')) {
-                    return response.json().catch(error => {
-                        console.error('JSON parsing error:', error);
-                        throw new Error('Failed to parse server response as JSON');
-                    });
-                } else {
-                    // If not JSON, get text and try to parse it
-                    return response.text().then(text => {
-                        console.log('Response text (first 100 chars):', text.substring(0, 100));
-                        try {
-                            return JSON.parse(text);
-                        } catch (error) {
-                            console.error('Response not JSON:', text.substring(0, 100));
-                            throw new Error('Server did not return JSON');
-                        }
-                    });
-                }
-            })
-            .then(data => {
-                console.log('Login data received:', data);
-                
-                if (data.token || data.access_token) {
-                    // Store authentication data
-                    AuthHelper.saveAuth(data);
-                    
-                    // Redirect to original destination or home
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const nextUrl = urlParams.get('next') || '/';
-                    window.location.href = nextUrl;
-                } else {
-                    errorElement.textContent = data.error || 'Login failed';
-                    errorElement.style.display = 'block';
-                }
-            })
-            .catch(error => {
-                console.error('Login error:', error);
-                errorElement.textContent = `Login failed: ${error.message}`;
-                errorElement.style.display = 'block';
-            });
-        });
-        
-        // Handle register form submission
-        document.getElementById('registerForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const username = document.getElementById('register-username').value;
-            const email = document.getElementById('register-email').value;
-            const password = document.getElementById('register-password').value;
-            const errorElement = document.getElementById('register-error');
-            
-            console.log('Register form submitted with:', { username, email });
-            
-            fetch('/api/auth/register', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    username: username,
-                    email: email,
-                    password: password
-                })
-            })
-            .then(response => {
-                console.log('Register response status:', response.status);
-                
-                // First check if the response is ok
-                if (!response.ok) {
-                    throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
-                }
-                
-                // Try to parse JSON, but handle parsing errors gracefully
-                const contentType = response.headers.get('content-type');
-                console.log('Response content type:', contentType);
-                
-                if (contentType && contentType.includes('application/json')) {
-                    return response.json().catch(error => {
-                        console.error('JSON parsing error:', error);
-                        throw new Error('Failed to parse server response as JSON');
-                    });
-                } else {
-                    // If not JSON, get text and try to parse it
-                    return response.text().then(text => {
-                        console.log('Response text (first 100 chars):', text.substring(0, 100));
-                        try {
-                            return JSON.parse(text);
-                        } catch (error) {
-                            console.error('Response not JSON:', text.substring(0, 100));
-                            throw new Error('Server did not return JSON');
-                        }
-                    });
-                }
-            })
-            .then(data => {
-                console.log('Register data received:', data);
-                
-                if (data.token || data.access_token) {
-                    // Store authentication data
-                    AuthHelper.saveAuth(data);
-                    
-                    // Redirect to original destination or home
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const nextUrl = urlParams.get('next') || '/';
-                    window.location.href = nextUrl;
-                } else {
-                    errorElement.textContent = data.error || 'Registration failed';
-                    errorElement.style.display = 'block';
-                }
-            })
-            .catch(error => {
-                console.error('Registration error:', error);
-                errorElement.textContent = `Registration failed: ${error.message}`;
-                errorElement.style.display = 'block';
-            });
-        });
-        
-        // Check if user is already logged in
-        if (AuthHelper && AuthHelper.isAuthenticated()) {
-            const urlParams = new URLSearchParams(window.location.search);
-            const nextUrl = urlParams.get('next') || '/';
-            window.location.href = nextUrl;
-        }
-    </script>
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+    
+    <!-- Auth Helper -->
+    <script src="/static/js/utils/auth-helper.js"></script>
+    
+    <!-- Login Script -->
+    <script src="/static/js/login.js"></script>
 </body>
-</html> 
+</html>

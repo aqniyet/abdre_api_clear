@@ -3,97 +3,239 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Chats - ABDRE</title>
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>My Chats - ABDRE Chat</title>
+    
     <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/static/css/style.css">
+    
+    <!-- Security headers -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http: https: ws: wss: data:; connect-src 'self' http: https: ws: wss:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data:; font-src 'self' data: https://cdnjs.cloudflare.com;">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
 </head>
 <body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container">
-            <a class="navbar-brand" href="/">ABDRE Chat</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarContent">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item" data-auth-required>
-                        <a class="nav-link active" href="/my-chats">My Chats</a>
-                    </li>
-                    <li class="nav-item" data-auth-required>
-                        <a class="nav-link" href="/settings">Settings</a>
-                    </li>
-                    <li class="nav-item" data-auth-required>
-                        <a class="nav-link" href="#" data-action="logout">Logout</a>
-                    </li>
-                    <li class="nav-item" data-non-auth-only>
-                        <a class="nav-link" href="/login">Login</a>
-                    </li>
-                </ul>
+    <header class="bg-primary text-white py-3">
+        <div class="container-fluid">
+            <div class="row align-items-center">
+                <div class="col-6">
+                    <h1 class="fs-3 mb-0"><a href="/my-chats" class="text-white text-decoration-none">ABDRE Chat</a></h1>
+                </div>
+                <div class="col-6 text-end">
+                    <div id="auth-status">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
             </div>
         </div>
-    </nav>
+    </header>
 
-    <!-- Main Content -->
-    <div class="container mt-4">
+    <main class="container-fluid py-4">
         <div class="row">
-            <div class="col-md-12">
-                <div class="card mb-4">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h4>My Chats</h4>
-                        <div>
-                            <button id="refresh-button" class="btn btn-outline-secondary btn-sm me-2">
-                                <i class="bi bi-arrow-clockwise"></i> Refresh
-                            </button>
-                            <a href="/new" id="create-chat-button" class="btn btn-primary btn-sm">
-                                <i class="bi bi-plus-lg"></i> New Chat
-                            </a>
+            <div class="col-lg-10 mx-auto">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2 class="h3 mb-0">My Conversations</h2>
+                    <div>
+                        <button type="button" id="new-chat-btn" class="btn btn-outline-primary me-2">
+                            <i class="fas fa-user-plus me-2"></i> Add User
+                        </button>
+                        <button type="button" id="qr-invite-btn" class="btn btn-primary">
+                            <i class="fas fa-qrcode me-2"></i> QR Invite
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Search Box -->
+                <div class="card mb-4 chat-search-card">
+                    <div class="card-body">
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0">
+                                <i class="fas fa-search text-muted"></i>
+                            </span>
+                            <input type="text" id="chat-search" class="form-control border-start-0" placeholder="Search conversations..." aria-label="Search conversations">
                         </div>
                     </div>
-                    <div class="card-body">
+                </div>
+                
+                <!-- Chat List -->
+                <div class="card">
+                    <div class="list-group list-group-flush" id="chats-container">
+                        <!-- Loader (shown initially) -->
+                        <div id="chats-loader" class="p-5 text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-3 text-muted">Loading your conversations...</p>
+                        </div>
+                        
+                        <!-- Empty state (hidden initially) -->
+                        <div id="empty-chats" class="p-5 text-center d-none">
+                            <div class="mb-4">
+                                <i class="fas fa-comments text-muted" style="font-size: 3.5rem;"></i>
+                            </div>
+                            <h3 class="h4 mb-3">No conversations yet</h3>
+                            <p class="text-muted mb-4">Start chatting with someone to create your first conversation</p>
+                            <button id="empty-new-chat-btn" class="btn btn-primary">
+                                <i class="fas fa-plus me-2"></i> New Chat
+                            </button>
+                        </div>
+                        
+                        <!-- Error state (hidden initially) -->
+                        <div id="error-state" class="p-5 text-center d-none">
+                            <div class="mb-4">
+                                <i class="fas fa-exclamation-triangle text-warning" style="font-size: 3.5rem;"></i>
+                            </div>
+                            <h3 class="h4 mb-3">Couldn't load conversations</h3>
+                            <p class="text-muted mb-4" id="error-message">There was a problem connecting to the server.</p>
+                            <button id="retry-btn" class="btn btn-primary">
+                                <i class="fas fa-sync-alt me-2"></i> Retry
+                            </button>
+                        </div>
+                        
+                        <!-- Chat entries will be added here dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- New Chat Modal -->
+    <div class="modal fade" id="new-chat-modal" tabindex="-1" aria-labelledby="new-chat-modal-label" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="new-chat-modal-label">Start New Conversation</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="new-chat-form">
                         <div class="mb-3">
-                            <div class="input-group">
-                                <span class="input-group-text">
-                                    <i class="bi bi-search"></i>
-                                </span>
-                                <input type="text" id="search-input" class="form-control" placeholder="Search chats...">
+                            <label for="recipient-username" class="form-label">Username or Email</label>
+                            <input type="text" class="form-control" id="recipient-username" placeholder="Enter username or email" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="chat-title" class="form-label">Chat Title (Optional)</label>
+                            <input type="text" class="form-control" id="chat-title" placeholder="Enter a title for this conversation">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="encrypted-chat">
+                                <label class="form-check-label" for="encrypted-chat">
+                                    Enable end-to-end encryption
+                                </label>
                             </div>
                         </div>
-                        <div id="chat-list-container" class="chat-list-container">
-                            <!-- Chat list items will be populated here -->
-                        </div>
-                    </div>
+                        <div class="alert alert-danger d-none" id="new-chat-error"></div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="create-chat-btn">Create Chat</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Bootstrap JS Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- QR Code Invitation Modal -->
+    <div class="modal fade" id="qr-invitation-modal" tabindex="-1" aria-labelledby="qr-invitation-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="qr-invitation-modal-label">Invite via QR Code</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-3">
+                        <p class="lead">Scan this QR code to start a chat</p>
+                        <div class="alert alert-info" id="scan-status">
+                            Waiting for someone to scan the QR code...
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="qr-code-container mx-auto" style="width: 256px; height: 256px; position: relative;">
+                                <div id="qr-code" style="width: 100%; height: 100%;">
+                                    <div class="d-flex justify-content-center align-items-center h-100">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="text-center mt-3">
+                                <p class="mb-1">This invitation expires in:</p>
+                                <div id="invitation-countdown" class="fw-bold fs-4">30:00</div>
+                                <div class="mt-2">
+                                    <span class="me-2">Status:</span>
+                                    <span class="badge bg-secondary" id="invitation-status">Generating...</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="card mt-3 mt-md-0">
+                                <div class="card-header bg-light">
+                                    <h6 class="mb-0">Instructions</h6>
+                                </div>
+                                <div class="card-body">
+                                    <ol class="ps-3">
+                                        <li>Show this QR code to the person you want to chat with</li>
+                                        <li>They need to scan it with their phone camera</li>
+                                        <li>Once scanned, a new chat will be created automatically</li>
+                                        <li>This QR code will expire in 30 minutes if not used</li>
+                                    </ol>
+                                    
+                                    <div class="mt-3">
+                                        <p class="fw-bold mb-1">Or share this link:</p>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" id="invitation-link" readonly>
+                                            <button class="btn btn-outline-primary" type="button" id="copy-link-btn">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                        </div>
+                                        <div id="copy-status" class="form-text"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="regenerate-qr-btn">
+                        <i class="fas fa-sync-alt me-2"></i> Generate New Code
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
     
-    <!-- Socket.IO -->
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <!-- QRCode.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
     
-    <!-- Utilities -->
+    <!-- Socket.IO from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.6.1/dist/socket.io.min.js"></script>
+    
+    <!-- Auth Helper -->
     <script src="/static/js/utils/auth-helper.js"></script>
-    <script src="/static/js/utils/date-formatter.js"></script>
-    <script src="/static/js/utils/state-manager.js"></script>
     
-    <!-- Services -->
-    <script src="/static/js/services/api-client.js"></script>
-    <script src="/static/js/services/socket-client.js"></script>
+    <!-- QR Code Generator -->
+    <script src="/static/js/utils/qrcode-generator.js"></script>
     
-    <!-- Components -->
-    <script src="/static/js/components/chat-list.js"></script>
+    <!-- Invitation Manager -->
+    <script src="/static/js/utils/invitation-manager.js"></script>
     
-    <!-- Page Module -->
+    <!-- My Chats Script -->
     <script src="/static/js/modules/my-chats-page.js"></script>
-    
-    <!-- Main JS -->
-    <script src="/static/js/main.js"></script>
 </body>
 </html> 

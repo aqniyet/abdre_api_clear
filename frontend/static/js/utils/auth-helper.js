@@ -1,4 +1,5 @@
-const AuthHelper = {
+// Define the AuthHelper object and immediately assign it to window
+window.AuthHelper = {
   // Configuration
   config: {
     tokenName: 'authToken',
@@ -75,21 +76,31 @@ const AuthHelper = {
   init() {
     console.log('Initializing AuthHelper...');
     
-    // Save reference to original fetch for token refresh
-    this._originalFetch = window.fetch;
-    
-    // Override fetch to include authentication tokens
-    window.fetch = this._createFetchWrapper();
-    
-    // Check authentication status on init
-    this._checkAuthStatus();
-    
-    // Set up token refresh interval
-    this._setupRefreshInterval();
-    
-    // Get or create visitor ID for guest users
-    if (!this.isAuthenticated()) {
-      this.getOrCreateVisitorId();
+    try {
+      // Save reference to original fetch for token refresh
+      this._originalFetch = window.fetch;
+      
+      // Override fetch to include authentication tokens
+      window.fetch = this._createFetchWrapper();
+      
+      // Check authentication status on init
+      this._checkAuthStatus();
+      
+      // Set up token refresh interval
+      this._setupRefreshInterval();
+      
+      // Get or create visitor ID for guest users if not authenticated
+      if (!this.isAuthenticated()) {
+        this.getOrCreateVisitorId().catch(error => {
+          // Just log the error but don't fail initialization
+          console.warn("Failed to get visitor ID, but continuing anyway:", error);
+        });
+      }
+      
+      console.log('AuthHelper initialized');
+    } catch (error) {
+      console.error('Error during AuthHelper initialization:', error);
+      // Continue despite errors to prevent complete failure
     }
     
     return this;

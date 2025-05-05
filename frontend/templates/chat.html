@@ -3,95 +3,120 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat - ABDRE</title>
-    <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Chat Room - ABDRE Chat</title>
+    
     <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/static/css/style.css">
+    
+    <!-- Security headers -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http: https: ws: wss: data:; connect-src 'self' http: https: ws: wss:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data:; font-src 'self' data: https://cdnjs.cloudflare.com;">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
 </head>
 <body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container">
-            <a class="navbar-brand" href="/">ABDRE Chat</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarContent">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item" data-auth-required>
-                        <a class="nav-link" href="/my-chats">My Chats</a>
-                    </li>
-                    <li class="nav-item" data-auth-required>
-                        <a class="nav-link" href="/settings">Settings</a>
-                    </li>
-                    <li class="nav-item" data-auth-required>
-                        <a class="nav-link" href="#" data-action="logout">Logout</a>
-                    </li>
-                    <li class="nav-item" data-non-auth-only>
-                        <a class="nav-link" href="/login">Login</a>
-                    </li>
-                </ul>
+    <header class="bg-primary text-white py-3">
+        <div class="container-fluid">
+            <div class="row align-items-center">
+                <div class="col-6">
+                    <h1 class="fs-3 mb-0"><a href="/my-chats" class="text-white text-decoration-none">ABDRE Chat</a></h1>
+                </div>
+                <div class="col-6 text-end">
+                    <div id="auth-status">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
             </div>
         </div>
-    </nav>
+    </header>
 
-    <!-- Main Content -->
-    <div class="container mt-4">
-        <div class="row">
-            <div class="col-md-12">
-                <div class="card">
+    <div class="container-fluid h-100 py-3">
+        <div class="row h-100">
+            <div class="col-md-3 col-lg-2 mb-3">
+                <div class="card h-100">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h4 id="chat-title">Chat Room</h4>
-                        <div class="d-flex align-items-center">
-                            <div class="me-3">
-                                <span class="me-1">Status:</span>
-                                <span id="user-status" class="away">Away</span>
+                        <h2 class="h5 mb-0">Chat Rooms</h2>
+                        <button class="btn btn-sm btn-primary" id="new-chat-btn">New</button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="chat-list" class="list-group list-group-flush overflow-auto" style="max-height: 60vh;">
+                            <!-- Chat rooms will be listed here -->
+                            <div class="p-3 text-center text-muted small">
+                                <div class="spinner-border spinner-border-sm" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2 mb-0">Loading chats...</p>
                             </div>
-                            <a href="/my-chats" class="btn btn-secondary btn-sm">
-                                <i class="bi bi-arrow-left"></i> Back
-                            </a>
                         </div>
                     </div>
-                    <div class="chat-container" id="chat-container">
-                        <!-- Messages will be added here dynamically -->
+                </div>
+            </div>
+            
+            <div class="col-md-9 col-lg-10">
+                <div class="card h-100 d-flex flex-column">
+                    <div class="card-header bg-light">
+                        <div class="row align-items-center">
+                            <div class="col">
+                                <h3 class="h5 mb-0" id="current-chat-name">Chat Room</h3>
+                                <small class="text-muted" id="chat-participants">0 participants</small>
+                            </div>
+                            <div class="col-auto">
+                                <span id="connection-status" class="badge bg-secondary">Disconnected</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="input-container">
-                        <input type="text" id="message-input" class="form-control" placeholder="Type a message..." aria-label="Message" />
-                        <button id="send-button" class="btn btn-primary">
-                            <i class="bi bi-send"></i> Send
-                        </button>
+                    
+                    <div class="card-body p-0 overflow-auto" id="message-container" style="flex: 1; min-height: 50vh;">
+                        <!-- Messages will be displayed here -->
+                        <div id="chat-messages" class="p-3">
+                            <div id="connection-message" class="alert alert-info text-center">
+                                Connecting to chat server...
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-footer">
+                        <form id="message-form" class="message-form">
+                            <div class="input-group">
+                                <input type="text" id="message-input" class="form-control" placeholder="Type a message..." disabled>
+                                <button type="submit" class="btn btn-primary" id="send-button" disabled>Send</button>
+                            </div>
+                            <div id="error-container" class="small text-danger mt-2 d-none"></div>
+                        </form>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Socket.IO -->
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <!-- Connection Error Modal -->
+    <div class="modal fade" id="connection-error-modal" tabindex="-1" aria-labelledby="connection-error-label" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="connection-error-label">Connection Error</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="connection-error-message">Unable to connect to the chat server. Please check your connection and try again.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="reconnect-button">Reconnect</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
     
-    <!-- Bootstrap JS Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Utilities -->
+    <!-- Auth Helper -->
     <script src="/static/js/utils/auth-helper.js"></script>
-    <script src="/static/js/utils/date-formatter.js"></script>
-    <script src="/static/js/utils/state-manager.js"></script>
     
-    <!-- Services -->
-    <script src="/static/js/services/api-client.js"></script>
-    <script src="/static/js/services/socket-client.js"></script>
-    
-    <!-- Components -->
-    <script src="/static/js/components/chat-message.js"></script>
-    
-    <!-- Page Module -->
-    <script src="/static/js/modules/chat-page.js"></script>
-    
-    <!-- Main JS -->
-    <script src="/static/js/main.js"></script>
+    <!-- Chat Script -->
+    <script src="/static/js/chat.js"></script>
 </body>
 </html> 

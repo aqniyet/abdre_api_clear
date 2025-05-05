@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timedelta
 from functools import wraps
 
-import jwt
+import PyJWT as jwt
 import prometheus_client
 import requests
 from flask import (
@@ -196,7 +196,7 @@ def authenticate_token():
         token = auth_header.split(" ")[1]
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
         return payload
-    except (jwt.InvalidTokenError, IndexError):
+    except (jwt.exceptions.InvalidTokenError, IndexError, AttributeError):
         return None
 
 
