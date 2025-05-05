@@ -46,7 +46,12 @@ const SocketClient = {
             QR_SCANNED: 'qr_scanned',
             QR_SCANNED_NOTIFICATION: 'qr_scanned_notification',
             INVITATION_ACCEPTED: 'invitation_accepted',
-            ROOM_CREATED: 'room_created'
+            ROOM_CREATED: 'room_created',
+            // New event types
+            READ_RECEIPT: 'read_receipt',
+            MESSAGE_STATUS: 'message_status',
+            JOIN_SUCCESS: 'join_success',
+            USER_JOINED: 'user_joined'
         }
     },
     
@@ -60,6 +65,8 @@ const SocketClient = {
     _queuedMessages: [],
     _connectionListeners: new Set(),
     _directConnectionUrl: null,
+    _typingTimeouts: new Map(),
+    _messagesAwaitingDelivery: new Map(),
     
     /**
      * Initialize the socket client
@@ -112,46 +119,14 @@ const SocketClient = {
      */
     async _checkConnectionMethod(socketOptions) {
         try {
-            // Call the API gateway's WebSocket proxy endpoint
-            const response = await fetch(`${this.config.url}/socket.io/?token=${socketOptions.query.token}`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${socketOptions.query.token}`,
-                    'Accept': 'application/json'
-                }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
-                // Check if API gateway wants us to connect directly
-                if (data.status === 'redirect' && data.connection_url) {
-                    console.log('Using direct connection to realtime service:', data.connection_url);
-                    this._directConnectionUrl = data.connection_url;
-                    
-                    // Update socket options with any additional query params
-                    if (data.query_params) {
-                        socketOptions.query = {
-                            ...socketOptions.query,
-                            ...data.query_params
-                        };
-                    }
-                    
-                    // Initialize with direct connection
-                    this._initializeSocketConnection(data.connection_url, socketOptions);
-                } else {
-                    // Use the proxy through API gateway
-                    console.log('Using API gateway proxy for WebSocket connection');
-                    this._initializeSocketConnection(this.config.url, socketOptions);
-                }
-            } else {
-                // Fallback to API gateway proxy
-                console.warn('Failed to get WebSocket connection info, using API gateway proxy');
-                this._initializeSocketConnection(this.config.url, socketOptions);
-            }
+            console.log('Connecting directly to realtime service on http://localhost:5506');
+            // Always use direct connection to realtime service
+            this._directConnectionUrl = 'http://localhost:5506';
+            this._initializeSocketConnection('http://localhost:5506', socketOptions);
         } catch (error) {
-            console.error('Error checking connection method:', error);
-            // Fallback to API gateway proxy
+            console.error('Error initializing direct connection:', error);
+            console.log('Falling back to standard connection');
+            // Fallback to API gateway proxy as last resort
             this._initializeSocketConnection(this.config.url, socketOptions);
         }
     },
@@ -228,6 +203,9 @@ const SocketClient = {
             // Process queued messages
             this._processQueue();
             
+            // Retry any messages that were pending delivery when disconnected
+            this._retryPendingMessages();
+            
             // Notify connection listeners
             this._notifyConnectionListeners(true);
         });
@@ -248,8 +226,35 @@ const SocketClient = {
             this._reconnecting = true;
         });
         
+        this._socket.on(this.config.eventTypes.RECONNECT, () => {
+            console.log('Socket reconnected');
+            this._connected = true;
+            this._reconnecting = false;
+            
+            // Start heartbeat
+            this._startHeartbeat();
+            
+            // Resubscribe to rooms
+            this._resubscribeRooms();
+            
+            // Process queued messages
+            this._processQueue();
+            
+            // Retry any messages that were pending delivery
+            this._retryPendingMessages();
+            
+            // Notify connection listeners
+            this._notifyConnectionListeners(true);
+        });
+        
         this._socket.on(this.config.eventTypes.ERROR, (error) => {
             console.error('Socket error:', error);
+            
+            // If not connected or reconnecting, try to reconnect
+            if (!this._connected && !this._reconnecting) {
+                console.log('Attempting to reconnect after error...');
+                this._socket.connect();
+            }
         });
         
         // Setup pong handler for heartbeat
@@ -291,6 +296,7 @@ const SocketClient = {
         
         // Typing indicators
         this._socket.on(this.config.eventTypes.TYPING, (data) => {
+            // Trigger handlers for typing event
             this._triggerHandlers(this.config.eventTypes.TYPING, data);
         });
         
@@ -306,6 +312,41 @@ const SocketClient = {
         // Room creation
         this._socket.on(this.config.eventTypes.ROOM_CREATED, (data) => {
             this._triggerHandlers(this.config.eventTypes.ROOM_CREATED, data);
+        });
+        
+        // Handle message status updates
+        this._socket.on(this.config.eventTypes.MESSAGE_STATUS, (data) => {
+            // Update any tracked message status
+            if (data.client_message_id && this._messagesAwaitingDelivery.has(data.client_message_id)) {
+                const tracking = this._messagesAwaitingDelivery.get(data.client_message_id);
+                tracking.status = data.status;
+                
+                // Update resolver if message was delivered successfully
+                if (data.status === 'delivered' || data.status === 'read') {
+                    const responseData = {
+                        ...tracking.data,
+                        status: data.status,
+                        server_message_id: data.server_message_id
+                    };
+                    tracking.resolver(responseData);
+                } else if (data.status === 'failed') {
+                    tracking.rejecter(new Error(data.error || 'Message delivery failed'));
+                }
+            }
+            
+            // Trigger handlers for message status event
+            this._triggerHandlers(this.config.eventTypes.MESSAGE_STATUS, data);
+        });
+        
+        // Handle room events
+        this._socket.on(this.config.eventTypes.JOIN_SUCCESS, (data) => {
+            // Trigger handlers for join success event
+            this._triggerHandlers(this.config.eventTypes.JOIN_SUCCESS, data);
+        });
+        
+        this._socket.on(this.config.eventTypes.USER_JOINED, (data) => {
+            // Trigger handlers for user joined event
+            this._triggerHandlers(this.config.eventTypes.USER_JOINED, data);
         });
     },
     
@@ -340,37 +381,85 @@ const SocketClient = {
      * Resubscribe to rooms after reconnection
      */
     _resubscribeRooms() {
-        if (!this._socket || !this._socket.connected) return;
-        
-        // Get user ID for join requests
-        const userData = AuthHelper.getUserData();
-        const visitorId = userData ? userData.user_id : AuthHelper.getOrCreateVisitorId();
-        
-        // Resubscribe to all rooms
-        this._subscribedRooms.forEach(roomId => {
-            console.log(`Resubscribing to room: ${roomId}`);
-            this._socket.emit('join', {
-                room_id: roomId,
-                visitor_id: visitorId
-            });
-        });
+        if (this._subscribedRooms.size > 0) {
+            console.log(`Resubscribing to ${this._subscribedRooms.size} rooms`);
+            
+            for (const roomId of this._subscribedRooms) {
+                this._socket.emit('join', { room_id: roomId });
+                console.log(`Resubscribed to room ${roomId}`);
+            }
+        }
     },
     
     /**
-     * Process queued messages after reconnection
+     * Retry sending any messages that were pending delivery when disconnected
+     */
+    _retryPendingMessages() {
+        // Check if we have any pending messages
+        if (this._messagesAwaitingDelivery.size > 0) {
+            console.log(`Retrying ${this._messagesAwaitingDelivery.size} pending messages`);
+            
+            // Retry each pending message
+            for (const [messageId, tracking] of this._messagesAwaitingDelivery.entries()) {
+                // Only retry if status is pending or timeout
+                if (tracking.status === 'pending' || tracking.status === 'timeout' || tracking.status === 'queued') {
+                    console.log(`Retrying message ${messageId}`);
+                    
+                    // Clear any existing timeout
+                    if (tracking.timeout) {
+                        clearTimeout(tracking.timeout);
+                    }
+                    
+                    // Retry sending
+                    this._socket.emit('message', tracking.data);
+                    
+                    // Update tracking
+                    tracking.attempts += 1;
+                    tracking.status = 'pending';
+                    tracking.timeout = setTimeout(() => {
+                        this._checkMessageDelivery(messageId);
+                    }, 10000);
+                    
+                    this._messagesAwaitingDelivery.set(messageId, tracking);
+                }
+            }
+        }
+    },
+    
+    /**
+     * Process queued messages
      */
     _processQueue() {
-        if (!this._socket || !this._socket.connected) return;
-        
         if (this._queuedMessages.length > 0) {
             console.log(`Processing ${this._queuedMessages.length} queued messages`);
             
-            this._queuedMessages.forEach(item => {
-                this._socket.emit(item.event, item.data);
-            });
-            
-            // Clear queue
-            this._queuedMessages = [];
+            // Process messages in FIFO order
+            while (this._queuedMessages.length > 0) {
+                const item = this._queuedMessages.shift();
+                
+                // Handle different types of queued actions
+                switch (item.type) {
+                    case 'message':
+                        console.log('Sending queued message:', item.data.message_id);
+                        this._socket.emit('message', item.data);
+                        break;
+                    case 'typing':
+                        this._socket.emit('typing', item.data);
+                        break;
+                    case 'stop_typing':
+                        this._socket.emit('typing', {...item.data, typing: false});
+                        break;
+                    case this.config.eventTypes.MESSAGE_READ:
+                        this._socket.emit(this.config.eventTypes.MESSAGE_READ, item.data);
+                        break;
+                    case 'user_active':
+                    case 'user_away':
+                        this._socket.emit(item.type, item.data);
+                        break;
+                    default:
+                        console.warn('Unknown queued message type:', item.type);
+                }
+            }
         }
     },
     
@@ -527,140 +616,295 @@ const SocketClient = {
     },
     
     /**
-     * Send a message to a room
+     * Send typing status to a room
      * 
-     * @param {string} roomId - The room ID to send to
-     * @param {string} content - The message content
-     * @param {string} messageId - Optional message ID (generates UUID if not provided)
-     * @returns {Promise} - Resolves when message is acknowledged
-     */
-    sendMessage(roomId, content, messageId = null) {
-        return new Promise((resolve, reject) => {
-            if (!this._socket || !this.isConnected()) {
-                console.error('Socket not connected. Cannot send message.');
-                // Queue the message for later sending
-                const msg = { roomId, content, messageId: messageId || crypto.randomUUID() };
-                this._queuedMessages.push({ type: 'message', data: msg });
-                reject(new Error('Socket not connected'));
-                return;
-            }
-            
-            if (!roomId) {
-                console.error('Room ID is required to send a message.');
-                reject(new Error('Room ID is required'));
-                return;
-            }
-            
-            // Ensure we're in the room
-            if (!this._subscribedRooms.has(roomId)) {
-                console.log(`Not in room ${roomId}, joining before sending message.`);
-                this.joinRoom(roomId);
-            }
-            
-            // Generate message ID if not provided
-            const msgId = messageId || crypto.randomUUID();
-            
-            // Send the message
-            try {
-                this._socket.emit('message', {
-                    room_id: roomId,
-                    message: content,
-                    message_id: msgId
-                });
-                
-                // Set up one-time handler for acknowledgment
-                const ackHandler = (data) => {
-                    if (data.message_id === msgId) {
-                        // Remove the handler after receiving ack
-                        this._socket.off('message_ack', ackHandler);
-                        resolve(data);
-                    }
-                };
-                
-                // Listen for acknowledgment
-                this._socket.on('message_ack', ackHandler);
-                
-                // Set timeout to reject if no ack received
-                setTimeout(() => {
-                    // Check if still waiting for ack
-                    if (this._socket.hasListeners('message_ack')) {
-                        this._socket.off('message_ack', ackHandler);
-                        reject(new Error('Message acknowledgment timeout'));
-                    }
-                }, 5000); // 5 second timeout
-            } catch (error) {
-                console.error('Error sending message:', error);
-                reject(error);
-            }
-        });
-    },
-    
-    /**
-     * Send typing indicator
-     * 
-     * @param {string} roomId - Room ID
-     * @param {boolean} isTyping - Whether user is typing
+     * @param {string} roomId - The room ID to send typing status to
+     * @param {boolean} isTyping - Whether the user is typing or stopped typing
+     * @returns {Promise} - Promise that resolves when typing status is sent
      */
     sendTypingStatus(roomId, isTyping = true) {
-        if (!roomId) {
-            console.error('Room ID is required');
-            return;
-        }
-        
-        if (!this._socket || !this._socket.connected) {
-            return;
-        }
-        
-        const eventType = isTyping ? 
-            this.config.eventTypes.TYPING : 
-            this.config.eventTypes.STOP_TYPING;
-            
-        this._socket.emit(eventType, { room_id: roomId });
+        return new Promise((resolve, reject) => {
+            if (!this.isConnected()) {
+                this._queuedMessages.push({
+                    type: isTyping ? 'typing' : 'stop_typing',
+                    data: { room_id: roomId, typing: isTyping }
+                });
+                return reject(new Error('Socket not connected'));
+            }
+
+            if (!roomId) {
+                return reject(new Error('Room ID is required'));
+            }
+
+            // Clear any existing typing timeout
+            const timeoutKey = `${roomId}-typing`;
+            if (this._typingTimeouts.has(timeoutKey)) {
+                clearTimeout(this._typingTimeouts.get(timeoutKey));
+            }
+
+            // If typing, set timeout to automatically clear the typing status after 5 seconds
+            if (isTyping) {
+                this._typingTimeouts.set(timeoutKey, setTimeout(() => {
+                    this.sendTypingStatus(roomId, false)
+                        .catch(error => console.error('Error clearing typing status:', error));
+                }, 5000));
+            }
+
+            this._socket.emit('typing', {
+                room_id: roomId,
+                typing: isTyping
+            });
+
+            resolve();
+        });
     },
-    
+
     /**
      * Send read receipt for messages
      * 
-     * @param {string} roomId - Room ID
-     * @param {Array<string>} messageIds - IDs of read messages
+     * @param {string} roomId - The room ID where messages were read
+     * @param {string[]} messageIds - Array of message IDs that were read
+     * @returns {Promise} - Promise that resolves when read receipt is sent
      */
     sendReadReceipt(roomId, messageIds) {
-        if (!roomId || !messageIds || !messageIds.length) {
-            console.error('Room ID and message IDs are required');
-            return;
-        }
-        
-        if (!this._socket || !this._socket.connected) {
-            return;
-        }
-        
-        this._socket.emit(this.config.eventTypes.MESSAGE_READ, {
-            room_id: roomId,
-            message_ids: messageIds
+        return new Promise((resolve, reject) => {
+            if (!this.isConnected()) {
+                this._queuedMessages.push({
+                    type: this.config.eventTypes.MESSAGE_READ,
+                    data: { room_id: roomId, message_ids: messageIds }
+                });
+                return reject(new Error('Socket not connected'));
+            }
+
+            if (!roomId) {
+                return reject(new Error('Room ID is required'));
+            }
+
+            if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
+                return reject(new Error('Message IDs must be a non-empty array'));
+            }
+
+            this._socket.emit(this.config.eventTypes.MESSAGE_READ, {
+                room_id: roomId,
+                message_ids: messageIds
+            });
+
+            resolve();
         });
     },
-    
+
     /**
-     * Send user active/away status
+     * Send user status (active/away) to a room
      * 
-     * @param {string} roomId - Room ID
-     * @param {boolean} isActive - Whether user is active
+     * @param {string} roomId - The room ID to send status to
+     * @param {boolean} isActive - Whether the user is active (true) or away (false)
+     * @returns {Promise} - Promise that resolves when status is sent
      */
     sendUserStatus(roomId, isActive = true) {
-        if (!roomId) {
-            console.error('Room ID is required');
-            return;
-        }
-        
-        if (!this._socket || !this._socket.connected) {
-            return;
-        }
-        
-        const eventType = isActive ?
-            this.config.eventTypes.USER_ACTIVE :
-            this.config.eventTypes.USER_AWAY;
+        return new Promise((resolve, reject) => {
+            if (!this.isConnected()) {
+                this._queuedMessages.push({
+                    type: isActive ? 'user_active' : 'user_away',
+                    data: { room_id: roomId }
+                });
+                return reject(new Error('Socket not connected'));
+            }
+
+            if (!roomId) {
+                return reject(new Error('Room ID is required'));
+            }
+
+            const eventType = isActive ? 'user_active' : 'user_away';
+            this._socket.emit(eventType, {
+                room_id: roomId
+            });
+
+            resolve();
+        });
+    },
+
+    /**
+     * Enhanced message sending with delivery tracking and retries
+     * 
+     * @param {string} roomId - The room ID to send message to
+     * @param {string} content - Message content
+     * @param {string} messageId - Optional message ID (will be generated if not provided)
+     * @param {string} messageType - Optional message type (default: 'text')
+     * @returns {Promise} - Promise that resolves with message data when sent
+     */
+    sendMessage(roomId, content, messageId = null, messageType = 'text') {
+        return new Promise((resolve, reject) => {
+            if (!roomId) {
+                return reject(new Error('Room ID is required'));
+            }
+
+            if (!content) {
+                return reject(new Error('Message content is required'));
+            }
+
+            // Generate message ID if not provided
+            const msgId = messageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             
-        this._socket.emit(eventType, { room_id: roomId });
+            // Create message data
+            const messageData = {
+                room_id: roomId,
+                content: content,
+                message_id: msgId,
+                message_type: messageType,
+                timestamp: new Date().toISOString(),
+                status: 'pending'
+            };
+
+            // If not connected, queue the message
+            if (!this.isConnected()) {
+                console.log('Socket not connected, queueing message:', msgId);
+                this._queuedMessages.push({
+                    type: 'message',
+                    data: messageData,
+                    timestamp: Date.now()
+                });
+                
+                // Track message waiting for delivery
+                this._messagesAwaitingDelivery.set(msgId, {
+                    data: messageData,
+                    attempts: 0,
+                    status: 'queued',
+                    resolver: resolve,
+                    rejecter: reject
+                });
+                
+                return;
+            }
+
+            // Setup delivery tracking with timeout
+            const deliveryTimeout = setTimeout(() => {
+                // If we have a delivery tracking for this message
+                if (this._messagesAwaitingDelivery.has(msgId)) {
+                    const tracking = this._messagesAwaitingDelivery.get(msgId);
+                    
+                    // If status is still pending, consider it undelivered
+                    if (tracking.status === 'pending') {
+                        tracking.status = 'timeout';
+                        tracking.attempts += 1;
+                        
+                        // If we've tried less than 3 times, retry
+                        if (tracking.attempts < 3) {
+                            console.log(`Message delivery timeout, retrying (${tracking.attempts}/3):`, msgId);
+                            
+                            // Retry sending
+                            this._socket.emit('message', messageData);
+                            
+                            // Set a new timeout
+                            tracking.timeout = setTimeout(() => {
+                                // Use recursion to retry the timeout check
+                                this._checkMessageDelivery(msgId);
+                            }, 5000);
+                            
+                            this._messagesAwaitingDelivery.set(msgId, tracking);
+                        } else {
+                            // Give up after 3 attempts
+                            console.error('Message delivery failed after 3 attempts:', msgId);
+                            
+                            // Notify the promiser
+                            tracking.rejecter(new Error('Message delivery timeout after 3 attempts'));
+                            
+                            // Remove from tracking
+                            this._messagesAwaitingDelivery.delete(msgId);
+                        }
+                    }
+                }
+            }, 10000); // 10 second timeout for delivery
+            
+            // Track message waiting for delivery confirmation
+            this._messagesAwaitingDelivery.set(msgId, {
+                data: messageData,
+                attempts: 1,
+                status: 'pending',
+                timeout: deliveryTimeout,
+                resolver: resolve,
+                rejecter: reject
+            });
+            
+            // Send the message
+            this._socket.emit('message', messageData);
+            
+            // Listen for acknowledgment
+            const ackHandler = (data) => {
+                if (data.client_message_id === msgId) {
+                    // Clear delivery timeout
+                    clearTimeout(deliveryTimeout);
+                    
+                    // Update tracking status
+                    if (this._messagesAwaitingDelivery.has(msgId)) {
+                        const tracking = this._messagesAwaitingDelivery.get(msgId);
+                        tracking.status = data.status;
+                        
+                        // Resolve or reject based on status
+                        if (data.status === 'delivered' || data.status === 'read') {
+                            const responseData = {
+                                ...messageData,
+                                status: data.status,
+                                server_message_id: data.server_message_id
+                            };
+                            tracking.resolver(responseData);
+                        } else {
+                            tracking.rejecter(new Error(data.error || `Message delivery failed: ${data.status}`));
+                        }
+                        
+                        // Remove from tracking after a delay to allow for read receipts
+                        setTimeout(() => {
+                            this._messagesAwaitingDelivery.delete(msgId);
+                        }, 60000); // Keep tracking for 1 minute for read receipts
+                    }
+                    
+                    // Remove this specific listener
+                    this._socket.off('message_status', ackHandler);
+                }
+            };
+            
+            // Set up the acknowledgment listener
+            this._socket.on('message_status', ackHandler);
+        });
+    },
+
+    /**
+     * Check message delivery status and handle retries/timeouts
+     * @private
+     */
+    _checkMessageDelivery(messageId) {
+        if (this._messagesAwaitingDelivery.has(messageId)) {
+            const tracking = this._messagesAwaitingDelivery.get(messageId);
+            
+            // If still pending after timeout
+            if (tracking.status === 'pending') {
+                tracking.status = 'timeout';
+                tracking.attempts += 1;
+                
+                // If we've tried less than 3 times, retry
+                if (tracking.attempts < 3) {
+                    console.log(`Retrying message delivery (${tracking.attempts}/3):`, messageId);
+                    
+                    // Retry sending
+                    this._socket.emit('message', tracking.data);
+                    
+                    // Set a new timeout
+                    tracking.timeout = setTimeout(() => {
+                        this._checkMessageDelivery(messageId);
+                    }, 5000);
+                    
+                    this._messagesAwaitingDelivery.set(messageId, tracking);
+                } else {
+                    // Give up after 3 attempts
+                    console.error('Message delivery failed after 3 attempts:', messageId);
+                    
+                    // Notify the promiser
+                    tracking.rejecter(new Error('Message delivery timeout after 3 attempts'));
+                    
+                    // Remove from tracking
+                    this._messagesAwaitingDelivery.delete(messageId);
+                }
+            }
+        }
     },
     
     /**

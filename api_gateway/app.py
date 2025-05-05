@@ -124,6 +124,9 @@ PUBLIC_ROUTES = [
     r"^/api/json-test$",
     r"^/api/chats$",  # Root chats endpoint as public
     r"^/api/chats/[^/]+/messages$",  # Make the messages endpoint public
+    r"^/api/my-chats$",  # Allow access to my-chats without auth for demo
+    r"^/api/realtime/check-connection$",  # Allow connection check without auth
+    r"^/api/realtime/socket\.io.*$"  # Allow all socket.io endpoints without auth
 ]
 
 # Rate limiting configuration
@@ -1062,20 +1065,42 @@ def error_page():
 
 @app.route("/ws-test")
 def websocket_test():
-    """Render the WebSocket testing page"""
-    if not template_exists("chat.html"):
-        logger.error("Failed to render ws-test page - template file missing")
-        return render_template("error.html", error="WebSocket test page not available"), 500
-    return render_template("chat.html", mode="ws-test")
+    """WebSocket test page"""
+    return render_template("websocket-test.html")
 
 @app.route("/websocket-test")
 def websocket_test_page():
-    """Render the detailed WebSocket testing page"""
-    if template_exists("ws_test.html"):
-        return render_template("ws_test.html")
-    else:
-        logger.error("Failed to render ws_test.html - template file missing")
-        return render_template("error.html", error="WebSocket test page not available"), 500
+    """Advanced WebSocket test page with more features"""
+    try:
+        # Get connection details
+        conn_resp = requests.get(
+            f"{request.url_root.rstrip('/')}/api/realtime/check-connection", 
+            timeout=3
+        )
+        
+        if conn_resp.status_code != 200:
+            return render_template(
+                "error.html", 
+                error_message="Could not get realtime service connection details", 
+                details=conn_resp.text if conn_resp.text else f"Status code: {conn_resp.status_code}"
+            )
+            
+        conn_data = conn_resp.json()
+        
+        return render_template(
+            "websocket-test.html",
+            connection_data=conn_data,
+            socket_url=conn_data.get("websocket_url", "/api/realtime"),
+            socket_path=conn_data.get("socket_io_path", "/socket.io"),
+            user_id=conn_data.get("user_id", "anonymous"),
+            is_authenticated=conn_data.get("authenticated", False)
+        )
+    except Exception as e:
+        return render_template(
+            "error.html", 
+            error_message="Error preparing WebSocket test page", 
+            details=str(e)
+        )
 
 @app.route("/favicon.ico")
 def favicon():
@@ -1107,7 +1132,7 @@ def direct_login():
         print(f"Auth service URL from discovery: {service_url}")
         
         # Override the service URL to use localhost directly
-        auth_url = "http://localhost:5001/login"
+        auth_url = "http://localhost:5501/login"
         print(f"Using direct auth URL: {auth_url}")
         
         headers = {"Content-Type": "application/json"}
@@ -1179,7 +1204,7 @@ def direct_register():
         sanitized_data = sanitize_input(data)
 
         # Forward to auth service
-        auth_url = "http://localhost:5001/register"
+        auth_url = "http://localhost:5501/register"
         headers = {"Content-Type": "application/json"}
         
         # Add correlation ID for tracing
@@ -1250,7 +1275,7 @@ def direct_refresh():
         headers["X-Correlation-ID"] = correlation_id
 
         # Forward to auth service
-        auth_url = "http://localhost:5001/refresh"
+        auth_url = "http://localhost:5501/refresh"
         
         response = requests.post(
             auth_url, json=data, headers=headers, timeout=5
@@ -1315,7 +1340,7 @@ def direct_verify():
         headers["X-Correlation-ID"] = correlation_id
 
         # Forward to auth service
-        auth_url = "http://localhost:5001/verify"
+        auth_url = "http://localhost:5501/verify"
         
         response = requests.get(
             auth_url, headers=headers, timeout=5
@@ -1376,7 +1401,7 @@ def direct_visitor_id():
         headers["X-Correlation-ID"] = correlation_id
 
         # Forward to auth service
-        auth_url = "http://localhost:5001/get-or-create-visitor-id"
+        auth_url = "http://localhost:5501/get-or-create-visitor-id"
         
         if request.method == "GET":
             response = requests.get(
@@ -1450,7 +1475,7 @@ def direct_set_user_name():
         headers["X-Correlation-ID"] = correlation_id
 
         # Forward to auth service
-        auth_url = "http://localhost:5001/set-user-name"
+        auth_url = "http://localhost:5501/set-user-name"
         
         response = requests.post(
             auth_url, json=data, headers=headers, timeout=5
@@ -1515,7 +1540,7 @@ def direct_logout():
         headers["X-Correlation-ID"] = correlation_id
 
         # Forward to auth service
-        auth_url = "http://localhost:5001/logout"
+        auth_url = "http://localhost:5501/logout"
         
         response = requests.post(
             auth_url, headers=headers, timeout=5
@@ -1722,26 +1747,17 @@ def socketio_proxy():
     if request.headers.get("Upgrade", "").lower() == "websocket":
         logger.info("WebSocket upgrade request detected, preparing to proxy")
 
-        # Check if user is authenticated first
+        # Check if user is authenticated (but allow guest users)
         auth_data = authenticate_token()
-        if not auth_data and check_protected_route(request.path):
-            return (
-                jsonify(
-                    {
-                        "error": "Unauthorized",
-                        "error_code": "AUTH_REQUIRED",
-                        "message": "Authentication required for WebSocket connections",
-                    }
-                ),
-                401,
-            )
 
         # Set user data in g if authenticated
         if auth_data:
             g.user = auth_data
             logger.info(f"User {auth_data.get('user_id')} authenticated for WebSocket connection")
         else:
-            logger.info("Anonymous WebSocket connection (no authentication)")
+            logger.info("Anonymous WebSocket connection (guest user)")
+            # Set guest user information
+            g.user = {"user_id": "guest", "is_guest": True}
 
         # Create a direct connection URL for WebSockets
         # In development, this might be localhost with the right port
@@ -1755,13 +1771,26 @@ def socketio_proxy():
             
             # Add the auth token to query params if authenticated
             if hasattr(g, "user") and not query_params.get("token"):
-                # Get the original token from the Authorization header
-                auth_header = request.headers.get("Authorization", "")
-                if auth_header.startswith("Bearer "):
-                    token = auth_header[7:]
-                    query_params["token"] = token
-                    logger.info("Added authentication token to WebSocket connection params")
-            
+                if g.user.get("is_guest"):
+                    # For guest users, set token to 'guest'
+                    query_params["token"] = "guest"
+                    logger.info("Added guest token to WebSocket connection params")
+                else:
+                    # Get the original token from the Authorization header
+                    auth_header = request.headers.get("Authorization", "")
+                    if auth_header.startswith("Bearer "):
+                        token = auth_header[7:]
+                        query_params["token"] = token
+                        logger.info("Added authentication token to WebSocket connection params")
+                    else:
+                        # If no token is present, use 'guest'
+                        query_params["token"] = "guest"
+                        logger.info("No auth header found, using guest token")
+            elif not query_params.get("token"):
+                # Default to guest if no token is present
+                query_params["token"] = "guest"
+                logger.info("No token found in query, using guest token")
+
             # For WebSocket upgrade handling, we'll return JSON info for the client
             # to use to connect directly to the realtime service
             ws_protocol = "wss" if request.is_secure else "ws"
@@ -2353,16 +2382,39 @@ def check_realtime_connection():
         auth_data = authenticate_token()
         user_id = auth_data.get("user_id", "anonymous") if auth_data else "anonymous"
         
+        # Get WebSocket connection URL (same logic as socketio_proxy)
+        ws_protocol = "wss" if request.is_secure else "ws"
+        realtime_url = REALTIME_SERVICE_URL
+        if realtime_url.startswith("http"):
+            realtime_url = realtime_url.replace("http://", f"{ws_protocol}://")
+            realtime_url = realtime_url.replace("https://", f"{ws_protocol}://")
+        else:
+            realtime_url = f"{ws_protocol}://{realtime_url}"
+            
+        # Check for public URL override
+        public_realtime_url = os.environ.get("PUBLIC_REALTIME_URL")
+        if public_realtime_url:
+            if public_realtime_url.startswith("http"):
+                public_realtime_url = public_realtime_url.replace("http://", f"{ws_protocol}://")
+                public_realtime_url = public_realtime_url.replace("https://", f"{ws_protocol}://")
+            else:
+                public_realtime_url = f"{ws_protocol}://{public_realtime_url}"
+                
+            realtime_url = public_realtime_url
+        
         # Return connection status and configuration
         return jsonify({
             "status": "available",
             "realtime_service": REALTIME_SERVICE_URL,
             "socket_io_path": "/socket.io",
+            "websocket_url": realtime_url,
             "authenticated": auth_data is not None,
             "user_id": user_id,
             "connections": connections_resp.json() if connections_resp.status_code == 200 else None,
             "websocket_test_route": "/api/ws-test",
-            "socket_endpoint": "/api/realtime/socket.io"
+            "socket_endpoint": "/api/realtime/socket.io",
+            "transport_options": ["websocket", "polling"],
+            "connection_health": health_resp.json() if health_resp.status_code == 200 else None
         })
     except requests.RequestException as e:
         logger.error(f"Error connecting to realtime service: {str(e)}")
@@ -2374,15 +2426,72 @@ def check_realtime_connection():
             }),
             503
         )
-    except Exception as e:
-        logger.error(f"Error checking realtime connection: {str(e)}")
-        return (
-            jsonify({
-                "status": "error",
-                "message": f"Error checking realtime connection: {str(e)}"
-            }),
-            500
+
+@app.route("/api/my-chats", methods=["GET"])
+def get_my_chats():
+    """Endpoint to retrieve chats for the currently authenticated user"""
+    # Get authentication data if available
+    auth_data = authenticate_token()
+    
+    # Use a default guest user ID if no authentication
+    user_id = auth_data.get("user_id", "guest") if auth_data else "guest"
+    logger.info(f"Getting chats for user: {user_id}")
+    
+    try:
+        # For development, return an empty array if chat service is not available
+        if IS_DEVELOPMENT:
+            # Try to connect to chat service
+            try:
+                # Create headers with the user_id
+                headers = {"X-User-ID": user_id}
+                if hasattr(g, "correlation_id"):
+                    headers["X-Correlation-ID"] = g.correlation_id
+                
+                # Add Authorization header to pass through the token
+                auth_header = request.headers.get("Authorization")
+                if auth_header:
+                    headers["Authorization"] = auth_header
+                
+                response = requests.get(
+                    f"{CHAT_SERVICE_URL}/my-chats",
+                    headers=headers,
+                    timeout=3
+                )
+                
+                if response.status_code == 200:
+                    return jsonify(response.json()), 200
+                
+                logger.error(f"Chat service error: {response.status_code}, {response.text}")
+                # Fall back to returning empty array
+                return jsonify([]), 200
+            except requests.RequestException as e:
+                logger.error(f"Failed to connect to chat service: {str(e)}")
+                # Return empty array in development
+                return jsonify([]), 200
+        
+        # In production, properly proxy to chat service
+        # Create headers with the user_id
+        headers = {"X-User-ID": user_id}
+        if hasattr(g, "correlation_id"):
+            headers["X-Correlation-ID"] = g.correlation_id
+        
+        # Add Authorization header
+        auth_header = request.headers.get("Authorization")
+        if auth_header:
+            headers["Authorization"] = auth_header
+        
+        response = requests.get(
+            f"{CHAT_SERVICE_URL}/my-chats",
+            headers=headers,
+            timeout=5
         )
+        
+        return jsonify(response.json()), response.status_code
+        
+    except Exception as e:
+        logger.error(f"Error in my-chats endpoint: {str(e)}")
+        # Return empty array instead of error for better user experience
+        return jsonify([]), 200
 
 
 if __name__ == "__main__":

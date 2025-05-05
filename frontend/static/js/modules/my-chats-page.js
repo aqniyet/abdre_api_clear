@@ -517,8 +517,8 @@ const MyChatsList = {
       const token = AuthHelper.getToken() || 'guest';
       
       // Initialize connection
-      this.state.socket = io('//', {
-        path: '/api/realtime/socket.io',
+      this.state.socket = io('http://localhost:5506', {
+        path: '/socket.io',
         query: { token },
         transports: ['websocket', 'polling'],
         reconnection: true,
