@@ -1,595 +1,819 @@
 /**
- * Socket.IO Client for ABDRE Chat Application
- * Handles all real-time communication with the backend
+ * Socket Client for ABDRE Realtime Service
+ * Provides a unified interface for WebSocket communication with robust
+ * connection management, event handling, and room subscriptions.
  */
 
-class SocketClient {
-  constructor() {
-    this.socket = null;
-    this.connected = false;
-    this.lastConnectionAttempt = 0;
-    this.reconnectAttempts = 0;
-    this.handlers = {
-      'message': [],
-      'join': [],
-      'user_active': [],
-      'user_away': [],
-      'check_status': [],
-      'request_unread_count': []
-    };
-    
-    // Keep track of rooms to join/rejoin
-    this._roomsToJoin = new Set();
-    
-    // Set up auto-reconnect
-    this._setupAutoReconnect();
-  }
-
-  /**
-   * Set up automatic reconnection checks
-   * @private
-   */
-  _setupAutoReconnect() {
-    // Check connection status every 10 seconds
-    setInterval(() => {
-      if (!this.connected && this.socket) {
-        console.log('Socket reconnection check - not connected, attempting to reconnect...');
-        
-        // Only try to reconnect if sufficient time has passed since the last attempt
-        // Use exponential backoff to avoid overwhelming the server
-        const backoffTime = Math.min(30000, Math.pow(2, this.reconnectAttempts) * 1000);
-        const now = Date.now();
-        
-        if (now - this.lastConnectionAttempt > backoffTime) {
-          console.log(`Reconnection attempt #${this.reconnectAttempts + 1} after ${backoffTime}ms backoff`);
-          this.lastConnectionAttempt = now;
-          this.socket.connect();
-          this.reconnectAttempts++; // Increment for next backoff calculation
-        } else {
-          const remainingTime = backoffTime - (now - this.lastConnectionAttempt);
-          console.log(`Waiting ${Math.round(remainingTime/1000)}s before next reconnection attempt`);
+const SocketClient = {
+    // Configuration
+    config: {
+        url: '/api/realtime',
+        directUrl: null, // Will be populated from API gateway response
+        options: {
+            path: '/socket.io',
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            timeout: 20000,
+            autoConnect: false
+        },
+        // Time between heartbeat pings (ms)
+        pingInterval: 30000,
+        // Event types for standardization
+        eventTypes: {
+            // System events
+            CONNECT: 'connect',
+            DISCONNECT: 'disconnect',
+            RECONNECT: 'reconnect',
+            RECONNECT_ATTEMPT: 'reconnect_attempt',
+            ERROR: 'error',
+            PING: 'ping',
+            PONG: 'pong',
+            // Chat events
+            MESSAGE: 'message',
+            JOIN: 'join',
+            LEAVE: 'leave',
+            USER_ACTIVE: 'user_active',
+            USER_AWAY: 'user_away',
+            TYPING: 'typing',
+            STOP_TYPING: 'stop_typing',
+            MESSAGE_READ: 'message_read',
+            // Invitation events
+            INVITATION_CREATED: 'invitation_created',
+            INVITATION_STATUS: 'invitation_status',
+            QR_SCANNED: 'qr_scanned',
+            QR_SCANNED_NOTIFICATION: 'qr_scanned_notification',
+            INVITATION_ACCEPTED: 'invitation_accepted',
+            ROOM_CREATED: 'room_created'
         }
-      } else if (this.connected && this.socket) {
-        // Reset reconnect attempts counter when connected
-        this.reconnectAttempts = 0;
-        
-        // Test connection with a ping
-        this.testConnection();
-      }
-    }, 10000);
-  }
-
-  /**
-   * Initialize the socket connection
-   * @returns {Promise} - Promise that resolves when the connection is established
-   */
-  init() {
-    return new Promise((resolve, reject) => {
-      try {
-        const accessToken = AuthHelper.getToken();
-        console.log('SocketClient: Initializing with token available:', !!accessToken);
-        
-        if (!accessToken) {
-          console.warn('No access token found for socket connection, will connect as guest');
-        }
-
-        // Use API Gateway as a proxy to the realtime service instead of connecting directly
-        // This allows proper routing, authentication, and security
-        
-        // We'll use a relative URL rather than hardcoded port to work across environments
-        const socketUrl = window.location.origin;
-        const socketPath = '/api/realtime/socket.io';
-        
-        console.log(`SocketClient: Connecting to socket URL: ${socketUrl} with path: ${socketPath}`);
-        
-        // Configure Socket.IO with proper settings
-        this.socket = io(socketUrl, {
-          path: socketPath,
-          auth: {
-            token: accessToken || 'guest'
-          },
-          transports: ['websocket', 'polling'], // Try WebSocket first, fall back to polling
-          reconnection: true,
-          reconnectionAttempts: Infinity,
-          reconnectionDelay: 1000,
-          reconnectionDelayMax: 10000, // Cap at 10 seconds
-          timeout: 20000, // Increase timeout for slower connections
-          withCredentials: true, // Important for CORS with credentials
-          autoConnect: true,
-          forceNew: true, // Ensure a clean connection each time
-          query: {
-            token: accessToken || 'guest' // Also include token in query params as backup
-          },
-          extraHeaders: accessToken ? {
-            Authorization: `Bearer ${accessToken}`
-          } : {}
-        });
-
-        this.lastConnectionAttempt = Date.now();
-        this.reconnectAttempts = 0;
-
-        // Set up event listeners
-        this.socket.on('connect', () => {
-          console.log('SocketClient: Connected successfully with ID:', this.socket.id);
-          this.connected = true;
-          this.reconnectAttempts = 0; // Reset counter on successful connection
-          
-          // Re-join all rooms after reconnection
-          this._rejoinRoomsAfterReconnect();
-          
-          resolve(this.socket);
-        });
-
-        this.socket.on('disconnect', (reason) => {
-          console.log('SocketClient: Disconnected from server. Reason:', reason);
-          this.connected = false;
-          
-          // If the disconnection wasn't intentional, attempt to reconnect
-          if (reason === 'io server disconnect' || reason === 'transport close' || reason === 'transport error') {
-            console.log('SocketClient: Attempting to reconnect after disconnect...');
-            this.socket.connect();
-          }
-        });
-
-        this.socket.on('reconnect', (attemptNumber) => {
-          console.log(`SocketClient: Reconnected after ${attemptNumber} attempts`);
-          this.connected = true;
-          this.reconnectAttempts = 0; // Reset counter on successful reconnection
-          
-          // Re-join rooms after reconnection
-          this._rejoinRoomsAfterReconnect();
-        });
-
-        this.socket.on('reconnect_attempt', (attemptNumber) => {
-          console.log(`SocketClient: Reconnection attempt #${attemptNumber}`);
-          this.lastConnectionAttempt = Date.now();
-          
-          // Update auth token on reconnect attempt in case it was refreshed
-          const currentToken = AuthHelper.getToken();
-          if (currentToken && this.socket) {
-            console.log('SocketClient: Updating auth token for reconnection attempt');
-            this.socket.auth.token = currentToken;
-            if (this.socket.io && this.socket.io.opts) {
-              this.socket.io.opts.query = {
-                ...this.socket.io.opts.query,
-                token: currentToken
-              };
-              if (this.socket.io.opts.extraHeaders) {
-                this.socket.io.opts.extraHeaders.Authorization = `Bearer ${currentToken}`;
-              }
-            }
-          }
-        });
-
-        this.socket.on('reconnect_error', (error) => {
-          console.error('SocketClient: Error during reconnection:', error);
-          this.reconnectAttempts++; // Increment for exponential backoff
-        });
-
-        this.socket.on('connect_error', async (error) => {
-          console.error('SocketClient: Connection error:', error.message);
-          
-          // Try to refresh token if connection error is authentication related
-          if (error.message === 'Authentication failed' || 
-              error.message === 'jwt expired' || 
-              error.message.includes('auth') || 
-              error.message.includes('token')) {
-            
-            console.log('SocketClient: Authentication error, attempting to refresh token');
-            try {
-              await AuthHelper.refreshToken();
-              const newToken = AuthHelper.getToken();
-              
-              // Try to reconnect with new token
-              if (this.socket && newToken) {
-                console.log('SocketClient: Token refreshed, reconnecting with new token');
-                this.socket.auth.token = newToken;
-                if (this.socket.io && this.socket.io.opts) {
-                  this.socket.io.opts.query = {
-                    ...this.socket.io.opts.query,
-                    token: newToken
-                  };
-                  if (this.socket.io.opts.extraHeaders) {
-                    this.socket.io.opts.extraHeaders.Authorization = `Bearer ${newToken}`;
-                  }
-                }
-                this.socket.connect();
-              }
-            } catch (refreshError) {
-              console.error('SocketClient: Token refresh failed:', refreshError);
-              
-              // If token refresh fails, try to connect as guest
-              console.log('SocketClient: Connecting as guest after auth failure');
-              if (this.socket) {
-                this.socket.auth.token = 'guest';
-                if (this.socket.io && this.socket.io.opts) {
-                  this.socket.io.opts.query = {
-                    ...this.socket.io.opts.query,
-                    token: 'guest'
-                  };
-                  if (this.socket.io.opts.extraHeaders) {
-                    delete this.socket.io.opts.extraHeaders.Authorization;
-                  }
-                }
-                this.socket.connect();
-              } else {
-                reject(error);
-              }
-            }
-          } else {
-            // For non-auth errors, increment reconnect attempts counter for backoff
-            this.reconnectAttempts++;
-            
-            // If it's the first error, still resolve the promise as we're handling reconnections
-            // This prevents the app from getting stuck on initialization
-            if (this.reconnectAttempts === 1) {
-              console.warn('SocketClient: Resolving init promise despite connection error, will reconnect in background');
-              resolve(this.socket);
-            }
-          }
-        });
-
-        // Set up event handlers for incoming messages
-        this.socket.on('message', (data) => {
-          console.log('SOCKET RECEIVED MESSAGE EVENT:', data);
-          this._triggerEvent('message', data);
-        });
-        this.socket.on('join', (data) => this._triggerEvent('join', data));
-        this.socket.on('user_active', (data) => this._triggerEvent('user_active', data));
-        this.socket.on('user_away', (data) => this._triggerEvent('user_away', data));
-        this.socket.on('check_status', (data) => this._triggerEvent('check_status', data));
-        this.socket.on('request_unread_count', (data) => this._triggerEvent('request_unread_count', data));
-        
-        // Handle errors from socket.io
-        this.socket.on('error', (error) => {
-          console.error('SocketClient: Socket error:', error);
-        });
-        
-        // Keep track of ping timestamps
-        this.pingTimestamps = {};
-        
-        this.socket.on('pong', (data) => {
-          console.log('Pong received:', data);
-          
-          const pingId = data.received_ping;
-          if (this.pingTimestamps[pingId]) {
-            const sentTime = this.pingTimestamps[pingId];
-            const roundTripTime = new Date().getTime() - sentTime;
-            console.log(`Ping round-trip time: ${roundTripTime}ms`);
-            
-            // Clean up stored timestamp
-            delete this.pingTimestamps[pingId];
-            
-            // If ping time is very high, this might indicate connection issues
-            if (roundTripTime > 5000) {
-              console.warn(`SocketClient: High ping time (${roundTripTime}ms) may indicate connection issues`);
-            }
-          } else {
-            console.warn('Received pong for unknown ping timestamp:', pingId);
-          }
-        });
-      } catch (error) {
-        console.error('Socket initialization error:', error);
-        this.reconnectAttempts++;
-        reject(error);
-      }
-    });
-  }
-
-  /**
-   * Re-join all rooms after a reconnection
-   * @private
-   */
-  _rejoinRoomsAfterReconnect() {
-    // Get current room from state manager
-    const roomId = stateManager.get('roomId');
-    const userId = stateManager.get('userId');
+    },
     
-    // Rejoin rooms that we've previously joined
-    if (this._roomsToJoin && this._roomsToJoin.size > 0) {
-      console.log(`SocketClient: Rejoining ${this._roomsToJoin.size} rooms after reconnection`);
-      
-      this._roomsToJoin.forEach(room => {
-        console.log(`SocketClient: Rejoining room ${room}`);
+    // Internal state
+    _socket: null,
+    _connected: false,
+    _heartbeatTimer: null,
+    _reconnecting: false,
+    _subscribedRooms: new Set(),
+    _eventHandlers: new Map(),
+    _queuedMessages: [],
+    _connectionListeners: new Set(),
+    _directConnectionUrl: null,
+    
+    /**
+     * Initialize the socket client
+     * 
+     * @param {Object} options - Custom options for socket connection
+     * @returns {SocketClient} - The initialized client for chaining
+     */
+    init(options = {}) {
+        // Merge default options with custom options
+        const socketOptions = {
+            ...this.config.options,
+            ...options
+        };
         
-        // Join the room
-        this.socket.emit('join', {
-          room_id: room,
-          visitor_id: userId || localStorage.getItem('user_id')
-        });
+        // Add authentication token if available
+        const token = AuthHelper.getToken() || 'guest';
+        socketOptions.query = { token };
+        socketOptions.auth = { token };
         
-        // Also subscribe to direct room events
-        this.socket.emit('subscribe', { room: room });
-        
-        // Set user as active
-        this.setUserActive({
-          room_id: room,
-          visitor_id: userId || localStorage.getItem('user_id')
-        });
-      });
-    } else if (roomId) {
-      console.log(`SocketClient: Rejoining room ${roomId} after reconnection`);
-      
-      // Join the room
-      this.joinRoom({
-        room_id: roomId,
-        visitor_id: userId
-      });
-      
-      // Set user as active
-      this.setUserActive({
-        room_id: roomId,
-        visitor_id: userId
-      });
-    }
-    
-    // Trigger refresh event to get any missed messages
-    setTimeout(() => {
-      console.log('Triggering message refresh after reconnection');
-      document.dispatchEvent(new CustomEvent('refresh-messages'));
-    }, 1000);
-  }
-
-  /**
-   * Trigger event handlers for a specific event
-   * @param {string} event - Event name
-   * @param {Object} data - Event data
-   * @private
-   */
-  _triggerEvent(event, data) {
-    console.log(`Socket received event "${event}"`, data);
-    
-    // Skip triggering if invalid data
-    if (!data) {
-      console.error(`Invalid data for event "${event}"`);
-      return;
-    }
-    
-    // For message events, make sure we trigger a refresh if the handlers array is empty
-    if (event === 'message' && (!this.handlers[event] || this.handlers[event].length === 0)) {
-      console.warn(`No handlers registered for message event - triggering refresh`);
-      document.dispatchEvent(new CustomEvent('refresh-messages'));
-      return;
-    }
-    
-    if (this.handlers[event]) {
-      console.log(`Triggering ${this.handlers[event].length} handlers for event "${event}"`);
-      this.handlers[event].forEach(handler => {
+        // Create socket instance
         try {
-          handler(data);
+            // Use socket.io-client from CDN (already loaded in HTML)
+            if (typeof io === 'undefined') {
+                console.error('Socket.IO client not loaded. Make sure to include socket.io-client.js');
+                return this;
+            }
+            
+            // First check if we should connect through the API gateway
+            // or directly to the realtime service
+            this._checkConnectionMethod(socketOptions)
+                .then(() => {
+                    console.log('Socket connection method determined, connecting...');
+                })
+                .catch(error => {
+                    console.error('Error determining connection method:', error);
+                    // Fall back to standard connection
+                    this._initializeSocketConnection(this.config.url, socketOptions);
+                });
+            
+            return this;
         } catch (error) {
-          console.error(`Error in handler for event "${event}":`, error);
-          
-          // If we get an error handling a message, trigger a refresh
-          if (event === 'message') {
-            document.dispatchEvent(new CustomEvent('refresh-messages'));
-          }
+            console.error('Error initializing socket client:', error);
+            return this;
         }
-      });
+    },
+    
+    /**
+     * Check if we should connect directly to the realtime service
+     * or through the API gateway
+     */
+    async _checkConnectionMethod(socketOptions) {
+        try {
+            // Call the API gateway's WebSocket proxy endpoint
+            const response = await fetch(`${this.config.url}/socket.io/?token=${socketOptions.query.token}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${socketOptions.query.token}`,
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Check if API gateway wants us to connect directly
+                if (data.status === 'redirect' && data.connection_url) {
+                    console.log('Using direct connection to realtime service:', data.connection_url);
+                    this._directConnectionUrl = data.connection_url;
+                    
+                    // Update socket options with any additional query params
+                    if (data.query_params) {
+                        socketOptions.query = {
+                            ...socketOptions.query,
+                            ...data.query_params
+                        };
+                    }
+                    
+                    // Initialize with direct connection
+                    this._initializeSocketConnection(data.connection_url, socketOptions);
+                } else {
+                    // Use the proxy through API gateway
+                    console.log('Using API gateway proxy for WebSocket connection');
+                    this._initializeSocketConnection(this.config.url, socketOptions);
+                }
+            } else {
+                // Fallback to API gateway proxy
+                console.warn('Failed to get WebSocket connection info, using API gateway proxy');
+                this._initializeSocketConnection(this.config.url, socketOptions);
+            }
+        } catch (error) {
+            console.error('Error checking connection method:', error);
+            // Fallback to API gateway proxy
+            this._initializeSocketConnection(this.config.url, socketOptions);
+        }
+    },
+    
+    /**
+     * Initialize the actual Socket.IO connection
+     */
+    _initializeSocketConnection(url, options) {
+        // Create the socket connection
+        this._socket = io(url, options);
+        
+        // Set up event listeners
+        this._setupEventListeners();
+        
+        // Start connection
+        this.connect();
+        
+        console.log('Socket client initialized with URL:', url);
+    },
+    
+    /**
+     * Connect to the Socket.IO server
+     */
+    connect() {
+        if (!this._socket) {
+            console.error('Socket not initialized. Call init() first.');
+            return;
+        }
+        
+        if (!this._socket.connected) {
+            console.log('Connecting to socket server...');
+            this._socket.connect();
+        }
+    },
+    
+    /**
+     * Disconnect from the Socket.IO server
+     */
+    disconnect() {
+        if (this._socket && this._socket.connected) {
+            console.log('Disconnecting from socket server...');
+            this._socket.disconnect();
+        }
+        
+        // Clear heartbeat timer
+        this._stopHeartbeat();
+    },
+    
+    /**
+     * Check if socket is connected
+     */
+    isConnected() {
+        return this._socket && this._socket.connected;
+    },
+    
+    /**
+     * Set up internal event listeners
+     */
+    _setupEventListeners() {
+        if (!this._socket) return;
+        
+        // Connection events
+        this._socket.on(this.config.eventTypes.CONNECT, () => {
+            console.log('Socket connected');
+            this._connected = true;
+            this._reconnecting = false;
+            
+            // Start heartbeat
+            this._startHeartbeat();
+            
+            // Resubscribe to rooms after reconnection
+            this._resubscribeRooms();
+            
+            // Process queued messages
+            this._processQueue();
+            
+            // Notify connection listeners
+            this._notifyConnectionListeners(true);
+        });
+        
+        this._socket.on(this.config.eventTypes.DISCONNECT, (reason) => {
+            console.log(`Socket disconnected: ${reason}`);
+            this._connected = false;
+            
+            // Stop heartbeat
+            this._stopHeartbeat();
+            
+            // Notify connection listeners
+            this._notifyConnectionListeners(false);
+        });
+        
+        this._socket.on(this.config.eventTypes.RECONNECT_ATTEMPT, (attempt) => {
+            console.log(`Socket reconnection attempt ${attempt}`);
+            this._reconnecting = true;
+        });
+        
+        this._socket.on(this.config.eventTypes.ERROR, (error) => {
+            console.error('Socket error:', error);
+        });
+        
+        // Setup pong handler for heartbeat
+        this._socket.on(this.config.eventTypes.PONG, (data) => {
+            const latency = Date.now() - new Date(data.received_ping).getTime();
+            console.log(`Socket heartbeat: latency ${latency}ms`);
+        });
+        
+        // Setup handlers for invitation flow
+        this._socket.on(this.config.eventTypes.INVITATION_STATUS, (data) => {
+            this._triggerHandlers(this.config.eventTypes.INVITATION_STATUS, data);
+        });
+        
+        this._socket.on(this.config.eventTypes.QR_SCANNED_NOTIFICATION, (data) => {
+            this._triggerHandlers(this.config.eventTypes.QR_SCANNED_NOTIFICATION, data);
+        });
+        
+        this._socket.on(this.config.eventTypes.INVITATION_ACCEPTED, (data) => {
+            this._triggerHandlers(this.config.eventTypes.INVITATION_ACCEPTED, data);
+        });
+        
+        // Chat message handler
+        this._socket.on(this.config.eventTypes.MESSAGE, (data) => {
+            this._triggerHandlers(this.config.eventTypes.MESSAGE, data);
+        });
+        
+        // User presence handlers
+        this._socket.on(this.config.eventTypes.JOIN, (data) => {
+            this._triggerHandlers(this.config.eventTypes.JOIN, data);
+        });
+        
+        this._socket.on(this.config.eventTypes.USER_ACTIVE, (data) => {
+            this._triggerHandlers(this.config.eventTypes.USER_ACTIVE, data);
+        });
+        
+        this._socket.on(this.config.eventTypes.USER_AWAY, (data) => {
+            this._triggerHandlers(this.config.eventTypes.USER_AWAY, data);
+        });
+        
+        // Typing indicators
+        this._socket.on(this.config.eventTypes.TYPING, (data) => {
+            this._triggerHandlers(this.config.eventTypes.TYPING, data);
+        });
+        
+        this._socket.on(this.config.eventTypes.STOP_TYPING, (data) => {
+            this._triggerHandlers(this.config.eventTypes.STOP_TYPING, data);
+        });
+        
+        // Read receipts
+        this._socket.on(this.config.eventTypes.MESSAGE_READ, (data) => {
+            this._triggerHandlers(this.config.eventTypes.MESSAGE_READ, data);
+        });
+        
+        // Room creation
+        this._socket.on(this.config.eventTypes.ROOM_CREATED, (data) => {
+            this._triggerHandlers(this.config.eventTypes.ROOM_CREATED, data);
+        });
+    },
+    
+    /**
+     * Start heartbeat to keep connection alive and detect disconnects
+     */
+    _startHeartbeat() {
+        this._stopHeartbeat();
+        
+        this._heartbeatTimer = setInterval(() => {
+            if (this._socket && this._socket.connected) {
+                this._socket.emit(this.config.eventTypes.PING, {
+                    timestamp: new Date().toISOString()
+                });
+            } else {
+                this._stopHeartbeat();
+            }
+        }, this.config.pingInterval);
+    },
+    
+    /**
+     * Stop heartbeat timer
+     */
+    _stopHeartbeat() {
+        if (this._heartbeatTimer) {
+            clearInterval(this._heartbeatTimer);
+            this._heartbeatTimer = null;
+        }
+    },
+    
+    /**
+     * Resubscribe to rooms after reconnection
+     */
+    _resubscribeRooms() {
+        if (!this._socket || !this._socket.connected) return;
+        
+        // Get user ID for join requests
+        const userData = AuthHelper.getUserData();
+        const visitorId = userData ? userData.user_id : AuthHelper.getOrCreateVisitorId();
+        
+        // Resubscribe to all rooms
+        this._subscribedRooms.forEach(roomId => {
+            console.log(`Resubscribing to room: ${roomId}`);
+            this._socket.emit('join', {
+                room_id: roomId,
+                visitor_id: visitorId
+            });
+        });
+    },
+    
+    /**
+     * Process queued messages after reconnection
+     */
+    _processQueue() {
+        if (!this._socket || !this._socket.connected) return;
+        
+        if (this._queuedMessages.length > 0) {
+            console.log(`Processing ${this._queuedMessages.length} queued messages`);
+            
+            this._queuedMessages.forEach(item => {
+                this._socket.emit(item.event, item.data);
+            });
+            
+            // Clear queue
+            this._queuedMessages = [];
+        }
+    },
+    
+    /**
+     * Trigger event handlers for a specific event
+     */
+    _triggerHandlers(eventType, data) {
+        const handlers = this._eventHandlers.get(eventType) || [];
+        handlers.forEach(handler => {
+            try {
+                handler(data);
+            } catch (error) {
+                console.error(`Error in ${eventType} handler:`, error);
+            }
+        });
+    },
+    
+    /**
+     * Notify connection state listeners
+     */
+    _notifyConnectionListeners(connected) {
+        this._connectionListeners.forEach(listener => {
+            try {
+                listener(connected);
+            } catch (error) {
+                console.error('Error in connection listener:', error);
+            }
+        });
+    },
+    
+    /**
+     * Subscribe to events
+     * 
+     * @param {string} eventType - Event type from config.eventTypes
+     * @param {Function} handler - Event handler function
+     * @returns {Function} - Unsubscribe function
+     */
+    on(eventType, handler) {
+        if (!handler || typeof handler !== 'function') {
+            console.error('Event handler must be a function');
+            return () => {};
+        }
+        
+        // Create handler collection if it doesn't exist
+        if (!this._eventHandlers.has(eventType)) {
+            this._eventHandlers.set(eventType, new Set());
+        }
+        
+        // Add handler
+        this._eventHandlers.get(eventType).add(handler);
+        
+        // Return unsubscribe function
+        return () => {
+            const handlers = this._eventHandlers.get(eventType);
+            if (handlers) {
+                handlers.delete(handler);
+                if (handlers.size === 0) {
+                    this._eventHandlers.delete(eventType);
+                }
+            }
+        };
+    },
+    
+    /**
+     * Remove event handler
+     * 
+     * @param {string} eventType - Event type
+     * @param {Function} handler - Event handler to remove
+     */
+    off(eventType, handler) {
+        const handlers = this._eventHandlers.get(eventType);
+        if (handlers && handler) {
+            handlers.delete(handler);
+            if (handlers.size === 0) {
+                this._eventHandlers.delete(eventType);
+            }
+        } else if (!handler) {
+            // Remove all handlers for this event type
+            this._eventHandlers.delete(eventType);
+        }
+    },
+    
+    /**
+     * Add connection state listener
+     * 
+     * @param {Function} listener - Connection state listener
+     * @returns {Function} - Unsubscribe function
+     */
+    onConnectionChange(listener) {
+        if (!listener || typeof listener !== 'function') {
+            console.error('Connection listener must be a function');
+            return () => {};
+        }
+        
+        this._connectionListeners.add(listener);
+        
+        // Return unsubscribe function
+        return () => {
+            this._connectionListeners.delete(listener);
+        };
+    },
+    
+    /**
+     * Join a chat room
+     * 
+     * @param {string} roomId - Room ID to join
+     */
+    joinRoom(roomId) {
+        if (!roomId) {
+            console.error('Room ID is required');
+            return;
+        }
+        
+        // Track subscribed room
+        this._subscribedRooms.add(roomId);
+        
+        if (!this._socket || !this._socket.connected) {
+            console.warn(`Socket not connected, joining room ${roomId} will be queued`);
+            this.connect();
+            return;
+        }
+        
+        // Get visitor ID for join request
+        const userData = AuthHelper.getUserData();
+        const visitorId = userData ? userData.user_id : AuthHelper.getOrCreateVisitorId();
+        
+        console.log(`Joining room: ${roomId}`);
+        this._socket.emit('join', {
+            room_id: roomId,
+            visitor_id: visitorId
+        });
+    },
+    
+    /**
+     * Leave a chat room
+     * 
+     * @param {string} roomId - Room ID to leave
+     */
+    leaveRoom(roomId) {
+        if (!roomId) {
+            console.error('Room ID is required');
+            return;
+        }
+        
+        // Remove from tracked rooms
+        this._subscribedRooms.delete(roomId);
+        
+        if (!this._socket || !this._socket.connected) {
+            return;
+        }
+        
+        console.log(`Leaving room: ${roomId}`);
+        this._socket.emit('leave', { room_id: roomId });
+    },
+    
+    /**
+     * Send a message to a room
+     * 
+     * @param {string} roomId - The room ID to send to
+     * @param {string} content - The message content
+     * @param {string} messageId - Optional message ID (generates UUID if not provided)
+     * @returns {Promise} - Resolves when message is acknowledged
+     */
+    sendMessage(roomId, content, messageId = null) {
+        return new Promise((resolve, reject) => {
+            if (!this._socket || !this.isConnected()) {
+                console.error('Socket not connected. Cannot send message.');
+                // Queue the message for later sending
+                const msg = { roomId, content, messageId: messageId || crypto.randomUUID() };
+                this._queuedMessages.push({ type: 'message', data: msg });
+                reject(new Error('Socket not connected'));
+                return;
+            }
+            
+            if (!roomId) {
+                console.error('Room ID is required to send a message.');
+                reject(new Error('Room ID is required'));
+                return;
+            }
+            
+            // Ensure we're in the room
+            if (!this._subscribedRooms.has(roomId)) {
+                console.log(`Not in room ${roomId}, joining before sending message.`);
+                this.joinRoom(roomId);
+            }
+            
+            // Generate message ID if not provided
+            const msgId = messageId || crypto.randomUUID();
+            
+            // Send the message
+            try {
+                this._socket.emit('message', {
+                    room_id: roomId,
+                    message: content,
+                    message_id: msgId
+                });
+                
+                // Set up one-time handler for acknowledgment
+                const ackHandler = (data) => {
+                    if (data.message_id === msgId) {
+                        // Remove the handler after receiving ack
+                        this._socket.off('message_ack', ackHandler);
+                        resolve(data);
+                    }
+                };
+                
+                // Listen for acknowledgment
+                this._socket.on('message_ack', ackHandler);
+                
+                // Set timeout to reject if no ack received
+                setTimeout(() => {
+                    // Check if still waiting for ack
+                    if (this._socket.hasListeners('message_ack')) {
+                        this._socket.off('message_ack', ackHandler);
+                        reject(new Error('Message acknowledgment timeout'));
+                    }
+                }, 5000); // 5 second timeout
+            } catch (error) {
+                console.error('Error sending message:', error);
+                reject(error);
+            }
+        });
+    },
+    
+    /**
+     * Send typing indicator
+     * 
+     * @param {string} roomId - Room ID
+     * @param {boolean} isTyping - Whether user is typing
+     */
+    sendTypingStatus(roomId, isTyping = true) {
+        if (!roomId) {
+            console.error('Room ID is required');
+            return;
+        }
+        
+        if (!this._socket || !this._socket.connected) {
+            return;
+        }
+        
+        const eventType = isTyping ? 
+            this.config.eventTypes.TYPING : 
+            this.config.eventTypes.STOP_TYPING;
+            
+        this._socket.emit(eventType, { room_id: roomId });
+    },
+    
+    /**
+     * Send read receipt for messages
+     * 
+     * @param {string} roomId - Room ID
+     * @param {Array<string>} messageIds - IDs of read messages
+     */
+    sendReadReceipt(roomId, messageIds) {
+        if (!roomId || !messageIds || !messageIds.length) {
+            console.error('Room ID and message IDs are required');
+            return;
+        }
+        
+        if (!this._socket || !this._socket.connected) {
+            return;
+        }
+        
+        this._socket.emit(this.config.eventTypes.MESSAGE_READ, {
+            room_id: roomId,
+            message_ids: messageIds
+        });
+    },
+    
+    /**
+     * Send user active/away status
+     * 
+     * @param {string} roomId - Room ID
+     * @param {boolean} isActive - Whether user is active
+     */
+    sendUserStatus(roomId, isActive = true) {
+        if (!roomId) {
+            console.error('Room ID is required');
+            return;
+        }
+        
+        if (!this._socket || !this._socket.connected) {
+            return;
+        }
+        
+        const eventType = isActive ?
+            this.config.eventTypes.USER_ACTIVE :
+            this.config.eventTypes.USER_AWAY;
+            
+        this._socket.emit(eventType, { room_id: roomId });
+    },
+    
+    /**
+     * Send invitation created event
+     * 
+     * @param {string} token - Invitation token
+     */
+    notifyInvitationCreated(token) {
+        if (!token) {
+            console.error('Invitation token is required');
+            return;
+        }
+        
+        if (!this._socket || !this._socket.connected) {
+            this._queuedMessages.push({
+                event: this.config.eventTypes.INVITATION_CREATED,
+                data: { invitation_token: token }
+            });
+            
+            this.connect();
+            return;
+        }
+        
+        this._socket.emit(this.config.eventTypes.INVITATION_CREATED, {
+            invitation_token: token
+        });
+    },
+    
+    /**
+     * Check invitation status
+     * 
+     * @param {string} token - Invitation token
+     */
+    checkInvitationStatus(token) {
+        if (!token) {
+            console.error('Invitation token is required');
+            return;
+        }
+        
+        if (!this._socket || !this._socket.connected) {
+            this._queuedMessages.push({
+                event: 'check_invitation_status',
+                data: { invitation_token: token }
+            });
+            
+            this.connect();
+            return;
+        }
+        
+        this._socket.emit('check_invitation_status', {
+            invitation_token: token
+        });
+    },
+    
+    /**
+     * Notify that a QR code was scanned
+     * 
+     * @param {string} token - Invitation token
+     */
+    notifyQrScanned(token) {
+        if (!token) {
+            console.error('Invitation token is required');
+            return;
+        }
+        
+        if (!this._socket || !this._socket.connected) {
+            this._queuedMessages.push({
+                event: this.config.eventTypes.QR_SCANNED,
+                data: { invitation_token: token }
+            });
+            
+            this.connect();
+            return;
+        }
+        
+        this._socket.emit(this.config.eventTypes.QR_SCANNED, {
+            invitation_token: token
+        });
+    },
+    
+    /**
+     * Run a connection test to verify WebSocket functionality
+     * @returns {Promise} - Resolves with connection status
+     */
+    testConnection() {
+        return new Promise((resolve, reject) => {
+            if (!this._socket || !this.isConnected()) {
+                reject(new Error('Socket not connected'));
+                return;
+            }
+            
+            const testData = {
+                timestamp: new Date().toISOString(),
+                test_id: crypto.randomUUID()
+            };
+            
+            // Send ping and wait for pong
+            this._socket.emit('ping', testData);
+            
+            // Set up one-time handler for pong
+            const pongHandler = (data) => {
+                // Remove the handler after receiving pong
+                this._socket.off('pong', pongHandler);
+                resolve({
+                    success: true,
+                    latency: Date.now() - new Date(testData.timestamp).getTime(),
+                    data
+                });
+            };
+            
+            // Listen for pong
+            this._socket.on('pong', pongHandler);
+            
+            // Set timeout to reject if no pong received
+            setTimeout(() => {
+                // Check if still waiting for pong
+                if (this._socket.hasListeners('pong')) {
+                    this._socket.off('pong', pongHandler);
+                    reject(new Error('WebSocket test timeout'));
+                }
+            }, 5000); // 5 second timeout
+        });
+    }
+};
+
+// Initialize the socket client when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+    // Delay initialization slightly to ensure AuthHelper is fully loaded
+    setTimeout(() => {
+        SocketClient.init();
+    }, 300); // Increase timeout to 300ms
+});
+
+// Handle page visibility changes
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        // Page is hidden, consider disconnecting to save resources
+        // but only if we're not in the middle of a chat
+        if (SocketClient._subscribedRooms.size === 0) {
+            SocketClient.disconnect();
+        }
     } else {
-      console.warn(`No handlers registered for event "${event}"`);
+        // Page is visible again, reconnect if needed
+        if (!SocketClient.isConnected()) {
+            SocketClient.connect();
+        }
     }
-  }
+});
 
-  /**
-   * Register an event handler
-   * @param {string} event - Event name
-   * @param {Function} callback - Event handler function
-   * @returns {Function} - Function to remove the event handler
-   */
-  on(event, callback) {
-    if (!this.handlers[event]) {
-      this.handlers[event] = [];
-    }
-    
-    this.handlers[event].push(callback);
-    
-    // Return a function to remove this handler
-    return () => {
-      this.handlers[event] = this.handlers[event].filter(handler => handler !== callback);
-    };
-  }
+// Handle page unload
+window.addEventListener('beforeunload', () => {
+    SocketClient.disconnect();
+});
 
-  /**
-   * Join a chat room
-   * @param {Object} data - Room join data
-   */
-  joinRoom(data) {
-    // Store this room ID for future reconnections
-    if (data.room_id) {
-      this._roomsToJoin.add(data.room_id);
-    }
-    
-    if (!this.connected) {
-      console.error('Socket not connected when trying to join room');
-      
-      // Try reconnecting
-      if (this.socket) {
-        this.socket.connect();
-      }
-      
-      // Queue up the join request to retry in 2 seconds
-      setTimeout(() => {
-        console.log('Retrying room join after delay:', data.room_id);
-        this.joinRoom(data);
-      }, 2000);
-      
-      return;
-    }
-    
-    console.log('Joining room:', data.room_id, 'as user:', data.visitor_id || localStorage.getItem('user_id'));
-    
-    try {
-      this.socket.emit('join', {
-        room_id: data.room_id,
-        visitor_id: data.visitor_id || localStorage.getItem('user_id'),
-        visitor_name: data.visitor_name
-      });
-      
-      // Also subscribe to direct room events using Socket.IO room functionality
-      this.socket.emit('subscribe', { room: data.room_id });
-    } catch (error) {
-      console.error('Error joining room:', error);
-      
-      // Try again after a delay if socket was connected but emit failed
-      if (this.connected) {
-        setTimeout(() => {
-          console.log('Retrying room join after error:', data.room_id);
-          this.joinRoom(data);
-        }, 2000);
-      }
-    }
-  }
-
-  /**
-   * Send a message to a chat room
-   * @param {Object} data - Message data
-   * @returns {boolean} - Whether the message was sent successfully
-   */
-  sendMessage(data) {
-    if (!this.connected) {
-      console.error('Socket not connected, cannot send message');
-      return false;
-    }
-    
-    console.log('SocketClient: Sending message to server:', data);
-    
-    try {
-      this.socket.emit('message', {
-        room_id: data.room_id,
-        message: data.message,
-        message_id: data.message_id
-      });
-      
-      console.log('SocketClient: Message sent to server');
-      return true;
-    } catch (error) {
-      console.error('SocketClient: Error sending message:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Set user as active in a chat room
-   * @param {Object} data - User active data
-   */
-  setUserActive(data) {
-    if (!this.connected) {
-      console.error('Socket not connected, cannot set user active');
-      return;
-    }
-    
-    try {
-      this.socket.emit('user_active', {
-        room_id: data.room_id,
-        visitor_id: data.visitor_id || localStorage.getItem('user_id')
-      });
-    } catch (error) {
-      console.error('Error setting user active:', error);
-    }
-  }
-
-  /**
-   * Set user as away in a chat room
-   * @param {Object} data - User away data
-   */
-  setUserAway(data) {
-    if (!this.connected) {
-      console.error('Socket not connected, cannot set user away');
-      return;
-    }
-    
-    try {
-      this.socket.emit('user_away', {
-        room_id: data.room_id,
-        visitor_id: data.visitor_id || localStorage.getItem('user_id')
-      });
-    } catch (error) {
-      console.error('Error setting user away:', error);
-    }
-  }
-
-  /**
-   * Check status of users in a chat room
-   * @param {Object} data - Check status data
-   */
-  checkStatus(data) {
-    if (!this.connected) {
-      console.error('Socket not connected, cannot check status');
-      return;
-    }
-    
-    try {
-      this.socket.emit('check_status', {
-        room_id: data.room_id
-      });
-    } catch (error) {
-      console.error('Error checking status:', error);
-    }
-  }
-
-  /**
-   * Request unread message count for a user in a chat room
-   * @param {Object} data - Request unread count data
-   */
-  requestUnreadCount(data) {
-    if (!this.connected) {
-      console.error('Socket not connected, cannot request unread count');
-      return;
-    }
-    
-    try {
-      this.socket.emit('request_unread_count', {
-        room_id: data.room_id,
-        visitor_id: data.visitor_id || localStorage.getItem('user_id')
-      });
-    } catch (error) {
-      console.error('Error requesting unread count:', error);
-    }
-  }
-
-  /**
-   * Disconnect the socket
-   */
-  disconnect() {
-    if (this.socket) {
-      this.socket.disconnect();
-      this.connected = false;
-    }
-  }
-
-  /**
-   * Test the socket connection by sending a ping
-   * @returns {boolean} - Whether the socket is connected
-   */
-  testConnection() {
-    if (!this.connected) {
-      console.error('Socket not connected');
-      return false;
-    }
-    
-    console.log('Socket connection test - currently connected:', this.connected);
-    console.log('Socket ID:', this.socket.id);
-    
-    // Generate a unique ID for this ping
-    const pingId = new Date().toISOString();
-    
-    // Store the current time in milliseconds
-    this.pingTimestamps[pingId] = new Date().getTime();
-    
-    // Send a ping to test bidirectional communication
-    try {
-      this.socket.emit('ping', {
-        timestamp: pingId
-      });
-      return true;
-    } catch (error) {
-      console.error('Error sending ping:', error);
-      this.connected = false; // Mark as disconnected if ping fails
-      return false;
-    }
-  }
-}
-
-// Create and export a singleton instance
-const socketClient = new SocketClient(); 
+// Export for use in other modules
+window.SocketClient = SocketClient; 

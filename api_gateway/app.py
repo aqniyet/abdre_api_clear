@@ -1070,10 +1070,11 @@ def websocket_test():
 @app.route("/websocket-test")
 def websocket_test_page():
     """Render the detailed WebSocket testing page"""
-    if not template_exists("chat.html"):
-        logger.error("Failed to render websocket-test page - template file missing")
+    if template_exists("ws_test.html"):
+        return render_template("ws_test.html")
+    else:
+        logger.error("Failed to render ws_test.html - template file missing")
         return render_template("error.html", error="WebSocket test page not available"), 500
-    return render_template("chat.html", mode="ws-test-detailed")
 
 @app.route("/favicon.ico")
 def favicon():
@@ -1712,7 +1713,7 @@ def socketio_proxy():
 
     # For WebSocket upgrade requests, add a special header for client information
     if request.headers.get("Upgrade", "").lower() == "websocket":
-        logger.info("WebSocket upgrade request detected, attempting direct proxy")
+        logger.info("WebSocket upgrade request detected, preparing to proxy")
 
         # Check if user is authenticated first
         auth_data = authenticate_token()
@@ -1731,22 +1732,54 @@ def socketio_proxy():
         # Set user data in g if authenticated
         if auth_data:
             g.user = auth_data
+            logger.info(f"User {auth_data.get('user_id')} authenticated for WebSocket connection")
+        else:
+            logger.info("Anonymous WebSocket connection (no authentication)")
 
         # Create a direct connection URL for WebSockets
         # In development, this might be localhost with the right port
         # In production, it should be the proper WebSocket endpoint
         try:
+            # Extract any query parameters to pass along
+            query_params = {}
+            if hasattr(request, "args"):
+                for key, value in request.args.items():
+                    query_params[key] = value
+            
+            # Add the auth token to query params if authenticated
+            if hasattr(g, "user") and not query_params.get("token"):
+                # Get the original token from the Authorization header
+                auth_header = request.headers.get("Authorization", "")
+                if auth_header.startswith("Bearer "):
+                    token = auth_header[7:]
+                    query_params["token"] = token
+                    logger.info("Added authentication token to WebSocket connection params")
+            
             # For WebSocket upgrade handling, we'll return JSON info for the client
             # to use to connect directly to the realtime service
+            ws_protocol = "wss" if request.is_secure else "ws"
+            http_protocol = "https" if request.is_secure else "http"
+            
+            # Parse the realtime service URL to extract host and port
+            realtime_url = REALTIME_SERVICE_URL
+            if realtime_url.startswith("http"):
+                # Replace http with ws protocol
+                realtime_url = realtime_url.replace("http://", f"{ws_protocol}://")
+                realtime_url = realtime_url.replace("https://", f"{ws_protocol}://")
+            else:
+                # If no protocol specified, add the ws protocol
+                realtime_url = f"{ws_protocol}://{realtime_url}"
+            
             return (
                 jsonify(
                     {
                         "status": "redirect",
                         "message": "WebSocket connections should be made directly to the realtime service",
-                        "connection_url": REALTIME_SERVICE_URL,
+                        "connection_url": realtime_url,
                         "socket_path": "/socket.io/",
                         "connection_type": "direct",
                         "token_valid": True if hasattr(g, "user") else False,
+                        "query_params": query_params,
                     }
                 ),
                 200,
@@ -2286,6 +2319,63 @@ def serve_socket_client():
 def serve_chat_service():
     """Serve the Chat service utility"""
     return send_from_directory(os.path.join(app.static_folder, "js", "services"), "chat-service.js", mimetype="application/javascript")
+
+@app.route("/api/realtime/check-connection", methods=["GET"])
+def check_realtime_connection():
+    """Check if the realtime service is available and properly configured"""
+    try:
+        # Verify that the realtime service is up
+        health_url = f"{REALTIME_SERVICE_URL}/health"
+        health_resp = requests.get(health_url, timeout=3)
+        
+        if health_resp.status_code != 200:
+            return (
+                jsonify({
+                    "status": "error",
+                    "message": f"Realtime service returned status code {health_resp.status_code}",
+                    "service_url": REALTIME_SERVICE_URL
+                }),
+                503
+            )
+        
+        # Try to get connection info from the realtime service
+        connections_url = f"{REALTIME_SERVICE_URL}/connections"
+        connections_resp = requests.get(connections_url, timeout=3)
+        
+        # Get auth status
+        auth_data = authenticate_token()
+        user_id = auth_data.get("user_id", "anonymous") if auth_data else "anonymous"
+        
+        # Return connection status and configuration
+        return jsonify({
+            "status": "available",
+            "realtime_service": REALTIME_SERVICE_URL,
+            "socket_io_path": "/socket.io",
+            "authenticated": auth_data is not None,
+            "user_id": user_id,
+            "connections": connections_resp.json() if connections_resp.status_code == 200 else None,
+            "websocket_test_route": "/api/ws-test",
+            "socket_endpoint": "/api/realtime/socket.io"
+        })
+    except requests.RequestException as e:
+        logger.error(f"Error connecting to realtime service: {str(e)}")
+        return (
+            jsonify({
+                "status": "unavailable",
+                "message": f"Could not connect to realtime service: {str(e)}",
+                "realtime_service_url": REALTIME_SERVICE_URL
+            }),
+            503
+        )
+    except Exception as e:
+        logger.error(f"Error checking realtime connection: {str(e)}")
+        return (
+            jsonify({
+                "status": "error",
+                "message": f"Error checking realtime connection: {str(e)}"
+            }),
+            500
+        )
 
 
 if __name__ == "__main__":
