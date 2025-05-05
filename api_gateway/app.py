@@ -1618,6 +1618,12 @@ def chat_service_proxy(path):
         target_url = f"{CHAT_SERVICE_URL}/generate-invitation"
         logger.info(f"Proxying to target URL: {target_url}")
         return proxy_request(target_url, "CHAT_SERVICE_URL")
+        
+    # Special handling for cleanup-expired-invitations endpoint
+    if path == "cleanup-expired-invitations":
+        target_url = f"{CHAT_SERVICE_URL}/cleanup-expired-invitations"
+        logger.info(f"Proxying to target URL: {target_url}")
+        return proxy_request(target_url, "CHAT_SERVICE_URL")
 
     # Special handling for GET requests to messages endpoint
     if request.method == "GET" and "/messages" in path:
