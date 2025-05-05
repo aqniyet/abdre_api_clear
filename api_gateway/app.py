@@ -17,7 +17,8 @@ import uuid
 from datetime import datetime, timedelta
 from functools import wraps
 
-import PyJWT as jwt
+# Fix: Import PyJWT correctly without aliasing
+import jwt as PyJWT
 import prometheus_client
 import requests
 from flask import (
@@ -62,12 +63,12 @@ app.config["SESSION_COOKIE_SAMESITE"] = (
 app.config["SESSION_COOKIE_SECURE"] = True
 
 # Configure service URLs from environment variables
-AUTH_SERVICE_URL = os.environ.get("AUTH_SERVICE_URL", "http://localhost:5001")
-USER_SERVICE_URL = os.environ.get("USER_SERVICE_URL", "http://user_service:5002")
-OAUTH_SERVICE_URL = os.environ.get("OAUTH_SERVICE_URL", "http://oauth_service:5003")
-CHAT_SERVICE_URL = os.environ.get("CHAT_SERVICE_URL", "http://chat_service:5004")
+AUTH_SERVICE_URL = os.environ.get("AUTH_SERVICE_URL", "http://localhost:5501")
+USER_SERVICE_URL = os.environ.get("USER_SERVICE_URL", "http://localhost:5502")
+OAUTH_SERVICE_URL = os.environ.get("OAUTH_SERVICE_URL", "http://localhost:5503")
+CHAT_SERVICE_URL = os.environ.get("CHAT_SERVICE_URL", "http://localhost:5504")
 REALTIME_SERVICE_URL = os.environ.get(
-    "REALTIME_SERVICE_URL", "http://realtime_service:5006"
+    "REALTIME_SERVICE_URL", "http://localhost:5506"
 )
 
 # JWT Secret
@@ -194,9 +195,9 @@ def authenticate_token():
     try:
         # Extract token from "Bearer <token>"
         token = auth_header.split(" ")[1]
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        payload = PyJWT.decode(token, JWT_SECRET, algorithms=["HS256"])
         return payload
-    except (jwt.exceptions.InvalidTokenError, IndexError, AttributeError):
+    except (PyJWT.exceptions.InvalidTokenError, PyJWT.exceptions.DecodeError, IndexError, AttributeError):
         return None
 
 
@@ -964,7 +965,7 @@ def join_chat(token):
         if auth_header.startswith("Bearer "):
             token_value = auth_header[7:]
             try:
-                user_data = jwt.decode(token_value, JWT_SECRET, algorithms=["HS256"])
+                user_data = PyJWT.decode(token_value, JWT_SECRET, algorithms=["HS256"])
                 user_id = user_data.get("user_id")
                 logger.info(f"Authenticated user {user_id} is joining with token {token}")
             except Exception as e:
@@ -1586,6 +1587,12 @@ def chat_service_proxy(path):
 
     logger.info(f"Chat service proxy for path: {path}")
     logger.info(f"Request method: {request.method}")
+
+    # Special handling for generate-invitation endpoint
+    if path == "generate-invitation":
+        target_url = f"{CHAT_SERVICE_URL}/generate-invitation"
+        logger.info(f"Proxying to target URL: {target_url}")
+        return proxy_request(target_url, "CHAT_SERVICE_URL")
 
     # Special handling for GET requests to messages endpoint
     if request.method == "GET" and "/messages" in path:

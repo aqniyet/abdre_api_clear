@@ -8,7 +8,7 @@ import uuid
 import hashlib
 from datetime import datetime, timedelta
 
-import jwt
+import jwt as PyJWT
 import bcrypt
 from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
@@ -200,68 +200,33 @@ def refresh():
         refresh_token = data.get("refresh_token")
         
     if not refresh_token:
-        return jsonify({"error": "Invalid or missing refresh token"}), 401
-
+        return jsonify({"error": "Refresh token is required"}), 400
+    
     try:
-        # Decode token
-        payload = jwt.decode(refresh_token, JWT_SECRET, algorithms=["HS256"])
-
-        # Check if it's a refresh token
+        # Decode refresh token
+        payload = PyJWT.decode(refresh_token, JWT_SECRET, algorithms=["HS256"])
+        
+        # Verify it's a refresh token
         if payload.get("type") != "refresh":
-            raise jwt.InvalidTokenError("Not a refresh token")
-
-        # Get user data
+            return jsonify({"error": "Invalid token type"}), 401
+        
+        # Get user info
         username = payload.get("username")
-        user_id = payload.get("user_id")
+        if not username or username not in users:
+            return jsonify({"error": "User not found"}), 401
         
-        # Handle guest users
-        if payload.get("is_guest"):
-            guest_id = user_id
-            guest_user = guest_users.get(guest_id)
-            
-            if not guest_user:
-                # Create a new guest user if it doesn't exist
-                guest_user = {
-                    "user_id": guest_id,
-                    "username": f"guest_{guest_id[:8]}",
-                    "role": "guest",
-                    "display_name": guest_user.get("display_name", "Guest User"),
-                }
-                guest_users[guest_id] = guest_user
-                
-            # Generate new tokens for guest
-            access_token = generate_token(guest_user, GUEST_TOKEN_EXPIRY, is_guest=True)
-            new_refresh_token = generate_token(guest_user, REFRESH_TOKEN_EXPIRY, is_refresh=True, is_guest=True)
-            
-            return jsonify(
-                {
-                    "access_token": access_token,
-                    "refresh_token": new_refresh_token,
-                    "user": {
-                        "user_id": guest_id,
-                        "username": guest_user["username"],
-                        "role": "guest",
-                        "display_name": guest_user.get("display_name", "Guest User"),
-                    },
-                    "auth_type": "guest",
-                    "expires_in": GUEST_TOKEN_EXPIRY,
-                }
-            )
+        user = users[username]
         
-        # Handle regular users
-        user = users.get(username)
-        if not user:
-            raise jwt.InvalidTokenError("User not found")
-
         # Generate new tokens
         access_token = generate_token(user, TOKEN_EXPIRY)
         new_refresh_token = generate_token(user, REFRESH_TOKEN_EXPIRY, is_refresh=True)
         
-        # Update session with new refresh token
+        # Update active sessions
         for session_id, session in active_sessions.items():
-            if session.get("refresh_token") == refresh_token:
-                active_sessions[session_id]["refresh_token"] = new_refresh_token
-
+            if session["user_id"] == user["user_id"] and session.get("refresh_token") == refresh_token:
+                session["refresh_token"] = new_refresh_token
+                break
+        
         return jsonify(
             {
                 "access_token": access_token,
@@ -277,56 +242,77 @@ def refresh():
                 "expires_in": TOKEN_EXPIRY,
             }
         )
-
-    except jwt.InvalidTokenError as e:
-        return jsonify({"error": f"Invalid token: {str(e)}"}), 401
+    except PyJWT.exceptions.InvalidTokenError:
+        return jsonify({"error": "Invalid or expired refresh token"}), 401
 
 
 @app.route("/verify", methods=["GET"])
 def verify():
     """Verify token endpoint"""
     auth_header = request.headers.get("Authorization")
-
+    
     if not auth_header or not auth_header.startswith("Bearer "):
-        return jsonify({"valid": False, "error": "Invalid or missing token"}), 401
-
+        return jsonify({"valid": False, "error": "No token provided"}), 401
+    
     token = auth_header.split(" ")[1]
-
+    
     try:
         # Decode token
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-
-        # Check token type
-        if payload.get("type") == "refresh":
-            return jsonify({"valid": True, "token_type": "refresh"})
-
-        user_data = {
-            "username": payload.get("username"),
-            "email": payload.get("email"),
-            "role": payload.get("role"),
-            "user_id": payload.get("user_id"),
-        }
+        payload = PyJWT.decode(token, JWT_SECRET, algorithms=["HS256"])
         
-        # Add display name if available
-        if payload.get("display_name"):
-            user_data["display_name"] = payload.get("display_name")
-            
-        # Indicate if this is a guest user
-        auth_type = "guest" if payload.get("is_guest") else "standard"
-
-        return jsonify(
-            {
+        # Check if token is expired
+        exp = payload.get("exp", 0)
+        current_time = datetime.utcnow().timestamp()
+        
+        if current_time > exp:
+            return jsonify({"valid": False, "error": "Token has expired"}), 401
+        
+        # Get user info for response
+        username = payload.get("username")
+        user_id = payload.get("user_id")
+        
+        # Check if user still exists (for registered users)
+        if username and username in users:
+            user = users[username]
+            return jsonify({
                 "valid": True,
-                "token_type": "access",
-                "user": user_data,
-                "auth_type": auth_type,
-            }
-        )
-
-    except jwt.ExpiredSignatureError:
-        return jsonify({"valid": False, "error": "Token expired"}), 401
-    except jwt.InvalidTokenError as e:
-        return jsonify({"valid": False, "error": f"Invalid token: {str(e)}"}), 401
+                "user": {
+                    "username": user["username"],
+                    "email": user["email"],
+                    "role": user["role"],
+                    "user_id": user["user_id"],
+                    "display_name": user.get("display_name", user["username"]),
+                },
+                "auth_type": "standard",
+                "expires_in": exp - current_time,
+            })
+        
+        # Check for guest users
+        if user_id and user_id in guest_users:
+            guest = guest_users[user_id]
+            return jsonify({
+                "valid": True,
+                "user": {
+                    "user_id": guest["user_id"],
+                    "display_name": guest.get("display_name", f"Guest-{guest['user_id'][:6]}"),
+                    "role": "guest",
+                },
+                "auth_type": "guest",
+                "expires_in": exp - current_time,
+            })
+        
+        # Token is valid but user not found (could be deleted)
+        return jsonify({
+            "valid": True,
+            "user": {
+                "user_id": user_id or payload.get("sub", "unknown"),
+                "role": payload.get("role", "guest"),
+            },
+            "auth_type": payload.get("auth_type", "standard"),
+            "expires_in": exp - current_time,
+        })
+    except PyJWT.exceptions.InvalidTokenError:
+        return jsonify({"valid": False, "error": "Invalid token"}), 401
 
 
 @app.route("/get-or-create-visitor-id", methods=["GET", "POST"])
@@ -387,7 +373,7 @@ def set_user_name():
     
     try:
         # Decode token
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        payload = PyJWT.decode(token, JWT_SECRET, algorithms=["HS256"])
         user_id = payload.get("user_id")
         username = payload.get("username")
         is_guest = payload.get("is_guest", False)
@@ -426,9 +412,9 @@ def set_user_name():
             }
         })
     
-    except jwt.ExpiredSignatureError:
+    except PyJWT.exceptions.ExpiredSignatureError:
         return jsonify({"error": "Token expired"}), 401
-    except jwt.InvalidTokenError as e:
+    except PyJWT.exceptions.InvalidTokenError as e:
         return jsonify({"error": f"Invalid token: {str(e)}"}), 401
 
 
@@ -444,7 +430,7 @@ def logout():
     
     try:
         # Decode token
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        payload = PyJWT.decode(token, JWT_SECRET, algorithms=["HS256"])
         user_id = payload.get("user_id")
         
         # Remove sessions for this user
@@ -458,9 +444,9 @@ def logout():
             
         return jsonify({"success": True})
     
-    except jwt.ExpiredSignatureError:
+    except PyJWT.exceptions.ExpiredSignatureError:
         return jsonify({"success": True})  # Expired token is already invalid
-    except jwt.InvalidTokenError:
+    except PyJWT.exceptions.InvalidTokenError:
         return jsonify({"success": True})  # Invalid token is already unusable
 
 
@@ -480,7 +466,7 @@ def generate_token(user, expiry, is_refresh=False, is_guest=False):
         "exp": now + timedelta(seconds=expiry),
     }
 
-    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    return PyJWT.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
 if __name__ == "__main__":

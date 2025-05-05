@@ -1,8 +1,8 @@
 {
   "services": {
     "api_gateway": {
-      "host": "api_gateway",
-      "port": 5000,
+      "host": "localhost",
+      "port": 5505,
       "health_endpoint": "/health",
       "metadata": {
         "description": "API Gateway service",
@@ -11,8 +11,8 @@
       }
     },
     "auth_service": {
-      "host": "auth_service",
-      "port": 5001,
+      "host": "localhost",
+      "port": 5501,
       "health_endpoint": "/health",
       "metadata": {
         "description": "Authentication service",
@@ -21,8 +21,8 @@
       }
     },
     "user_service": {
-      "host": "user_service",
-      "port": 5002,
+      "host": "localhost",
+      "port": 5502,
       "health_endpoint": "/health",
       "metadata": {
         "description": "User management service",
@@ -31,8 +31,8 @@
       }
     },
     "oauth_service": {
-      "host": "oauth_service",
-      "port": 5003,
+      "host": "localhost",
+      "port": 5503,
       "health_endpoint": "/health",
       "metadata": {
         "description": "OAuth integration service",
@@ -41,8 +41,8 @@
       }
     },
     "chat_service": {
-      "host": "chat_service",
-      "port": 5004,
+      "host": "localhost",
+      "port": 5504,
       "health_endpoint": "/health",
       "metadata": {
         "description": "Chat functionality service",
@@ -51,8 +51,8 @@
       }
     },
     "realtime_service": {
-      "host": "realtime_service",
-      "port": 5006,
+      "host": "localhost",
+      "port": 5506,
       "health_endpoint": "/health",
       "metadata": {
         "description": "Realtime WebSocket service",
