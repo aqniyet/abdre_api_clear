@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 import datetime
 import json
 import logging
@@ -5,7 +8,6 @@ import os
 import time
 import uuid
 
-import eventlet
 import jwt as PyJWT
 import requests
 from flask import Flask, jsonify, request
@@ -15,9 +17,6 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Use eventlet worker for better WebSocket performance
-eventlet.monkey_patch()
 
 app = Flask(__name__)
 
@@ -65,6 +64,12 @@ CHAT_SERVICE_URL = os.environ.get("CHAT_SERVICE_URL", "http://chat_service:5004"
 # Connected clients
 connected_clients = {}
 
+# Message delivery tracking
+message_delivery_status = {}
+# Typing indicator tracking
+typing_status = {}
+# Read receipt tracking
+read_receipts = {}
 
 # Helper function to verify JWT token
 def verify_token(token):
@@ -83,6 +88,31 @@ def verify_token(token):
         logger.error(f"Unexpected error verifying token: {str(e)}")
         return None
 
+# Helper to persist message to chat service
+def persist_message(room_id, message_data, sender_id):
+    try:
+        payload = {
+            "room_id": room_id,
+            "sender_id": sender_id,
+            "content": message_data.get("content"),
+            "message_type": message_data.get("message_type", "text"),
+            "client_message_id": message_data.get("message_id")
+        }
+        
+        response = requests.post(
+            f"{CHAT_SERVICE_URL}/api/messages",
+            json=payload,
+            headers={"Content-Type": "application/json"}
+        )
+        
+        if response.status_code == 201:
+            return response.json()
+        else:
+            logger.error(f"Failed to persist message: {response.status_code}, {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Error persisting message: {str(e)}")
+        return None
 
 # Socket.IO event handlers
 @socketio.on("connect")
@@ -179,6 +209,21 @@ def handle_connect():
         },
     }
 
+    # Update user presence status in all previously joined rooms
+    for room_id, users in typing_status.items():
+        if user_id in users:
+            del typing_status[room_id][user_id]
+            
+    # Notify all rooms with active conversations that user is back
+    for sid, client in connected_clients.items():
+        if client.get("user_id") == user_id and client.get("rooms"):
+            for room_id in client.get("rooms", []):
+                emit(
+                    "user_active", 
+                    {"room_id": room_id, "user_id": user_id}, 
+                    to=room_id
+                )
+
     return True
 
 
@@ -193,8 +238,22 @@ def handle_disconnect():
             for room_id in client["rooms"]:
                 emit(
                     "user_away",
-                    {"room_id": room_id, "visitor_id": client["user_id"]},
+                    {"room_id": room_id, "user_id": client["user_id"]},
                     to=room_id,
+                )
+                
+                # Clear typing indicators for this user in all rooms
+                if room_id in typing_status and client["user_id"] in typing_status[room_id]:
+                    typing_status[room_id].pop(client["user_id"], None)
+                    emit(
+                        "typing",
+                        {
+                            "room_id": room_id,
+                            "user_id": client["user_id"],
+                            "typing": False,
+                            "timestamp": datetime.datetime.utcnow().isoformat()
+                        },
+                        to=room_id
                 )
 
             # Remove client from tracking
@@ -249,16 +308,56 @@ def handle_join(data):
         if room_id not in client["rooms"]:
             client["rooms"].append(room_id)
 
-        logger.info(f"JOIN SUCCESS - User {client['user_id']} joined room {room_id}")
+        # Initialize typing status for this room if needed
+        if room_id not in typing_status:
+            typing_status[room_id] = {}
+            
+        # Initialize read receipts for this room if needed
+        if room_id not in read_receipts:
+            read_receipts[room_id] = {}
 
-        # Notify room of user joining
-        emit("join", {"room_id": room_id, "visitor_id": client["user_id"]}, to=room_id)
+        # Notify other clients in the room that this user has joined
+        emit(
+            "user_joined",
+            {"user_id": client["user_id"], "room_id": room_id},
+            to=room_id,
+            include_self=False
+        )
 
-        # Confirm to the client
-        emit("joined", {"room_id": room_id, "status": "success"}, to=sid)
+        # Notify the client that they successfully joined
+        emit(
+            "join_success",
+            {
+                "room_id": room_id,
+                "server_time": datetime.datetime.utcnow().isoformat(),
+            },
+            to=sid,
+        )
+
+        # Send current typing status for this room to the newly joined user
+        for user_id, status in typing_status.get(room_id, {}).items():
+            if status.get("typing", False):
+                emit(
+                    "typing",
+                    {
+                        "room_id": room_id,
+                        "user_id": user_id,
+                        "typing": True,
+                        "timestamp": status.get("timestamp")
+                    },
+                    to=sid
+                )
+                
+        # Send user active status for this user to the room
+        emit(
+            "user_active",
+            {"room_id": room_id, "user_id": client["user_id"]},
+            to=room_id
+        )
+        
     except Exception as e:
         logger.error(f"Error in join handler: {str(e)}")
-        emit("error", {"message": "Internal server error"}, to=sid)
+        emit("error", {"message": f"Error joining room: {str(e)}"}, to=sid)
 
 
 @socketio.on("message")
@@ -266,141 +365,126 @@ def handle_message(data):
     sid = request.sid
     client = connected_clients.get(sid)
     if not client:
-        logger.error(f"No client found for SID {sid}")
-        emit("error", {"message": "No client session found"}, to=sid)
+        logger.error(f"MESSAGE ERROR - No client found for SID {sid}")
+        emit("error", {"message": "Not connected"}, to=sid)
         return
 
     try:
         room_id = data.get("room_id")
-        message = data.get("message", "")
+        content = data.get("content")
         message_id = data.get("message_id", str(uuid.uuid4()))
+        message_type = data.get("message_type", "text")
 
         if not room_id:
-            logger.error(f"No room_id provided in message")
+            logger.error("No room_id provided in message")
             emit("error", {"message": "room_id is required"}, to=sid)
             return
 
-        if not message:
-            logger.error(f"No message content provided")
-            emit("error", {"message": "message content is required"}, to=sid)
+        if not content:
+            logger.error("No content provided in message")
+            emit("error", {"message": "content is required"}, to=sid)
             return
 
-        logger.info(
-            f"MESSAGE RECEIVED - Room: {room_id}, User: {client['user_id']}, Content: {message[:30]}..."
-        )
-
-        # Ensure client is in the room
         if room_id not in client["rooms"]:
-            logger.warning(f"Client {sid} ({client['user_id']}) not in room {room_id}")
-            # Join the room automatically if not already in it
-            logger.info(f"Auto-joining client to room {room_id}")
-            join_room(room_id)
-            client["rooms"].append(room_id)
+            logger.warning(f"Client trying to send message to room {room_id} which they haven't joined")
+            emit("error", {"message": "You must join the room first"}, to=sid)
+            return
 
-        # Create message data with timestamp - ensure UTC with Z suffix for ISO format
-        created_at = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-
-        # Broadcast message to room
+        # Create message object
+        timestamp = datetime.datetime.utcnow().isoformat()
         message_data = {
+            "message_id": message_id,
             "room_id": room_id,
             "sender_id": client["user_id"],
-            "content": message,
-            "created_at": created_at,
-            "message_id": message_id,
+            "content": content,
+            "message_type": message_type,
+            "timestamp": timestamp,
+            "status": "sent"
         }
 
-        # First, store message in database to ensure persistence
-        try:
-            # Prepare data for chat service
-            chat_service_data = {
-                "message": message,
-                "sender_id": client["user_id"],
-                "message_id": message_id,
+        # Store in message tracking for delivery confirmations
+        if room_id not in message_delivery_status:
+            message_delivery_status[room_id] = {}
+        
+        message_delivery_status[room_id][message_id] = {
+            "status": "sent",
+            "recipients": [],
+            "timestamp": timestamp
+        }
+        
+        # Clear typing indicator for this user
+        if room_id in typing_status and client["user_id"] in typing_status[room_id]:
+            typing_status[room_id][client["user_id"]] = {
+                "typing": False,
+                "timestamp": timestamp
             }
-
-            logger.info(
-                f"Storing message in database: room={room_id}, message_id={message_id}"
+            
+            # Broadcast typing stopped
+            emit(
+                "typing",
+                {
+                    "room_id": room_id,
+                    "user_id": client["user_id"],
+                    "typing": False,
+                    "timestamp": timestamp
+                },
+                to=room_id,
+                include_self=False
             )
 
-            # Use retry logic for database storage
-            max_retries = 3
-            retry_count = 0
-            success = False
-
-            while retry_count < max_retries and not success:
-                try:
-                    # Send request to chat service
-                    response = requests.post(
-                        f"{CHAT_SERVICE_URL}/chats/{room_id}/messages",
-                        json=chat_service_data,
-                        headers={"Content-Type": "application/json"},
-                        timeout=5,  # 5 second timeout
-                    )
-
-                    if response.status_code in (200, 201):
-                        logger.info(
-                            f"STORAGE SUCCESS - Message stored in database: room={room_id}, message_id={message_id}"
-                        )
-                        success = True
-                    else:
-                        logger.error(
-                            f"STORAGE ERROR - Failed to store message in database. Status: {response.status_code}"
-                        )
-                        retry_count += 1
-                        # Exponential backoff
-                        time.sleep(0.5 * retry_count)
-                except requests.RequestException as e:
-                    logger.error(
-                        f"STORAGE ERROR - Error storing message in database: {str(e)}"
-                    )
-                    retry_count += 1
-                    # Exponential backoff
-                    time.sleep(0.5 * retry_count)
-
-            if not success:
-                logger.error(
-                    f"CRITICAL - Failed to store message after {max_retries} retries: room={room_id}"
-                )
-                # We'll still emit the message to connected clients
-                # but it won't be in the database for new connections
-        except Exception as e:
-            logger.error(f"STORAGE ERROR - Unexpected error storing message: {str(e)}")
-
-        # Then, broadcast to all clients in the room
-        try:
-            # Regular emit to room
+        # Broadcast message to room
             emit("message", message_data, to=room_id)
 
-            # Also broadcast to make extra sure
-            socketio.emit("message", message_data, to=room_id)
-
-            logger.info(f"BROADCAST SUCCESS - Message broadcast to room {room_id}")
-
-            # Debugging: list connected clients in room
-            room_clients = [
-                cid for cid, cli in connected_clients.items() if room_id in cli["rooms"]
-            ]
-            logger.info(
-                f"ROOM CLIENTS: Room {room_id} has {len(room_clients)} connected clients"
-            )
-
-            # Send acknowledgment to sender
+        # Persist message to database via chat service
+        storage_result = persist_message(room_id, message_data, client["user_id"])
+        server_message_id = None
+        if storage_result and "message_id" in storage_result:
+            server_message_id = storage_result["message_id"]
+            
+            # Update delivery status with server ID
+            message_delivery_status[room_id][message_id]["server_message_id"] = server_message_id
+            message_delivery_status[room_id][message_id]["status"] = "delivered"
+            
+            # Send delivery confirmation to sender
             emit(
-                "message_ack",
+                "message_status",
                 {
-                    "message_id": message_id,
+                    "client_message_id": message_id,
+                    "server_message_id": server_message_id,
+                    "room_id": room_id,
                     "status": "delivered",
-                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                    "timestamp": datetime.datetime.utcnow().isoformat()
                 },
-                to=sid,
+                to=sid
+            )
+        else:
+            # Mark message as failed if persistence fails
+            message_delivery_status[room_id][message_id]["status"] = "failed"
+            
+            # Send failure notification to sender
+            emit(
+                "message_status",
+                {
+                    "client_message_id": message_id,
+                    "room_id": room_id,
+                    "status": "failed",
+                    "error": "Failed to persist message",
+                    "timestamp": datetime.datetime.utcnow().isoformat()
+                },
+                to=sid
             )
 
-        except Exception as e:
-            logger.error(f"BROADCAST ERROR - Error broadcasting message: {str(e)}")
-            emit("error", {"message": "Failed to broadcast message"}, to=sid)
     except Exception as e:
         logger.error(f"Error in message handler: {str(e)}")
-        emit("error", {"message": "Internal server error"}, to=sid)
+        # Send error back to sender
+        emit(
+            "error", 
+            {
+                "message": f"Error processing message: {str(e)}",
+                "message_id": data.get("message_id")
+            }, 
+            to=sid
+        )
 
 
 @socketio.on("user_active")
@@ -413,25 +497,21 @@ def handle_user_active(data):
 
     try:
         room_id = data.get("room_id")
+        
         if not room_id:
-            logger.error(f"USER_ACTIVE ERROR - No room_id provided")
+            logger.error("No room_id provided in user_active event")
             return
 
-        # Ensure client is in the room
         if room_id not in client["rooms"]:
-            logger.warning(f"Client {sid} not in room {room_id}, auto-joining")
-            join_room(room_id)
-            client["rooms"].append(room_id)
+            logger.warning(f"Client not in room {room_id}")
+            return
 
-        # Notify room that user is active
+        # Broadcast active status to room
         emit(
             "user_active",
-            {"room_id": room_id, "visitor_id": client["user_id"]},
+            {"room_id": room_id, "user_id": client["user_id"]},
             to=room_id,
-        )
-
-        logger.info(
-            f"USER_ACTIVE - User {client['user_id']} is active in room {room_id}"
+            include_self=False
         )
     except Exception as e:
         logger.error(f"Error in user_active handler: {str(e)}")
@@ -447,25 +527,167 @@ def handle_user_away(data):
 
     try:
         room_id = data.get("room_id")
+        
         if not room_id:
-            logger.error(f"USER_AWAY ERROR - No room_id provided")
+            logger.error("No room_id provided in user_away event")
             return
 
-        # Ensure client is in the room
         if room_id not in client["rooms"]:
-            logger.warning(f"Client {sid} not in room {room_id} for user_away event")
+            logger.warning(f"Client not in room {room_id}")
             return
 
-        # Notify room that user is away
+        # Broadcast away status to room
         emit(
             "user_away",
-            {"room_id": room_id, "visitor_id": client["user_id"]},
+            {"room_id": room_id, "user_id": client["user_id"]},
             to=room_id,
+            include_self=False
         )
-
-        logger.info(f"USER_AWAY - User {client['user_id']} is away in room {room_id}")
+        
+        # Clear typing indicator if user is away
+        if room_id in typing_status and client["user_id"] in typing_status[room_id]:
+            typing_status[room_id][client["user_id"]] = {
+                "typing": False,
+                "timestamp": datetime.datetime.utcnow().isoformat()
+            }
+            
+            # Broadcast typing stopped
+            emit(
+                "typing",
+                {
+                    "room_id": room_id,
+                    "user_id": client["user_id"],
+                    "typing": False,
+                    "timestamp": datetime.datetime.utcnow().isoformat()
+                },
+                to=room_id,
+                include_self=False
+            )
     except Exception as e:
         logger.error(f"Error in user_away handler: {str(e)}")
+
+
+@socketio.on("typing")
+def handle_typing(data):
+    sid = request.sid
+    client = connected_clients.get(sid)
+    if not client:
+        logger.error(f"TYPING ERROR - No client found for SID {sid}")
+        return
+
+    try:
+        room_id = data.get("room_id")
+        is_typing = data.get("typing", True)
+        
+        if not room_id:
+            logger.error("No room_id provided in typing event")
+            return
+            
+        if room_id not in client["rooms"]:
+            logger.warning(f"Client not in room {room_id}")
+            return
+
+        # Update typing status
+        timestamp = datetime.datetime.utcnow().isoformat()
+        if room_id not in typing_status:
+            typing_status[room_id] = {}
+            
+        typing_status[room_id][client["user_id"]] = {
+            "typing": is_typing,
+            "timestamp": timestamp
+        }
+        
+        # Broadcast typing status to room
+        emit(
+            "typing",
+            {
+                "room_id": room_id,
+                "user_id": client["user_id"],
+                "typing": is_typing,
+                "timestamp": timestamp
+            },
+            to=room_id,
+            include_self=False
+        )
+    except Exception as e:
+        logger.error(f"Error in typing handler: {str(e)}")
+
+
+@socketio.on("read")
+def handle_read_receipt(data):
+    sid = request.sid
+    client = connected_clients.get(sid)
+    if not client:
+        logger.error(f"READ ERROR - No client found for SID {sid}")
+        return
+
+    try:
+        room_id = data.get("room_id")
+        message_ids = data.get("message_ids", [])
+        
+        if not room_id:
+            logger.error("No room_id provided in read receipt event")
+            return
+            
+        if not message_ids or not isinstance(message_ids, list):
+            logger.error("Invalid or missing message_ids in read receipt")
+            return
+            
+        if room_id not in client["rooms"]:
+            logger.warning(f"Client not in room {room_id}")
+            return
+
+        # Update read receipts
+        timestamp = datetime.datetime.utcnow().isoformat()
+        if room_id not in read_receipts:
+            read_receipts[room_id] = {}
+            
+        if client["user_id"] not in read_receipts[room_id]:
+            read_receipts[room_id][client["user_id"]] = {}
+            
+        # Update read status for each message
+        for message_id in message_ids:
+            read_receipts[room_id][client["user_id"]][message_id] = timestamp
+            
+            # Update delivery status if message exists
+            if (room_id in message_delivery_status and 
+                message_id in message_delivery_status[room_id]):
+                if client["user_id"] not in message_delivery_status[room_id][message_id]["recipients"]:
+                    message_delivery_status[room_id][message_id]["recipients"].append(client["user_id"])
+                message_delivery_status[room_id][message_id]["status"] = "read"
+        
+        # Broadcast read receipt to room
+        emit(
+            "read_receipt",
+            {
+                "room_id": room_id,
+                "user_id": client["user_id"],
+                "message_ids": message_ids,
+                "timestamp": timestamp
+            },
+            to=room_id,
+            include_self=False
+        )
+        
+        # Try to sync with the chat service
+        try:
+            payload = {
+                "room_id": room_id,
+                "user_id": client["user_id"],
+                "message_ids": message_ids,
+                "timestamp": timestamp
+            }
+            
+            requests.post(
+                f"{CHAT_SERVICE_URL}/api/messages/read-status",
+                json=payload,
+                headers={"Content-Type": "application/json"}
+            )
+        except Exception as e:
+            logger.error(f"Error syncing read status with chat service: {str(e)}")
+            
+    except Exception as e:
+        logger.error(f"Error in read receipt handler: {str(e)}")
 
 
 @socketio.on("ping")
@@ -888,10 +1110,10 @@ def handle_qr_scanned(data):
 
 if __name__ == "__main__":
     # Use eventlet WSGI server
-    logger.info("Starting realtime service on port 5006")
+    logger.info("Starting realtime service on port 5506")
     socketio.run(
         app,
         host="0.0.0.0",
-        port=5006,
+        port=5506,
         debug=False,
     )

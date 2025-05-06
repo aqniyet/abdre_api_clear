@@ -124,6 +124,10 @@ PUBLIC_ROUTES = [
     r"^/api/json-test$",
     r"^/api/chats$",  # Root chats endpoint as public
     r"^/api/chats/[^/]+/messages$",  # Make the messages endpoint public
+    r"^/api/chats/invitation-status/.*$",  # Make invitation status endpoint public
+    r"^/api/chats/accept-invitation/.*$",  # Make invitation acceptance endpoint public
+    r"^/api/chats/generate-invitation$",  # Make invitation generation endpoint public
+    r"^/api/chats/cleanup-expired-invitations$",  # Add cleanup endpoint as public
     r"^/api/my-chats$",  # Allow access to my-chats without auth for demo
     r"^/api/realtime/check-connection$",  # Allow connection check without auth
     r"^/api/realtime/socket\.io.*$"  # Allow all socket.io endpoints without auth
@@ -213,6 +217,16 @@ def check_protected_route(path):
     # Temporary fix: always allow access to chat message endpoints
     if "/api/chats/" in path and "/messages" in path:
         logger.info(f"TEMPORARY FIX: Bypassing auth for chat messages endpoint: {path}")
+        return False
+        
+    # Explicitly handle invitation endpoints
+    if (
+        path == "/api/chats/generate-invitation" or
+        path.startswith("/api/chats/invitation-status/") or
+        path.startswith("/api/chats/accept-invitation/") or
+        path == "/api/chats/cleanup-expired-invitations"
+    ):
+        logger.info(f"Bypassing auth for invitation endpoint: {path}")
         return False
 
     for pattern in PROTECTED_ROUTES:
@@ -931,6 +945,14 @@ def login():
         return render_template("error.html", error="Template file missing"), 500
     return render_template("login.html")
 
+@app.route("/register")
+def register():
+    """Render the register page"""
+    if not template_exists("register.html"):
+        logger.error("Failed to render register.html - template file missing")
+        return render_template("error.html", error="Template file missing"), 500
+    return render_template("register.html")
+
 @app.route("/create")
 def create_chat():
     """Render the create chat page with QR code invitation flow"""
@@ -981,78 +1003,221 @@ def join_chat(token):
                 user_id = f"guest-{uuid.uuid4()}"
             logger.info(f"Guest user {user_id} is joining with token {token}")
         
+        # First check if the invitation exists
+        status_url = f"{CHAT_SERVICE_URL}/invitation-status/{token}"
+        logger.info(f"Checking invitation status at: {status_url}")
+        
+        try:
+            status_response = requests.get(status_url, timeout=5)
+            
+            if status_response.status_code != 200:
+                error_message = "Invitation not found"
+                try:
+                    error_data = status_response.json()
+                    error_message = error_data.get("error", error_message)
+                except:
+                    pass
+                    
+                logger.error(f"Invitation status check failed: {error_message}")
+                return redirect(f"/test-join/{token}?error={error_message}")
+                
+            # If we get here, the invitation exists - get the status
+            status_data = status_response.json()
+            invitation_status = status_data.get("status")
+            
+            if invitation_status == "expired":
+                return redirect(f"/test-join/{token}?error=Invitation has expired")
+                
+            if invitation_status == "used":
+                return redirect(f"/test-join/{token}?error=Invitation has already been used")
+                
+        except Exception as e:
+            logger.error(f"Error checking invitation status: {str(e)}")
+            return redirect(f"/test-join/{token}?error=Error checking invitation: {str(e)}")
+        
         # Call chat service to accept the invitation
         accept_url = f"{CHAT_SERVICE_URL}/accept-invitation/{token}"
-        response = requests.post(
-            accept_url,
-            json={"guest_id": user_id},
-            headers={"Content-Type": "application/json"},
-            timeout=5
-        )
+        logger.info(f"Calling chat service at {accept_url} with user_id {user_id}")
         
-        if response.status_code != 200:
-            error_data = response.json()
-            error_message = error_data.get("error", "Unknown error")
-            logger.error(f"Failed to accept invitation: {error_message}")
-            return redirect(f"/error?message=Failed to join chat: {error_message}")
+        # Log full request details
+        headers = {"Content-Type": "application/json"}
+        request_body = {"guest_id": user_id}
+        logger.info(f"Request to chat service: URL={accept_url}, headers={headers}, body={request_body}")
         
-        # Get the chat ID from the response
-        result = response.json()
-        chat_id = result.get("chat_id")
-        
-        if not chat_id:
-            logger.error("No chat ID returned from accept invitation endpoint")
-            return redirect("/error?message=Invalid invitation")
-        
-        # Notify the host through realtime service
         try:
-            host_id = result.get("host_id")
-            if host_id:
-                notify_url = f"{REALTIME_SERVICE_URL}/api/notify"
-                notification_data = {
-                    "event": "invitation_accepted",
-                    "recipient_id": host_id,
+            response = requests.post(
+                accept_url,
+                json=request_body,
+                headers=headers,
+                timeout=5
+            )
+            
+            # Log the full response
+            logger.info(f"Chat service response status: {response.status_code}")
+            logger.info(f"Chat service response headers: {dict(response.headers)}")
+            logger.info(f"Chat service response body: {response.text[:500]}")
+            
+            if response.status_code != 200:
+                try:
+                    error_data = response.json()
+                    error_message = error_data.get("error", "Unknown error")
+                    logger.error(f"Failed to accept invitation: {error_message}")
+                    # Try to get more diagnostic info
+                    logger.error(f"Full error response: {error_data}")
+                    return redirect(f"/test-join/{token}?error={error_message}")
+                except Exception as json_error:
+                    logger.error(f"Error parsing error response: {str(json_error)}")
+                    return redirect(f"/test-join/{token}?error=Status code {response.status_code}")
+            
+            # Get the chat ID from the response
+            result = response.json()
+            chat_id = result.get("chat_id")
+            
+            if not chat_id:
+                logger.error("No chat ID returned from accept invitation endpoint")
+                logger.error(f"Full response data: {result}")
+                return redirect(f"/test-join/{token}?error=No chat ID returned")
+            
+            # Notify the host through realtime service
+            try:
+                host_id = result.get("host_id")
+                if host_id:
+                    notify_url = f"{REALTIME_SERVICE_URL}/api/notify"
+                    notification_data = {
+                        "event": "invitation_accepted",
+                        "recipient_id": host_id,
+                        "data": {
+                            "chat_id": chat_id,
+                            "guest_id": user_id,
+                            "invitation_token": token
+                        }
+                    }
+                    
+                    requests.post(
+                        notify_url,
+                        json=notification_data,
+                        headers={"Content-Type": "application/json"},
+                        timeout=2  # Short timeout as this is non-critical
+                    )
+                
+                # Public notification for room creation
+                room_notification = {
+                    "event": "room_created",
+                    "room_id": chat_id,
                     "data": {
-                        "chat_id": chat_id,
-                        "guest_id": user_id,
-                        "invitation_token": token
+                        "room_id": chat_id,
+                        "created_at": datetime.utcnow().isoformat(),
+                        "participants": [host_id, user_id]
                     }
                 }
                 
                 requests.post(
-                    notify_url,
-                    json=notification_data,
+                    f"{REALTIME_SERVICE_URL}/api/broadcast",
+                    json=room_notification,
                     headers={"Content-Type": "application/json"},
-                    timeout=2  # Short timeout as this is non-critical
+                    timeout=2
                 )
+            except Exception as e:
+                # Don't fail the request if notification fails
+                logger.warning(f"Failed to send notification: {str(e)}")
             
-            # Public notification for room creation
-            room_notification = {
-                "event": "room_created",
-                "room_id": chat_id,
-                "data": {
-                    "room_id": chat_id,
-                    "created_at": datetime.datetime.utcnow().isoformat(),
-                    "participants": [host_id, user_id]
-                }
-            }
-            
-            requests.post(
-                f"{REALTIME_SERVICE_URL}/api/broadcast",
-                json=room_notification,
-                headers={"Content-Type": "application/json"},
-                timeout=2
-            )
-        except Exception as e:
-            # Don't fail the request if notification fails
-            logger.warning(f"Failed to send notification: {str(e)}")
+            # Redirect to the chat room
+            return redirect(f"/chat/{chat_id}")
+        except requests.RequestException as req_err:
+            logger.error(f"Request error when calling chat service: {str(req_err)}")
+            return redirect(f"/test-join/{token}?error=Error connecting to chat service")
         
-        # Redirect to the chat room
-        return redirect(f"/chat/{chat_id}")
-    
     except Exception as e:
         logger.error(f"Error in join_chat: {str(e)}", exc_info=True)
-        return redirect(f"/error?message=Error joining chat: {str(e)}")
+        return redirect(f"/test-join/{token}?error={str(e)}")
+
+@app.route("/test-join/<token>")
+def test_join_chat(token):
+    """Test endpoint to diagnose join chat issues"""
+    logger.info(f"Test join request received for token: {token}")
+    
+    try:
+        # Check invitation status first
+        status_url = f"{CHAT_SERVICE_URL}/invitation-status/{token}"
+        logger.info(f"Checking invitation status at {status_url}")
+        
+        error_from_query = request.args.get("error", None)
+        
+        # Add additional diagnostics
+        diagnostic = {
+            "token": token,
+            "error_from_query": error_from_query,
+            "timestamp": datetime.utcnow().isoformat(),
+            "chat_service_url": CHAT_SERVICE_URL,
+            "api_endpoints": {
+                "direct_status_url": status_url,
+                "api_gateway_status_url": f"/api/chats/invitation-status/{token}",
+                "direct_accept_url": f"{CHAT_SERVICE_URL}/accept-invitation/{token}",
+                "api_gateway_accept_url": f"/api/chats/accept-invitation/{token}",
+                "invitation_form": f"{request.url_root.rstrip('/')}/join/{token}"
+            }
+        }
+        
+        try:
+            # Try to get the actual status
+            status_response = requests.get(
+                status_url,
+                timeout=5
+            )
+            
+            # Add response info to diagnostics
+            diagnostic["status_code"] = status_response.status_code
+            
+            # Add invitation status if available
+            if status_response.status_code == 200:
+                diagnostic["invitation_status"] = status_response.json()
+            else:
+                # Get error message
+                try:
+                    error_data = status_response.json()
+                    diagnostic["error"] = error_data.get("error", "Unknown error")
+                except:
+                    diagnostic["error"] = f"Status check failed with code {status_response.status_code}"
+        except Exception as status_error:
+            diagnostic["status_check_error"] = str(status_error)
+        
+        # Also try to query through the API gateway endpoint to validate routing
+        try:
+            api_gateway_url = f"{request.url_root.rstrip('/')}/api/chats/invitation-status/{token}"
+            logger.info(f"Checking through API gateway at: {api_gateway_url}")
+            
+            api_gateway_response = requests.get(
+                api_gateway_url,
+                timeout=5
+            )
+            
+            diagnostic["api_gateway_status_code"] = api_gateway_response.status_code
+            
+            if api_gateway_response.status_code == 200:
+                diagnostic["api_gateway_status"] = api_gateway_response.json()
+            else:
+                try:
+                    api_error_data = api_gateway_response.json()
+                    diagnostic["api_gateway_error"] = api_error_data.get("error", "Unknown error")
+                except:
+                    diagnostic["api_gateway_error"] = f"API gateway check failed with code {api_gateway_response.status_code}"
+        except Exception as api_error:
+            diagnostic["api_gateway_check_error"] = str(api_error)
+        
+        # Return diagnostic information
+        return render_template(
+            "error.html", 
+            error="QR Code Invitation Diagnostic", 
+            details=json.dumps(diagnostic, indent=2)
+        )
+    
+    except Exception as e:
+        logger.error(f"Error in test_join_chat: {str(e)}", exc_info=True)
+        return render_template(
+            "error.html",
+            error="Error testing invitation",
+            details=str(e)
+        )
 
 @app.route("/error")
 def error_page():
@@ -1624,6 +1789,20 @@ def chat_service_proxy(path):
         target_url = f"{CHAT_SERVICE_URL}/cleanup-expired-invitations"
         logger.info(f"Proxying to target URL: {target_url}")
         return proxy_request(target_url, "CHAT_SERVICE_URL")
+        
+    # Special handling for invitation-status endpoint
+    if path.startswith("invitation-status/"):
+        token = path.split("/")[1]
+        target_url = f"{CHAT_SERVICE_URL}/invitation-status/{token}"
+        logger.info(f"Proxying invitation status to target URL: {target_url}")
+        return proxy_request(target_url, "CHAT_SERVICE_URL")
+        
+    # Special handling for accept-invitation endpoint
+    if path.startswith("accept-invitation/"):
+        token = path.split("/")[1]
+        target_url = f"{CHAT_SERVICE_URL}/accept-invitation/{token}"
+        logger.info(f"Proxying invitation acceptance to target URL: {target_url}")
+        return proxy_request(target_url, "CHAT_SERVICE_URL")
 
     # Special handling for GET requests to messages endpoint
     if request.method == "GET" and "/messages" in path:
@@ -1984,10 +2163,21 @@ def json_test():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def proxy_request(url, service_name):
+def proxy_request(url, service_name, skip_auth=False):
     """
     Proxy a request to the specified service URL with circuit breaker
     """
+    # Check if this is an invitation endpoint that should bypass authentication
+    path = request.path
+    if (
+        "invitation-status" in path or 
+        "accept-invitation" in path or 
+        "generate-invitation" in path or
+        "cleanup-expired-invitations" in path
+    ):
+        skip_auth = True
+        logger.info(f"Skipping authentication for invitation endpoint: {path}")
+
     # Check circuit breaker
     if not circuit_check(service_name):
         return (
@@ -2005,6 +2195,31 @@ def proxy_request(url, service_name):
     headers = {key: value for key, value in request.headers if key.lower() != "host"}
     if hasattr(g, "correlation_id"):
         headers["X-Correlation-ID"] = g.correlation_id
+
+    # Add user ID header for invitation endpoints
+    if skip_auth and "invitation" in path:
+        # Try to extract user ID from token if available
+        user_id = None
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            try:
+                token = auth_header.split(" ")[1]
+                payload = PyJWT.decode(token, JWT_SECRET, algorithms=["HS256"])
+                user_id = payload.get("user_id")
+            except:
+                pass
+        
+        # If no user ID from token, try visitor ID from cookies
+        if not user_id:
+            user_id = request.cookies.get("visitor_id")
+        
+        # If still no ID, generate a guest ID
+        if not user_id:
+            user_id = f"guest-{uuid.uuid4()}"
+        
+        # Add the user ID to headers
+        headers["X-User-ID"] = user_id
+        logger.info(f"Added user ID for invitation endpoint: {user_id}")
 
     logger.info(f"Proxy request to: {url}")
     logger.info(f"Proxy headers: {headers}")
@@ -2498,6 +2713,208 @@ def get_my_chats():
         logger.error(f"Error in my-chats endpoint: {str(e)}")
         # Return empty array instead of error for better user experience
         return jsonify([]), 200
+
+@app.route("/api/auth/check-session", methods=["GET", "OPTIONS"])
+def check_session():
+    """
+    Check current session status and return user state
+    This endpoint validates JWT tokens and determines if the user is:
+    - Authenticated (standard user)
+    - Guest user
+    - Not authenticated
+    """
+    if request.method == "OPTIONS":
+        return handle_preflight_request()
+        
+    auth_header = request.headers.get("Authorization")
+    session_status = {
+        "authenticated": False,
+        "guest": False,
+        "auth_type": None,
+        "user": None,
+        "token_status": "invalid"
+    }
+    
+    # Log the request
+    logger.info(f"Session check request received with Authorization header: {bool(auth_header)}")
+    
+    if not auth_header:
+        return jsonify(session_status), 200
+    
+    try:
+        # Extract token from "Bearer <token>"
+        token = auth_header.split(" ")[1]
+        
+        # Decode token
+        payload = PyJWT.decode(token, JWT_SECRET, algorithms=["HS256"])
+        
+        # Determine authentication type
+        auth_type = payload.get("auth_type", "standard")
+        is_guest = auth_type == "guest"
+        
+        # Check if token is expired
+        exp = payload.get("exp", 0)
+        token_expired = exp and datetime.fromtimestamp(exp) < datetime.utcnow()
+        
+        if token_expired:
+            session_status["token_status"] = "expired"
+            return jsonify(session_status), 200
+            
+        # Get user data
+        user_data = {
+            "user_id": payload.get("user_id", ""),
+            "username": payload.get("username", ""),
+            "display_name": payload.get("display_name", ""),
+            "email": payload.get("email", "")
+        }
+        
+        # Update session status
+        session_status["authenticated"] = not is_guest
+        session_status["guest"] = is_guest
+        session_status["auth_type"] = auth_type
+        session_status["user"] = user_data
+        session_status["token_status"] = "valid"
+        
+        # Add expiration info
+        if exp:
+            session_status["expires_at"] = datetime.fromtimestamp(exp).isoformat()
+            session_status["expires_in_seconds"] = max(0, exp - int(datetime.utcnow().timestamp()))
+        
+        logger.info(f"Session check successful. Auth type: {auth_type}, Guest: {is_guest}")
+        return jsonify(session_status), 200
+        
+    except Exception as e:
+        # Token is invalid
+        logger.error(f"Session check failed: {str(e)}")
+        return jsonify(session_status), 200
+
+@app.route("/api/chats/invitation-status/<token>", methods=["GET", "OPTIONS"])
+def invitation_status_proxy(token):
+    """Special proxy route for invitation status endpoints"""
+    # Handle OPTIONS request
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        return response
+        
+    # Create the target URL
+    target_url = f"{CHAT_SERVICE_URL}/invitation-status/{token}"
+    logger.info(f"Proxying invitation status check to: {target_url}")
+    
+    # Use proxy_request with skip_auth=True
+    return proxy_request(target_url, "CHAT_SERVICE_URL", skip_auth=True)
+    
+@app.route("/api/chats/accept-invitation/<token>", methods=["POST", "OPTIONS"])
+def accept_invitation_proxy(token):
+    """Special proxy route for accepting invitation endpoints"""
+    # Handle OPTIONS request
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        return response
+        
+    # Create the target URL
+    target_url = f"{CHAT_SERVICE_URL}/accept-invitation/{token}"
+    logger.info(f"Proxying invitation acceptance to: {target_url}")
+    
+    # Use proxy_request with skip_auth=True
+    return proxy_request(target_url, "CHAT_SERVICE_URL", skip_auth=True)
+
+@app.route("/api/chats/generate-invitation", methods=["POST", "OPTIONS"])
+def generate_invitation_proxy():
+    """Special proxy route for generating invitations"""
+    # Handle OPTIONS request
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        return response
+        
+    # Create the target URL
+    target_url = f"{CHAT_SERVICE_URL}/generate-invitation"
+    logger.info(f"Proxying invitation generation to: {target_url}")
+    
+    # Use proxy_request with skip_auth=True
+    return proxy_request(target_url, "CHAT_SERVICE_URL", skip_auth=True)
+
+@app.route("/ws/chat/<chat_id>", methods=["GET", "OPTIONS"])
+def websocket_chat_proxy(chat_id):
+    """Proxy WebSocket connections for chat to the realtime service"""
+    # Handle OPTIONS request
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        return response
+        
+    # Extract token from query parameters
+    token = request.args.get("token")
+    if not token:
+        return jsonify({"error": "Authentication required"}), 401
+    
+    # Set WebSocket protocol
+    ws_protocol = "wss" if request.is_secure else "ws"
+    
+    # Parse the realtime service URL to extract host and port
+    realtime_url = REALTIME_SERVICE_URL
+    
+    # Check if external host is configured
+    external_host = os.environ.get("EXTERNAL_HOST")
+    client_ip = request.remote_addr
+    
+    # Get client request headers to check if it's coming from an external IP
+    logger.info(f"WebSocket connection request from IP: {client_ip}")
+    
+    if external_host and not (client_ip == '127.0.0.1' or client_ip == 'localhost'):
+        # Use external host for connections from non-localhost clients
+        host_parts = realtime_url.split('://')
+        protocol = host_parts[0] if len(host_parts) > 1 else "http"
+        
+        # Extract port from original URL (default to 5506)
+        port_match = re.search(r':(\d+)', realtime_url)
+        port = port_match.group(1) if port_match else "5506"
+        
+        realtime_url = f"{protocol}://{external_host}:{port}"
+        logger.info(f"Using external host for WebSocket: {realtime_url}")
+    
+    if realtime_url.startswith("http"):
+        # Replace http with ws protocol
+        realtime_url = realtime_url.replace("http://", f"{ws_protocol}://")
+        realtime_url = realtime_url.replace("https://", f"{ws_protocol}://")
+    else:
+        # If no protocol specified, add the ws protocol
+        realtime_url = f"{ws_protocol}://{realtime_url}"
+    
+    # Format socket.io connection URL properly for compatibility with Socket.IO
+    socket_io_url = f"{realtime_url}/socket.io/?EIO=4&transport=websocket&token={token}&chat_id={chat_id}"
+    
+    logger.info(f"Redirecting WebSocket to: {socket_io_url}")
+    
+    # Create redirect response to the actual WebSocket endpoint
+    return (
+        jsonify({
+            "status": "redirect",
+            "message": "WebSocket connections should be made directly to the realtime service",
+            "connection_url": socket_io_url,
+            "socket_path": "/socket.io/",
+            "connection_type": "socketio",
+            "token_valid": True,
+            "chat_id": chat_id,
+            "transport": "websocket",
+            "socket_io_version": "4",
+            "additional_params": {
+                "EIO": "4",
+                "transport": "websocket",
+                "token": token,
+                "chat_id": chat_id
+            }
+        }),
+        200
+    )
+
+@app.route("/test-websocket")
+def test_websocket_page():
+    """Render the WebSocket test page"""
+    return render_template("websocket-test.html")
+
+@app.route("/static/js/libs/socket-io-helper.js")
+def serve_socketio_helper():
+    """Serve the Socket.IO helper JS file"""
+    return send_from_directory(os.path.join(app.static_folder, "js", "libs"), "socket-io-helper.js", mimetype="application/javascript")
 
 
 if __name__ == "__main__":
