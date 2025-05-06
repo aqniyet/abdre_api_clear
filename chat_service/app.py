@@ -1,4 +1,5 @@
 import datetime
+import importlib
 import json
 import logging
 import os
@@ -28,84 +29,125 @@ INVITATION_EXPIRY = int(os.environ.get("INVITATION_EXPIRY", "1800"))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-# Database connection function
-def get_db_connection():
-    if os.environ.get("MOCK_DB", "false").lower() == "true":
-        # For development, return mock connection
-        logger.warning("Using mock database connection")
-        return MockConnection()
-    
-    try:
-        conn = psycopg2.connect(
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            host=DB_HOST,
-            port=DB_PORT
-        )
-        conn.autocommit = True
-        logger.info("Database connection established")
-        
-        # Create tables if they don't exist
-        try:
-            create_tables(conn)
-            logger.info("Database tables created or already exist")
-        except Exception as e:
-            logger.error(f"Could not create tables: {str(e)}")
-        return conn
-    except Exception as e:
-        logger.error(f"Database connection error: {str(e)}")
-        logger.error("Could not connect to database to create tables")
-        if os.environ.get("FLASK_ENV") == "development":
-            logger.warning("Running in development mode without database connection")
-            return MockConnection()
-        return None
-
-
 # Mock connection for development without DB
-class MockConnection:
-    def __init__(self):
-        self.autocommit = True
-        self.chats = []
-        self.messages = []
-        self.invitations = []
-        
-    def cursor(self, *args, **kwargs):
-        return MockCursor(self)
-    
-    def close(self):
-        pass
-        
-    def commit(self):
-        # Dummy commit method for development
-        pass
-        
-    def rollback(self):
-        # Dummy rollback method for development
-        pass
+# Create a global dictionary to store invitations across requests
+MOCK_DB = {
+    "chats": [],
+    "messages": [],
+    "invitations": []
+}
+logger.info("Imported global MOCK_DB")
 
-class MockCursor:
-    def __init__(self, connection):
-        self.connection = connection
-        self.results = []
+# Import the enhanced mock DB implementation with persistence
+try:
+    # Use importlib to avoid circular import issues
+    mock_db_module = importlib.import_module("chat_service.mock_db")
+    MockConnection = mock_db_module.MockConnection
+    MockCursor = mock_db_module.MockCursor
+    logger.info("Using enhanced mock DB implementation with persistence")
+except Exception as e:
+    logger.error(f"Error importing mock_db module: {str(e)}")
+    
+    # Define fallback MockConnection and MockCursor classes
+    class MockConnection:
+        def __init__(self):
+            self.autocommit = True
+            global MOCK_DB
+            logger.info(f"Using fallback MockConnection with {len(MOCK_DB['invitations'])} invitations")
         
-    def execute(self, query, params=None):
-        # Just log the query
-        logger.info(f"MOCK DB: {query}")
-        if params:
-            logger.info(f"MOCK DB PARAMS: {params}")
-        return []
-    
-    def fetchall(self):
-        return self.results
-    
-    def fetchone(self):
-        return None
-    
-    def close(self):
-        pass
+        def cursor(self, *args, **kwargs):
+            return MockCursor(self)
+        
+        def close(self):
+            pass
+            
+        def commit(self):
+            pass
+            
+        def rollback(self):
+            pass
 
+    class MockCursor:
+        def __init__(self, connection):
+            self.connection = connection
+            self.results = []
+            self.query_type = None
+            
+        def execute(self, query, params=None):
+            logger.info(f"MOCK DB QUERY: {query}")
+            if params:
+                logger.info(f"MOCK DB PARAMS: {params}")
+                
+            global MOCK_DB
+                
+            # Handle different types of queries
+            if "INSERT INTO chat_invitations" in query:
+                if params and len(params) >= 5:
+                    invitation_token = params[0]
+                    host_id = params[1]
+                    created_at = params[2]
+                    expires_at = params[3]
+                    is_used = params[4]
+                    
+                    invitation = {
+                        "invitation_token": invitation_token,
+                        "host_id": host_id,
+                        "created_at": created_at,
+                        "expires_at": expires_at,
+                        "is_used": is_used,
+                        "used_at": None,
+                        "chat_id": None
+                    }
+                    MOCK_DB["invitations"].append(invitation)
+                    logger.info(f"Created mock invitation: {invitation_token}")
+                    self.results = [invitation]
+                    
+            elif "SELECT" in query and "FROM chat_invitations" in query:
+                if "WHERE invitation_token" in query and params and len(params) == 1:
+                    invitation_token = params[0]
+                    for invitation in MOCK_DB["invitations"]:
+                        if invitation["invitation_token"] == invitation_token:
+                            self.results = [invitation]
+                            logger.info(f"Found invitation: {invitation_token}")
+                            break
+                    else:
+                        logger.info(f"Invitation not found: {invitation_token}")
+                        self.results = []
+                    
+            elif "UPDATE chat_invitations" in query:
+                if params and len(params) >= 2:
+                    invitation_token = params[-1]
+                    
+                    for invitation in MOCK_DB["invitations"]:
+                        if invitation["invitation_token"] == invitation_token:
+                            invitation["is_used"] = True
+                            
+                            if "used_at" in query and len(params) >= 3:
+                                invitation["used_at"] = params[0]
+                                
+                            if "chat_id" in query and len(params) >= 3:
+                                invitation["chat_id"] = params[1]
+                                
+                            self.results = [invitation]
+                            logger.info(f"Updated invitation: {invitation_token}")
+                            break
+                    else:
+                        logger.info(f"Invitation to update not found: {invitation_token}")
+            
+            return []
+        
+        def fetchall(self):
+            if self.results:
+                return self.results
+            return []
+        
+        def fetchone(self):
+            if self.results:
+                return self.results[0]
+            return None
+        
+        def close(self):
+            pass
 
 # Ensure tables exist
 def ensure_tables():
@@ -517,10 +559,16 @@ def generate_invitation():
     try:
         # Get the host user ID from the request
         data = request.get_json()
-        if not data or "host_id" not in data:
+        if not data:
+            logger.error("No JSON data in request")
+            return jsonify({"error": "Missing request data"}), 400
+            
+        if "host_id" not in data:
+            logger.error("Missing host_id in request data")
             return jsonify({"error": "Host ID is required"}), 400
         
         host_id = data["host_id"]
+        logger.info(f"Generating invitation for host: {host_id}")
         
         # Generate a unique invitation token
         invitation_token = str(uuid.uuid4())
@@ -531,35 +579,51 @@ def generate_invitation():
         
         conn = get_db_connection()
         if not conn:
+            logger.error("Failed to get database connection")
             return jsonify({"error": "Database connection failed"}), 500
         
-        cur = conn.cursor()
-        
-        # Store the invitation in the database
-        cur.execute(
-            """
-            INSERT INTO chat_invitations 
-            (invitation_token, host_id, created_at, expires_at, is_used)
-            VALUES (%s, %s, %s, %s, %s)
-            """,
-            (invitation_token, host_id, created_at, expires_at, False)
-        )
-        
-        conn.commit()
-        cur.close()
-        conn.close()
-        
-        return jsonify({
-            "invitation_token": invitation_token,
-            "host_id": host_id,
-            "created_at": created_at.isoformat(),
-            "expires_at": expires_at.isoformat(),
-            "expiry_seconds": INVITATION_EXPIRY
-        }), 201
+        try:
+            cur = conn.cursor()
+            
+            # Store the invitation in the database
+            cur.execute(
+                """
+                INSERT INTO chat_invitations 
+                (invitation_token, host_id, created_at, expires_at, is_used)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (invitation_token, host_id, created_at, expires_at, False)
+            )
+            
+            conn.commit()
+            
+            # For mock connections, log more details
+            if isinstance(conn, MockConnection):
+                logger.info(f"Created mock invitation with token: {invitation_token}, expires at: {expires_at}")
+            
+            response_data = {
+                "invitation_token": invitation_token,
+                "host_id": host_id,
+                "created_at": created_at.isoformat(),
+                "expires_at": expires_at.isoformat(),
+                "expiry_seconds": INVITATION_EXPIRY
+            }
+            
+            logger.info(f"Invitation generated successfully: {invitation_token}")
+            return jsonify(response_data), 201
+            
+        except Exception as e:
+            logger.error(f"Database error while generating invitation: {str(e)}")
+            return jsonify({"error": f"Database error: {str(e)}"}), 500
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
         
     except Exception as e:
         logger.error(f"Error generating invitation: {str(e)}")
-        return jsonify({"error": "Error generating invitation"}), 500
+        return jsonify({"error": f"Error generating invitation: {str(e)}"}), 500
 
 
 # Endpoint to validate and accept an invitation
@@ -787,6 +851,147 @@ def create_tables(conn):
         )
 
         conn.commit()
+
+
+@app.route("/my-chats", methods=["GET"])
+def get_my_chats():
+    """Get chats for the current user"""
+    user_id = request.headers.get("X-User-ID")
+    
+    if not user_id:
+        logger.error("No user ID provided in X-User-ID header")
+        return jsonify([]), 200  # Return empty list instead of error for better UX
+    
+    logger.info(f"Getting chats for user: {user_id}")
+    
+    try:
+        conn = get_db_connection()
+        if not conn:
+            logger.error("Database connection failed when retrieving user chats")
+            return jsonify([]), 200  # Return empty list instead of error for better UX
+        
+        # Query to get chats where the user is a participant
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        
+        # Check if participants table exists
+        try:
+            # First try to get chats from participants table
+            cur.execute("""
+                SELECT c.chat_id, c.created_at, 
+                       (
+                           SELECT content 
+                           FROM messages 
+                           WHERE chat_id = c.chat_id 
+                           ORDER BY created_at DESC 
+                           LIMIT 1
+                       ) as last_message,
+                       (
+                           SELECT created_at 
+                           FROM messages 
+                           WHERE chat_id = c.chat_id 
+                           ORDER BY created_at DESC 
+                           LIMIT 1
+                       ) as last_activity,
+                       (
+                           SELECT COUNT(*) 
+                           FROM messages 
+                           WHERE chat_id = c.chat_id
+                       ) as message_count
+                FROM chats c
+                JOIN participants p ON c.chat_id = p.chat_id
+                WHERE p.user_id = %s
+                ORDER BY last_activity DESC NULLS LAST
+            """, (user_id,))
+        except psycopg2.errors.UndefinedTable:
+            # If participants table doesn't exist, fall back to using messages
+            logger.warning("Participants table not found, using messages to determine user's chats")
+            conn.rollback()  # Clear the error state
+            
+            # Get chats where the user has sent messages
+            cur.execute("""
+                SELECT c.chat_id, c.created_at, 
+                       (
+                           SELECT content 
+                           FROM messages 
+                           WHERE chat_id = c.chat_id 
+                           ORDER BY created_at DESC 
+                           LIMIT 1
+                       ) as last_message,
+                       (
+                           SELECT created_at 
+                           FROM messages 
+                           WHERE chat_id = c.chat_id 
+                           ORDER BY created_at DESC 
+                           LIMIT 1
+                       ) as last_activity,
+                       (
+                           SELECT COUNT(*) 
+                           FROM messages 
+                           WHERE chat_id = c.chat_id
+                       ) as message_count
+                FROM chats c
+                WHERE EXISTS (
+                    SELECT 1 FROM messages m WHERE m.chat_id = c.chat_id AND m.sender_id = %s
+                )
+                ORDER BY last_activity DESC NULLS LAST
+            """, (user_id,))
+        
+        user_chats = []
+        for row in cur.fetchall():
+            last_activity = row['last_activity'].isoformat() if row['last_activity'] else None
+            created_at = row['created_at'].isoformat() if row['created_at'] else None
+            
+            user_chats.append({
+                "chat_id": row["chat_id"],
+                "last_message": row["last_message"],
+                "message_count": row["message_count"],
+                "last_activity": last_activity,
+                "created_at": created_at
+            })
+        
+        cur.close()
+        conn.close()
+        
+        logger.info(f"Returning {len(user_chats)} chats for user {user_id}")
+        return jsonify(user_chats), 200
+        
+    except Exception as e:
+        logger.error(f"Error retrieving chats for user {user_id}: {str(e)}")
+        return jsonify([]), 200  # Return empty list instead of error for better UX
+
+
+# Database connection function
+def get_db_connection():
+    if os.environ.get("MOCK_DB", "false").lower() == "true":
+        # For development, return mock connection
+        logger.warning("Using mock database connection")
+        return MockConnection()
+    
+    try:
+        conn = psycopg2.connect(
+            dbname=DB_NAME,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            host=DB_HOST,
+            port=DB_PORT
+        )
+        conn.autocommit = True
+        logger.info("Database connection established")
+        
+        # Create tables if they don't exist
+        try:
+            create_tables(conn)
+            logger.info("Database tables created or already exist")
+        except Exception as e:
+            logger.error(f"Could not create tables: {str(e)}")
+        return conn
+    except Exception as e:
+        logger.error(f"Database connection error: {str(e)}")
+        logger.error("Could not connect to database to create tables")
+        if os.environ.get("FLASK_ENV") == "development":
+            logger.warning("Running in development mode without database connection")
+            return MockConnection()
+        return None
 
 
 if __name__ == "__main__":
