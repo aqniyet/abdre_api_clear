@@ -9,11 +9,14 @@
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
     
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/static/css/style.css">
     
     <!-- Security headers -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http: https: ws: wss: data:; connect-src 'self' http: https: ws: wss:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data:; font-src 'self' data: https://cdnjs.cloudflare.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http: https: ws: wss: data:; connect-src 'self' http: https: ws: wss:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://cdn.socket.io; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data:; font-src 'self' data: https://cdnjs.cloudflare.com;">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
 </head>
 <body>
@@ -116,7 +119,71 @@
     <!-- Auth Helper -->
     <script src="/static/js/utils/auth-helper.js"></script>
     
+    <!-- Socket.IO Helper -->
+    <script src="/static/js/libs/socket-io-helper.js"></script>
+    
     <!-- Chat Script -->
     <script src="/static/js/chat.js"></script>
+    
+    <!-- Auth Status Script -->
+    <script>
+        // Initialize auth status in header
+        document.addEventListener('DOMContentLoaded', function() {
+            updateAuthStatus();
+            
+            // Listen for auth changes
+            document.addEventListener('auth:change', function(event) {
+                updateAuthStatus();
+            });
+        });
+        
+        // Update auth status display
+        function updateAuthStatus() {
+            const authStatusElement = document.getElementById('auth-status');
+            if (!authStatusElement) return;
+            
+            if (window.AuthHelper && AuthHelper.isAuthenticated()) {
+                const userData = AuthHelper.getUserData();
+                const displayName = userData?.display_name || userData?.username || 'User';
+                
+                authStatusElement.innerHTML = `
+                    <span class="me-3 text-white">
+                        <i class="fas fa-user-circle me-1"></i> ${displayName}
+                    </span>
+                    <button id="logout-btn" class="btn btn-sm btn-outline-light">
+                        <i class="fas fa-sign-out-alt me-1"></i> Logout
+                    </button>
+                `;
+                
+                // Add event listener to logout button
+                const logoutBtn = document.getElementById('logout-btn');
+                if (logoutBtn) {
+                    logoutBtn.addEventListener('click', function() {
+                        if (window.AuthHelper) {
+                            AuthHelper.logout()
+                                .then(() => {
+                                    window.location.href = '/login';
+                                })
+                                .catch(error => {
+                                    console.error('Logout failed:', error);
+                                    // Still redirect to login page even if API call fails
+                                    window.location.href = '/login';
+                                });
+                        } else {
+                            // Fallback if AuthHelper is not available
+                            window.location.href = '/login';
+                        }
+                    });
+                }
+            } else {
+                // Show login link for guest users
+                authStatusElement.innerHTML = `
+                    <a href="/login" class="btn btn-sm btn-outline-light">
+                        <i class="fas fa-sign-in-alt me-1"></i> Login
+                    </a>
+                `;
+            }
+        }
+    </script>
 </body>
 </html> 

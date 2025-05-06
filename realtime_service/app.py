@@ -1,68 +1,43 @@
-import eventlet
-eventlet.monkey_patch()
+"""
+Realtime Service for Abdre Chat
+Provides real-time communication capabilities using Socket.IO
+"""
 
-import datetime
-import json
-import logging
 import os
-import time
+import json
 import uuid
+import logging
+from datetime import datetime, timedelta
 
-import jwt as PyJWT
-import requests
+# Import Flask and related libraries
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
 
-# Set up logging
+# Import shared modules
+import jwt as PyJWT
+
+# Initialize Flask app
+app = Flask(__name__)
+CORS(app)
+
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+# Get environment variables
+IS_DEVELOPMENT = os.environ.get("FLASK_ENV", "development") == "development"
 
-# Configure CORS properly with broader settings for WebSockets
-CORS(
-    app,
-    resources={r"/*": {"origins": "*"}},
-    supports_credentials=True,
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-)
+# Configure Socket.IO - Don't use eventlet for Python 3.12 compatibility
+socketio = SocketIO(app, cors_allowed_origins="*", logger=IS_DEVELOPMENT, engineio_logger=IS_DEVELOPMENT, ping_timeout=60, ping_interval=25, async_mode="threading")
 
-# Get CORS allowed origins from environment or default to '*'
-cors_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "*")
-if cors_origins != "*":
-    # Convert comma-separated string to list
-    cors_allowed_origins = cors_origins.split(",")
-    logger.info(f"CORS allowed origins: {cors_allowed_origins}")
-else:
-    cors_allowed_origins = "*"
-    logger.info("CORS allowed origins: all origins (*)")
-
-# Initialize Socket.IO with proper configuration
-socketio = SocketIO(
-    app,
-    cors_allowed_origins=cors_allowed_origins,
-    path="/socket.io",
-    async_mode="eventlet",
-    logger=True,
-    engineio_logger=True,
-    ping_timeout=60,  # Increase ping timeout for better connection stability
-    ping_interval=25,  # More frequent pings to detect disconnects faster
-    max_http_buffer_size=10 * 1024 * 1024,  # 10MB buffer for larger messages
-    allow_upgrades=True,  # Allow transport upgrades (e.g., polling to WebSocket)
-    http_compression=True,  # Enable HTTP compression for efficiency
-    always_connect=True,  # Always allow initial connection
-    manage_session=False,  # Don't use Flask sessions
-)
-
-# Configuration
+# Get JWT secret from environment
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-key")
-REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
-REDIS_PORT = os.environ.get("REDIS_PORT", "6379")
-CHAT_SERVICE_URL = os.environ.get("CHAT_SERVICE_URL", "http://chat_service:5004")
 
-# Connected clients
-connected_clients = {}
+# User tracking
+connected_clients = {}  # sid -> user data
+room_participants = {}  # room_id -> set of sids
+user_rooms = {}  # user_id -> set of room_ids
 
 # Message delivery tracking
 message_delivery_status = {}
@@ -87,6 +62,45 @@ def verify_token(token):
     except Exception as e:
         logger.error(f"Unexpected error verifying token: {str(e)}")
         return None
+
+# Helper to validate chat room existence
+def validate_chat_room(chat_id, user_id):
+    """
+    Validate that a chat room exists and user has access to it
+    Returns (valid, error_message)
+    """
+    try:
+        # Check if chat room exists in Chat Service
+        url = f"{CHAT_SERVICE_URL}/chats/{chat_id}"
+        headers = {}
+        
+        # Make the request
+        response = requests.get(url, headers=headers, timeout=5)
+        
+        if response.status_code == 200:
+            # Chat exists, check if user is a participant
+            chat_data = response.json()
+            
+            # Check if user is in participants list
+            participants = chat_data.get("participants", [])
+            participant_ids = [p.get("user_id") for p in participants]
+            
+            if user_id in participant_ids:
+                logger.info(f"User {user_id} validated for chat {chat_id}")
+                return True, None
+            else:
+                error_msg = f"User {user_id} is not a participant in chat {chat_id}"
+                logger.warning(error_msg)
+                return False, error_msg
+        else:
+            error_msg = f"Chat {chat_id} does not exist or cannot be accessed"
+            logger.warning(error_msg)
+            return False, error_msg
+            
+    except Exception as e:
+        logger.error(f"Error validating chat room: {str(e)}")
+        # On error, we'll allow access to avoid blocking communication
+        return True, None
 
 # Helper to persist message to chat service
 def persist_message(room_id, message_data, sender_id):
@@ -161,7 +175,7 @@ def handle_connect():
         connected_clients[sid] = {
             "user_id": user_id,
             "rooms": [],
-            "connected_at": datetime.datetime.utcnow().isoformat(),
+            "connected_at": datetime.utcnow().isoformat(),
             "client_info": {
                 "ip": (
                     request.remote_addr
@@ -185,7 +199,7 @@ def handle_connect():
         connected_clients[sid] = {
             "user_id": user_id,
             "rooms": [],
-            "connected_at": datetime.datetime.utcnow().isoformat(),
+            "connected_at": datetime.utcnow().isoformat(),
             "auth_status": "invalid_token",
         }
         return True
@@ -197,7 +211,7 @@ def handle_connect():
     connected_clients[sid] = {
         "user_id": user_id,
         "rooms": [],
-        "connected_at": datetime.datetime.utcnow().isoformat(),
+        "connected_at": datetime.utcnow().isoformat(),
         "auth_status": "authenticated",
         "client_info": {
             "ip": request.remote_addr if hasattr(request, "remote_addr") else "unknown",
@@ -251,7 +265,7 @@ def handle_disconnect():
                             "room_id": room_id,
                             "user_id": client["user_id"],
                             "typing": False,
-                            "timestamp": datetime.datetime.utcnow().isoformat()
+                            "timestamp": datetime.utcnow().isoformat()
                         },
                         to=room_id
                 )
@@ -271,7 +285,8 @@ def handle_join(data):
         return
 
     try:
-        room_id = data.get("room_id")
+        # Support both room_id and chat_id parameters
+        room_id = data.get("room_id") or data.get("chat_id")
         visitor_id = data.get("visitor_id")
 
         if not room_id:
@@ -300,6 +315,16 @@ def handle_join(data):
             else:
                 emit("error", {"message": "User ID mismatch"}, to=sid)
                 return
+                
+        # Validate that the chat room exists and user has access
+        is_valid, error_message = validate_chat_room(room_id, client["user_id"])
+        if not is_valid:
+            emit("error", {
+                "message": error_message or "Cannot access chat room",
+                "code": "ROOM_ACCESS_DENIED",
+                "room_id": room_id
+            }, to=sid)
+            return
 
         # Add client to room
         join_room(room_id)
@@ -329,7 +354,7 @@ def handle_join(data):
             "join_success",
             {
                 "room_id": room_id,
-                "server_time": datetime.datetime.utcnow().isoformat(),
+                "server_time": datetime.utcnow().isoformat(),
             },
             to=sid,
         )
@@ -391,7 +416,7 @@ def handle_message(data):
             return
 
         # Create message object
-        timestamp = datetime.datetime.utcnow().isoformat()
+        timestamp = datetime.utcnow().isoformat()
         message_data = {
             "message_id": message_id,
             "room_id": room_id,
@@ -453,7 +478,7 @@ def handle_message(data):
                     "server_message_id": server_message_id,
                     "room_id": room_id,
                     "status": "delivered",
-                    "timestamp": datetime.datetime.utcnow().isoformat()
+                    "timestamp": datetime.utcnow().isoformat()
                 },
                 to=sid
             )
@@ -469,7 +494,7 @@ def handle_message(data):
                     "room_id": room_id,
                     "status": "failed",
                     "error": "Failed to persist message",
-                    "timestamp": datetime.datetime.utcnow().isoformat()
+                    "timestamp": datetime.utcnow().isoformat()
                 },
                 to=sid
             )
@@ -548,7 +573,7 @@ def handle_user_away(data):
         if room_id in typing_status and client["user_id"] in typing_status[room_id]:
             typing_status[room_id][client["user_id"]] = {
                 "typing": False,
-                "timestamp": datetime.datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat()
             }
             
             # Broadcast typing stopped
@@ -558,7 +583,7 @@ def handle_user_away(data):
                     "room_id": room_id,
                     "user_id": client["user_id"],
                     "typing": False,
-                    "timestamp": datetime.datetime.utcnow().isoformat()
+                    "timestamp": datetime.utcnow().isoformat()
                 },
                 to=room_id,
                 include_self=False
@@ -588,7 +613,7 @@ def handle_typing(data):
             return
 
         # Update typing status
-        timestamp = datetime.datetime.utcnow().isoformat()
+        timestamp = datetime.utcnow().isoformat()
         if room_id not in typing_status:
             typing_status[room_id] = {}
             
@@ -638,7 +663,7 @@ def handle_read_receipt(data):
             return
 
         # Update read receipts
-        timestamp = datetime.datetime.utcnow().isoformat()
+        timestamp = datetime.utcnow().isoformat()
         if room_id not in read_receipts:
             read_receipts[room_id] = {}
             
@@ -707,7 +732,7 @@ def handle_ping(data):
 
         # Create UTC timestamp with Z suffix
         server_time = (
-            datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+            datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
         )
 
         # Send a pong response back to the client with original timestamp
@@ -814,7 +839,7 @@ def test_broadcast():
     logger.info(f"Test broadcast received: {message}")
 
     # Create UTC timestamp with Z suffix
-    created_at = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    created_at = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
     if room:
         # Broadcast to specific room
@@ -1116,4 +1141,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=5506,
         debug=False,
+        allow_unsafe_werkzeug=True,
     )

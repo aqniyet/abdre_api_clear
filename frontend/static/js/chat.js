@@ -817,4 +817,8 @@ const ChatClient = {
 // Initialize chat client when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
   ChatClient.init();
+});
+// End of ChatClient object
+document.addEventListener('DOMContentLoaded', () => {
+  ChatClient.init();
 }); 

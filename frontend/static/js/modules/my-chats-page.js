@@ -613,8 +613,16 @@ const MyChatsList = {
    * Generate QR invitation
    */
   generateQrInvitation: async function() {
-    if (!window.QRCodeGenerator || !window.InvitationManager) {
-      console.error('QRCodeGenerator or InvitationManager not available');
+    // Check dependencies
+    if (!window.QRCodeGenerator) {
+      console.error('QRCodeGenerator not available');
+      this.showQrError('QR code generation library not available. Please refresh the page and try again.');
+      return;
+    }
+    
+    if (!window.InvitationManager) {
+      console.error('InvitationManager not available');
+      this.showQrError('Invitation management service not available. Please refresh the page and try again.');
       return;
     }
     
@@ -644,11 +652,25 @@ const MyChatsList = {
         scanStatusEl.className = 'alert alert-info';
       }
       
+      // Set up error listeners
+      const handleInvitationError = (event) => {
+        console.error('Invitation generation error event:', event.detail);
+        this.showQrError(event.detail.error || 'Failed to generate invitation code');
+      };
+      
+      document.addEventListener('invitationGenerationError', handleInvitationError);
+      
       // Generate invitation
+      console.log('Starting invitation generation...');
       const invitation = await InvitationManager.generateInvitation();
+      console.log('Invitation generated:', invitation);
+      
+      // Remove error listener
+      document.removeEventListener('invitationGenerationError', handleInvitationError);
       
       // Create invitation URL
       const invitationUrl = QRCodeGenerator.createInvitationURL(invitation.invitation_token);
+      console.log('Generated invitation URL:', invitationUrl);
       
       // Display URL
       if (this.elements.invitationLinkInput) {
@@ -658,10 +680,19 @@ const MyChatsList = {
       // Generate QR code
       if (qrCodeEl) {
         qrCodeEl.innerHTML = ''; // Clear loading state
-        QRCodeGenerator.generateQR('qr-code', invitationUrl, {
+        const qrCode = QRCodeGenerator.generateQR('qr-code', invitationUrl, {
           width: 240,
           height: 240
         });
+        
+        if (!qrCode) {
+          console.error('QR code generation returned null');
+          // Avoid showing an error if the QRCode element already contains error message
+          if (!qrCodeEl.querySelector('.alert-danger')) {
+            this.showQrError('Failed to render QR code. Please try again.');
+          }
+          return;
+        }
       }
       
       // Update status indicators
@@ -677,24 +708,45 @@ const MyChatsList = {
       
     } catch (error) {
       console.error('Error generating QR invitation:', error);
-      
-      // Show error in UI
-      const qrCodeEl = document.getElementById('qr-code');
-      if (qrCodeEl) {
-        qrCodeEl.innerHTML = `
-          <div class="alert alert-danger">
-            <i class="fas fa-exclamation-circle me-2"></i>
-            Failed to generate QR code: ${error.message || 'Unknown error'}
-          </div>
-        `;
-      }
-      
-      // Update status indicator
-      const statusEl = document.getElementById('invitation-status');
-      if (statusEl) {
-        statusEl.textContent = 'Error';
-        statusEl.className = 'badge bg-danger';
-      }
+      this.showQrError(error.message || 'Unknown error generating QR code');
+    }
+  },
+  
+  /**
+   * Handle invitation generation error
+   */
+  handleInvitationError: function(event) {
+    console.error('Invitation generation error event:', event.detail);
+    MyChatsList.showQrError(event.detail.error || 'Failed to generate invitation code');
+  },
+  
+  /**
+   * Show QR code generation error
+   */
+  showQrError: function(errorMessage) {
+    // Show error in UI
+    const qrCodeEl = document.getElementById('qr-code');
+    if (qrCodeEl) {
+      qrCodeEl.innerHTML = `
+        <div class="alert alert-danger">
+          <i class="fas fa-exclamation-circle me-2"></i>
+          ${errorMessage || 'Unknown error'}
+        </div>
+      `;
+    }
+    
+    // Update status indicator
+    const statusEl = document.getElementById('invitation-status');
+    if (statusEl) {
+      statusEl.textContent = 'Error';
+      statusEl.className = 'badge bg-danger';
+    }
+    
+    // Update scan status
+    const scanStatusEl = document.getElementById('scan-status');
+    if (scanStatusEl) {
+      scanStatusEl.textContent = 'Failed to generate QR code. Please try again.';
+      scanStatusEl.className = 'alert alert-danger';
     }
   },
   
