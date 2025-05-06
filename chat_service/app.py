@@ -938,16 +938,34 @@ def get_my_chats():
         
         user_chats = []
         for row in cur.fetchall():
-            last_activity = row['last_activity'].isoformat() if row['last_activity'] else None
-            created_at = row['created_at'].isoformat() if row['created_at'] else None
-            
-            user_chats.append({
-                "chat_id": row["chat_id"],
-                "last_message": row["last_message"],
-                "message_count": row["message_count"],
-                "last_activity": last_activity,
-                "created_at": created_at
-            })
+            try:
+                # Format the dates safely
+                if row.get('last_activity') and isinstance(row['last_activity'], datetime.datetime):
+                    last_activity = row['last_activity'].isoformat()
+                else:
+                    last_activity = None
+                    
+                if row.get('created_at') and isinstance(row['created_at'], datetime.datetime):
+                    created_at = row['created_at'].isoformat()
+                else:
+                    created_at = None
+                
+                # Create a standard chat object with all the expected fields
+                chat_data = {
+                    "chat_id": row["chat_id"],
+                    "id": row["chat_id"],  # Frontend expects this duplicate
+                    "name": f"Chat Room {row['chat_id'].split('-')[0]}",  # Generate a readable name
+                    "last_message": row.get("last_message"),
+                    "message_count": row.get("message_count", 0),
+                    "last_activity": last_activity,
+                    "created_at": created_at,
+                    "participant_count": 2  # Default to 2 participants
+                }
+                
+                user_chats.append(chat_data)
+            except Exception as inner_e:
+                # Log but continue processing other chats
+                logger.error(f"Error formatting chat {row.get('chat_id')}: {str(inner_e)}")
         
         cur.close()
         conn.close()

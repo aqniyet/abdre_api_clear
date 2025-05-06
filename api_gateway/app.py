@@ -2680,15 +2680,18 @@ def get_my_chats():
                 )
                 
                 if response.status_code == 200:
-                    return jsonify(response.json()), 200
+                    chats_data = response.json()
+                    logger.info(f"Got response from chat service: {chats_data[:100]}")
+                    # Ensure we return the expected format for the frontend
+                    return jsonify({"chats": chats_data}), 200
                 
                 logger.error(f"Chat service error: {response.status_code}, {response.text}")
                 # Fall back to returning empty array
-                return jsonify([]), 200
+                return jsonify({"chats": []}), 200
             except requests.RequestException as e:
                 logger.error(f"Failed to connect to chat service: {str(e)}")
                 # Return empty array in development
-                return jsonify([]), 200
+                return jsonify({"chats": []}), 200
         
         # In production, properly proxy to chat service
         # Create headers with the user_id
@@ -2707,12 +2710,19 @@ def get_my_chats():
             timeout=5
         )
         
-        return jsonify(response.json()), response.status_code
+        if response.status_code == 200:
+            chats_data = response.json()
+            logger.info(f"Got response from chat service (production): {chats_data[:100]}")
+            # Ensure we return the expected format for the frontend
+            return jsonify({"chats": chats_data}), 200
+        else:
+            logger.error(f"Chat service error in production: {response.status_code}, {response.text}")
+            return jsonify({"chats": []}), 200
         
     except Exception as e:
         logger.error(f"Error in my-chats endpoint: {str(e)}")
         # Return empty array instead of error for better user experience
-        return jsonify([]), 200
+        return jsonify({"chats": []}), 200
 
 @app.route("/api/auth/check-session", methods=["GET", "OPTIONS"])
 def check_session():

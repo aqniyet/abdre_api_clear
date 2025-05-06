@@ -154,6 +154,64 @@ class MockCursor:
                 save_mock_db()
         
         elif "SELECT" in query and "FROM chats" in query:
+            # Handle my-chats query for user's chats
+            if ("JOIN participants" in query or "EXISTS" in query) and params and len(params) == 1:
+                user_id = params[0]
+                logger.info(f"Handling my-chats query for user: {user_id}")
+                
+                # Return all chats for this user
+                # In a real implementation, this would filter based on user_id
+                # But for the mock DB, we'll just return all chats
+                user_chats = []
+                
+                try:
+                    for chat in MOCK_DB["chats"]:
+                        # Create a copy of the chat object to work with
+                        user_chat = dict(chat)
+                        
+                        # Ensure required fields are present
+                        if "id" not in user_chat and "chat_id" in user_chat:
+                            user_chat["id"] = user_chat["chat_id"]
+                            
+                        # Create a readable name for the chat
+                        if "name" not in user_chat:
+                            short_id = user_chat["chat_id"].split("-")[0]
+                            user_chat["name"] = f"Chat Room {short_id}"
+                        
+                        # Add participant count (default to 2 for mock data)
+                        if "participant_count" not in user_chat:
+                            user_chat["participant_count"] = 2
+                        
+                        # Add additional fields needed for the my-chats response
+                        user_chat["last_message"] = "Welcome to the chat!"
+                        user_chat["message_count"] = 1
+                        
+                        # Format dates as ISO strings
+                        if "created_at" in user_chat:
+                            # Handle both datetime and string cases
+                            if isinstance(user_chat["created_at"], datetime.datetime):
+                                user_chat["last_activity"] = user_chat["created_at"].isoformat()
+                                # Convert to string format if it's still a datetime
+                                user_chat["created_at"] = user_chat["created_at"].isoformat()
+                            else:
+                                # It's already a string, so use it directly
+                                user_chat["last_activity"] = user_chat["created_at"]
+                        else:
+                            # No created_at field, use current time
+                            now_str = datetime.datetime.utcnow().isoformat()
+                            user_chat["created_at"] = now_str
+                            user_chat["last_activity"] = now_str
+                        
+                        user_chats.append(user_chat)
+                    
+                    logger.info(f"Returning {len(user_chats)} chats for user {user_id}")
+                    self.results = user_chats
+                    self.query_type = "my_chats"
+                except Exception as e:
+                    logger.error(f"Error processing chats for my-chats query: {str(e)}")
+                    self.results = []
+                return
+            
             # Handling chat lookup
             if "WHERE chat_id" in query and params and len(params) == 1:
                 chat_id = params[0]
