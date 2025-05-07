@@ -112,6 +112,7 @@ PROTECTED_ROUTES = [
     r"^/api/users/.*$",
     r"^/api/chats/[^/]+$",  # Match /api/chats/{id} but not /api/chats/{id}/messages
     r"^/api/chats/[^/]+/(?!messages).*$",  # Match other chat endpoints but exclude messages
+    r"^/api/my-chats$",  # My chats endpoint should be protected
 ]
 
 PUBLIC_ROUTES = [
@@ -128,7 +129,6 @@ PUBLIC_ROUTES = [
     r"^/api/chats/accept-invitation/.*$",  # Make invitation acceptance endpoint public
     r"^/api/chats/generate-invitation$",  # Make invitation generation endpoint public
     r"^/api/chats/cleanup-expired-invitations$",  # Add cleanup endpoint as public
-    r"^/api/my-chats$",  # Allow access to my-chats without auth for demo
     r"^/api/realtime/check-connection$",  # Allow connection check without auth
     r"^/api/realtime/socket\.io.*$"  # Allow all socket.io endpoints without auth
 ]
@@ -947,11 +947,8 @@ def login():
 
 @app.route("/register")
 def register():
-    """Render the register page"""
-    if not template_exists("register.html"):
-        logger.error("Failed to render register.html - template file missing")
-        return render_template("error.html", error="Template file missing"), 500
-    return render_template("register.html")
+    """Redirect to login page with register mode"""
+    return redirect("/login?mode=register")
 
 @app.route("/create")
 def create_chat():
@@ -1285,73 +1282,135 @@ def direct_login():
         return handle_preflight_request()
 
     try:
+        # Get request data
         data = request.get_json()
-        if not data or not data.get("username") or not data.get("password"):
-            return jsonify({"error": "Missing username or password"}), 400
+        if not data:
+            return jsonify({"error": "Invalid request", "message": "Missing request data"}), 400
+            
+        if not data.get("username") or not data.get("password"):
+            return jsonify({"error": "Missing credentials", "message": "Username and password are required"}), 400
 
         # Sanitize input
         sanitized_data = sanitize_input(data)
+        
+        # Add client IP for rate limiting on the auth service side
+        client_ip = request.remote_addr
+        if client_ip:
+            sanitized_data["client_ip"] = client_ip
+            
+        # Add CSRF token validation if provided
+        csrf_token = request.headers.get("X-CSRF-Token")
+        if csrf_token:
+            sanitized_data["csrf_token"] = csrf_token
 
-        # Debug the service discovery
+        # Get service URL from discovery
         service_url = discovery.get_service_url('auth_service')
-        print(f"Auth service URL from discovery: {service_url}")
+        if not service_url:
+            logger.error("Auth service not found in service discovery")
+            
+        # Use direct URL as fallback
+        auth_url = service_url + "/login" if service_url else "http://localhost:5501/login"
+        logger.info(f"Using auth endpoint: {auth_url}")
         
-        # Override the service URL to use localhost directly
-        auth_url = "http://localhost:5501/login"
-        print(f"Using direct auth URL: {auth_url}")
-        
-        headers = {"Content-Type": "application/json"}
+        # Prepare headers
+        headers = {
+            "Content-Type": "application/json",
+            "X-Forwarded-For": client_ip
+        }
         
         # Add correlation ID for tracing
         correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
         headers["X-Correlation-ID"] = correlation_id
 
-        print(f"Sending request to auth service with headers: {headers}")
-        print(f"Request data: {sanitized_data}")
-        
+        # Check circuit breaker
+        if not circuit_check("auth_service"):
+            return jsonify({"error": "Authentication service circuit open", 
+                           "message": "Authentication service is temporarily unavailable. Please try again later."}), 503
+
+        # Forward request to auth service
         response = requests.post(
-            auth_url, json=sanitized_data, headers=headers, timeout=5
+            auth_url, 
+            json=sanitized_data, 
+            headers=headers, 
+            timeout=5,
+            cookies=request.cookies
         )
 
-        print(f"Auth service response status: {response.status_code}")
-        print(f"Auth service response: {response.text}")
-
-        # Check for circuit breaker
-        if circuit_check("auth_service"):
-            if response.status_code >= 500:
-                circuit_failure("auth_service")
-                return (
-                    jsonify(
-                        {"error": "Authentication service unavailable, please try again later"}
-                    ),
-                    503,
-                )
-            else:
-                circuit_success("auth_service")
-
-        # Format response
-        result = response.json()
+        # Parse response
+        try:
+            result = response.json()
+        except ValueError:
+            logger.error(f"Invalid JSON response from auth service: {response.text}")
+            result = {"error": "Invalid response from authentication service"}
+            
         status_code = response.status_code
 
-        # Set CORS headers
-        resp = make_response(jsonify(result), status_code)
-        add_cors_headers(resp)
-
-        return resp
+        # Check for successful authentication
+        if response.status_code == 200 and result.get("token"):
+            # Record circuit success
+            circuit_success("auth_service")
+            
+            # Create response with token as HttpOnly cookie if remember_me
+            resp = make_response(jsonify(result), status_code)
+            
+            # Set token cookie if remember_me is true
+            if data.get("remember_me") and result.get("token"):
+                # Get expiry time from token or default to 30 days
+                max_age = result.get("expires_in", 30 * 24 * 60 * 60)
+                # Set secure HttpOnly cookie
+                resp.set_cookie(
+                    "auth_token",
+                    result["token"],
+                    max_age=max_age,
+                    httponly=True,
+                    secure=True,
+                    samesite="Lax"
+                )
+                
+                # Set refresh token if provided
+                if result.get("refresh_token"):
+                    resp.set_cookie(
+                        "refresh_token",
+                        result["refresh_token"],
+                        max_age=max_age * 2,  # Refresh token lives twice as long
+                        httponly=True,
+                        secure=True,
+                        samesite="Lax"
+                    )
+                    
+            # Add CORS headers to response
+            add_cors_headers(resp)
+            return resp
+        elif response.status_code >= 500:
+            # Record circuit failure for server errors
+            circuit_failure("auth_service")
+            return jsonify({
+                "error": "Authentication service error",
+                "message": result.get("message", "Authentication service unavailable, please try again later")
+            }), 503
+        else:
+            # Record circuit success despite client error (401, 403, etc.)
+            circuit_success("auth_service")
+            
+            # Create error response
+            resp = make_response(jsonify(result), status_code)
+            add_cors_headers(resp)
+            return resp
 
     except requests.RequestException as e:
         # Handle connection error
         circuit_failure("auth_service")
-        print(f"Auth service connection error: {e}")
-        logger.error(f"Auth service connection error: {e}")
-        return (
-            jsonify({"error": "Authentication service unavailable, please try again later"}),
-            503,
-        )
+        logger.error(f"Auth service connection error: {str(e)}")
+        return jsonify({
+            "error": "Service unavailable",
+            "message": "Authentication service is currently unavailable. Please try again later."
+        }), 503
     except Exception as e:
-        print(f"Login error: {str(e)}")
-        logger.error(f"Login error: {e}")
-        return jsonify({"error": "An unexpected error occurred"}), 500
+        logger.error(f"Login error: {str(e)}", exc_info=True)
+        return jsonify({
+            "error": "Authentication error",
+            "message": "An unexpected error occurred during authentication."
+        }), 500
 
 
 @app.route("/api/auth/register", methods=["POST", "OPTIONS"])
@@ -1945,8 +2004,6 @@ def socketio_proxy():
             g.user = {"user_id": "guest", "is_guest": True}
 
         # Create a direct connection URL for WebSockets
-        # In development, this might be localhost with the right port
-        # In production, it should be the proper WebSocket endpoint
         try:
             # Extract any query parameters to pass along
             query_params = {}
@@ -1976,27 +2033,32 @@ def socketio_proxy():
                 query_params["token"] = "guest"
                 logger.info("No token found in query, using guest token")
 
-            # For WebSocket upgrade handling, we'll return JSON info for the client
-            # to use to connect directly to the realtime service
+            # Use proper protocol detection (ws vs wss)
             ws_protocol = "wss" if request.is_secure else "ws"
             http_protocol = "https" if request.is_secure else "http"
             
-            # Parse the realtime service URL to extract host and port
+            # Ensure direct connection URL includes correct host and port
             realtime_url = REALTIME_SERVICE_URL
-            if realtime_url.startswith("http"):
-                # Replace http with ws protocol
+            if realtime_url.startswith("http://"):
                 realtime_url = realtime_url.replace("http://", f"{ws_protocol}://")
+            elif realtime_url.startswith("https://"):
                 realtime_url = realtime_url.replace("https://", f"{ws_protocol}://")
             else:
                 # If no protocol specified, add the ws protocol
                 realtime_url = f"{ws_protocol}://{realtime_url}"
+            
+            # Generate correct socket.io connection URL with proper parameters
+            token = query_params.get("token", "guest")
+            connection_url = f"{realtime_url}/socket.io/?EIO=4&transport=websocket&token={token}"
+            
+            logger.info(f"Generated WebSocket connection URL: {connection_url}")
             
             return (
                 jsonify(
                     {
                         "status": "redirect",
                         "message": "WebSocket connections should be made directly to the realtime service",
-                        "connection_url": realtime_url,
+                        "connection_url": connection_url,
                         "socket_path": "/socket.io/",
                         "connection_type": "direct",
                         "token_valid": True if hasattr(g, "user") else False,
@@ -2008,6 +2070,55 @@ def socketio_proxy():
         except Exception as e:
             logger.error(f"Error handling WebSocket proxy: {e}")
             return jsonify({"error": "WebSocket proxy error", "message": str(e)}), 500
+    
+    # For standard HTTP/AJAX requests (non-WebSocket)
+    # This is used by client to check connection details
+    elif request.method == "GET":
+        # Check if user is authenticated (but allow guest users)
+        auth_data = authenticate_token()
+        user_id = auth_data.get("user_id", "guest") if auth_data else "guest"
+        
+        # Use proper protocol detection
+        ws_protocol = "wss" if request.is_secure else "ws"
+        
+        # Ensure direct connection URL includes correct host and port
+        realtime_url = REALTIME_SERVICE_URL
+        if realtime_url.startswith("http://"):
+            realtime_url = realtime_url.replace("http://", f"{ws_protocol}://")
+        elif realtime_url.startswith("https://"):
+            realtime_url = realtime_url.replace("https://", f"{ws_protocol}://")
+        else:
+            # If no protocol specified, add the ws protocol
+            realtime_url = f"{ws_protocol}://{realtime_url}"
+        
+        # Get token from request or auth header
+        token = request.args.get("token")
+        if not token and auth_data:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header[7:]
+            
+        # Default to guest if no token
+        if not token:
+            token = "guest"
+        
+        # Generate connection details for client
+        connection_url = f"{realtime_url}/socket.io/?EIO=4&transport=websocket&token={token}"
+        
+        logger.info(f"Returning connection details: {connection_url}")
+        
+        return jsonify({
+            "status": "available",
+            "message": "Connection info for Socket.IO client",
+            "connection_url": connection_url,
+            "socket_path": "/socket.io/",
+            "connection_type": "direct",
+            "token_valid": auth_data is not None,
+            "user_id": user_id,
+            "auth_type": "standard" if auth_data else "guest",
+            "query_params": {"token": token},
+            "transport": "websocket"
+        }), 200
 
     # For regular HTTP requests to Socket.IO (polling), use the standard proxy
     logger.info(f"Socket.IO HTTP request (polling) proxied to: {target_url}")
@@ -2651,78 +2762,84 @@ def check_realtime_connection():
 @app.route("/api/my-chats", methods=["GET"])
 def get_my_chats():
     """Endpoint to retrieve chats for the currently authenticated user"""
-    # Get authentication data if available
+    # Get authentication data - this will be required now that we removed
+    # the my-chats endpoint from PUBLIC_ROUTES
     auth_data = authenticate_token()
     
-    # Use a default guest user ID if no authentication
-    user_id = auth_data.get("user_id", "guest") if auth_data else "guest"
-    logger.info(f"Getting chats for user: {user_id}")
+    # If authentication failed, the before_request middleware should already
+    # have returned a 401 response. But we'll check again just to be sure.
+    if not auth_data:
+        logger.error("Authentication required for /api/my-chats endpoint")
+        return jsonify({
+            "error": "Authentication required",
+            "message": "Please login to view your conversations"
+        }), 401
+    
+    # Get user ID from token
+    user_id = auth_data.get("user_id")
+    if not user_id:
+        logger.error("No user_id found in authentication token")
+        return jsonify({
+            "error": "Invalid authentication",
+            "message": "User ID missing from authentication token"
+        }), 401
+    
+    logger.info(f"Getting chats for authenticated user: {user_id}")
     
     try:
-        # For development, return an empty array if chat service is not available
-        if IS_DEVELOPMENT:
-            # Try to connect to chat service
-            try:
-                # Create headers with the user_id
-                headers = {"X-User-ID": user_id}
-                if hasattr(g, "correlation_id"):
-                    headers["X-Correlation-ID"] = g.correlation_id
-                
-                # Add Authorization header to pass through the token
-                auth_header = request.headers.get("Authorization")
-                if auth_header:
-                    headers["Authorization"] = auth_header
-                
-                response = requests.get(
-                    f"{CHAT_SERVICE_URL}/my-chats",
-                    headers=headers,
-                    timeout=3
-                )
-                
-                if response.status_code == 200:
-                    chats_data = response.json()
-                    logger.info(f"Got response from chat service: {chats_data[:100]}")
-                    # Ensure we return the expected format for the frontend
-                    return jsonify({"chats": chats_data}), 200
-                
-                logger.error(f"Chat service error: {response.status_code}, {response.text}")
-                # Fall back to returning empty array
-                return jsonify({"chats": []}), 200
-            except requests.RequestException as e:
-                logger.error(f"Failed to connect to chat service: {str(e)}")
-                # Return empty array in development
-                return jsonify({"chats": []}), 200
-        
-        # In production, properly proxy to chat service
-        # Create headers with the user_id
+        # Create headers with the user_id and correlation ID
         headers = {"X-User-ID": user_id}
         if hasattr(g, "correlation_id"):
             headers["X-Correlation-ID"] = g.correlation_id
         
-        # Add Authorization header
+        # Add Authorization header to pass through the token
         auth_header = request.headers.get("Authorization")
         if auth_header:
             headers["Authorization"] = auth_header
         
+        # Make request to chat service
         response = requests.get(
             f"{CHAT_SERVICE_URL}/my-chats",
             headers=headers,
             timeout=5
         )
         
+        # Check response status
         if response.status_code == 200:
-            chats_data = response.json()
-            logger.info(f"Got response from chat service (production): {chats_data[:100]}")
-            # Ensure we return the expected format for the frontend
-            return jsonify({"chats": chats_data}), 200
+            try:
+                chats_data = response.json()
+                logger.info(f"Got {len(chats_data) if isinstance(chats_data, list) else 'non-list'} chats from chat service")
+                
+                # If response is already a list, return it directly
+                if isinstance(chats_data, list):
+                    return jsonify(chats_data), 200
+                
+                # If response has a 'chats' key, return that
+                if isinstance(chats_data, dict) and 'chats' in chats_data:
+                    return jsonify(chats_data['chats']), 200
+                
+                # Otherwise, wrap the response in an object
+                return jsonify(chats_data), 200
+            except ValueError as json_err:
+                logger.error(f"Invalid JSON response from chat service: {str(json_err)}")
+                return jsonify([]), 200
+        elif response.status_code == 401:
+            # If chat service returned unauthorized, pass that through
+            logger.warning("Chat service returned unauthorized")
+            return jsonify({
+                "error": "Authentication required",
+                "message": "Please login to view your conversations"
+            }), 401
         else:
-            logger.error(f"Chat service error in production: {response.status_code}, {response.text}")
-            return jsonify({"chats": []}), 200
-        
+            # For other errors, log and return empty array
+            logger.error(f"Chat service error: {response.status_code}, {response.text}")
+            return jsonify([]), 200
+    except requests.RequestException as e:
+        logger.error(f"Failed to connect to chat service: {str(e)}")
+        return jsonify([]), 200
     except Exception as e:
-        logger.error(f"Error in my-chats endpoint: {str(e)}")
-        # Return empty array instead of error for better user experience
-        return jsonify({"chats": []}), 200
+        logger.error(f"Unexpected error in my-chats endpoint: {str(e)}")
+        return jsonify([]), 200
 
 @app.route("/api/auth/check-session", methods=["GET", "OPTIONS"])
 def check_session():

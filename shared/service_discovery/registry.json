@@ -1,0 +1,52 @@
+{
+  "auth_service": {
+    "name": "auth_service",
+    "host": "localhost",
+    "port": 9001,
+    "url": "http://localhost:9001",
+    "health_endpoint": "/health",
+    "status": "offline",
+    "last_check": 1746635882.473234,
+    "metadata": {}
+  },
+  "user_service": {
+    "name": "user_service",
+    "host": "localhost",
+    "port": 9002,
+    "url": "http://localhost:9002",
+    "health_endpoint": "/health",
+    "status": "offline",
+    "last_check": 1746635882.4738402,
+    "metadata": {}
+  },
+  "oauth_service": {
+    "name": "oauth_service",
+    "host": "localhost",
+    "port": 9003,
+    "url": "http://localhost:9003",
+    "health_endpoint": "/health",
+    "status": "offline",
+    "last_check": 1746635882.4775693,
+    "metadata": {}
+  },
+  "chat_service": {
+    "name": "chat_service",
+    "host": "localhost",
+    "port": 9004,
+    "url": "http://localhost:9004",
+    "health_endpoint": "/health",
+    "status": "offline",
+    "last_check": 1746635882.478269,
+    "metadata": {}
+  },
+  "realtime_service": {
+    "name": "realtime_service",
+    "host": "localhost",
+    "port": 9006,
+    "url": "http://localhost:9006",
+    "health_endpoint": "/health",
+    "status": "offline",
+    "last_check": 1746635882.478751,
+    "metadata": {}
+  }
+}

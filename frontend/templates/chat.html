@@ -20,11 +20,16 @@
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
 </head>
 <body>
-    <header class="bg-primary text-white py-3">
+    <!-- Standardized Menu Bar -->
+    <header class="bg-primary text-white py-2 menu-bar">
         <div class="container-fluid">
             <div class="row align-items-center">
                 <div class="col-6">
-                    <h1 class="fs-3 mb-0"><a href="/my-chats" class="text-white text-decoration-none">ABDRE Chat</a></h1>
+                    <h1 class="fs-3 mb-0">
+                        <a href="/my-chats" class="text-white text-decoration-none d-flex align-items-center">
+                            <span class="brand-logo">ABDRE Chat</span>
+                        </a>
+                    </h1>
                 </div>
                 <div class="col-6 text-end">
                     <div id="auth-status">
@@ -37,36 +42,16 @@
 
     <div class="container-fluid h-100 py-3">
         <div class="row h-100">
-            <div class="col-md-3 col-lg-2 mb-3">
-                <div class="card h-100">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h2 class="h5 mb-0">Chat Rooms</h2>
-                        <button class="btn btn-sm btn-primary" id="new-chat-btn">New</button>
-                    </div>
-                    <div class="card-body p-0">
-                        <div id="chat-list" class="list-group list-group-flush overflow-auto" style="max-height: 60vh;">
-                            <!-- Chat rooms will be listed here -->
-                            <div class="p-3 text-center text-muted small">
-                                <div class="spinner-border spinner-border-sm" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <p class="mt-2 mb-0">Loading chats...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-9 col-lg-10">
+            <div class="col-12">
                 <div class="card h-100 d-flex flex-column">
                     <div class="card-header bg-light">
                         <div class="row align-items-center">
                             <div class="col">
                                 <h3 class="h5 mb-0" id="current-chat-name">Chat Room</h3>
-                                <small class="text-muted" id="chat-participants">0 participants</small>
-                            </div>
-                            <div class="col-auto">
-                                <span id="connection-status" class="badge bg-secondary">Disconnected</span>
+                                <div class="d-flex align-items-center mt-1">
+                                    <span class="status-indicator me-2" id="status-indicator"></span>
+                                    <small id="chat-status">Waiting to connect...</small>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -122,68 +107,25 @@
     <!-- Socket.IO Helper -->
     <script src="/static/js/libs/socket-io-helper.js"></script>
     
+    <!-- API Client -->
+    <script src="/static/js/services/api-client.js"></script>
+    
+    <!-- Socket Client -->
+    <script src="/static/js/services/socket-client.js"></script>
+    
+    <!-- State Manager -->
+    <script src="/static/js/utils/state-manager.js"></script>
+    
+    <!-- Chat Message Component -->
+    <script src="/static/js/components/chat-message.js"></script>
+    
+    <!-- Menu Bar Component -->
+    <script src="/static/js/components/menu-bar.js"></script>
+    
+    <!-- Chat Page Module -->
+    <script src="/static/js/modules/chat-page.js"></script>
+    
     <!-- Chat Script -->
     <script src="/static/js/chat.js"></script>
-    
-    <!-- Auth Status Script -->
-    <script>
-        // Initialize auth status in header
-        document.addEventListener('DOMContentLoaded', function() {
-            updateAuthStatus();
-            
-            // Listen for auth changes
-            document.addEventListener('auth:change', function(event) {
-                updateAuthStatus();
-            });
-        });
-        
-        // Update auth status display
-        function updateAuthStatus() {
-            const authStatusElement = document.getElementById('auth-status');
-            if (!authStatusElement) return;
-            
-            if (window.AuthHelper && AuthHelper.isAuthenticated()) {
-                const userData = AuthHelper.getUserData();
-                const displayName = userData?.display_name || userData?.username || 'User';
-                
-                authStatusElement.innerHTML = `
-                    <span class="me-3 text-white">
-                        <i class="fas fa-user-circle me-1"></i> ${displayName}
-                    </span>
-                    <button id="logout-btn" class="btn btn-sm btn-outline-light">
-                        <i class="fas fa-sign-out-alt me-1"></i> Logout
-                    </button>
-                `;
-                
-                // Add event listener to logout button
-                const logoutBtn = document.getElementById('logout-btn');
-                if (logoutBtn) {
-                    logoutBtn.addEventListener('click', function() {
-                        if (window.AuthHelper) {
-                            AuthHelper.logout()
-                                .then(() => {
-                                    window.location.href = '/login';
-                                })
-                                .catch(error => {
-                                    console.error('Logout failed:', error);
-                                    // Still redirect to login page even if API call fails
-                                    window.location.href = '/login';
-                                });
-                        } else {
-                            // Fallback if AuthHelper is not available
-                            window.location.href = '/login';
-                        }
-                    });
-                }
-            } else {
-                // Show login link for guest users
-                authStatusElement.innerHTML = `
-                    <a href="/login" class="btn btn-sm btn-outline-light">
-                        <i class="fas fa-sign-in-alt me-1"></i> Login
-                    </a>
-                `;
-            }
-        }
-    </script>
 </body>
 </html> 

@@ -64,6 +64,13 @@ function initPageModule() {
  * Initialize common components used across different pages
  */
 function initCommonComponents() {
+  // Initialize menu bar if on a non-login page
+  if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+    if (typeof MenuBar !== 'undefined') {
+      MenuBar.init();
+    }
+  }
+  
   // Set up authentication status in the UI
   updateAuthUI();
   

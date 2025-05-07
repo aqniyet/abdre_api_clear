@@ -98,11 +98,16 @@
 </head>
 
 <body>
-    <header class="bg-primary text-white py-3">
+    <!-- Standardized Menu Bar -->
+    <header class="bg-primary text-white py-2 menu-bar">
         <div class="container-fluid">
             <div class="row align-items-center">
                 <div class="col-6">
-                    <h1 class="fs-3 mb-0"><a href="/my-chats" class="text-white text-decoration-none">ABDRE Chat</a></h1>
+                    <h1 class="fs-3 mb-0">
+                        <a href="/my-chats" class="text-white text-decoration-none d-flex align-items-center">
+                            <span class="brand-logo me-2">ABDRE Chat</span>
+                        </a>
+                    </h1>
                 </div>
                 <div class="col-6 text-end">
                     <div id="auth-status">
@@ -236,5 +241,8 @@
         }
       });
     </script>
+    
+    <!-- Menu Bar Component -->
+    <script src="/static/js/components/menu-bar.js"></script>
 </body>
 </html> 

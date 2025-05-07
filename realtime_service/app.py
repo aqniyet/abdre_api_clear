@@ -20,7 +20,14 @@ import jwt as PyJWT
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)
+
+# Configure CORS properly with broader settings for WebSockets
+CORS(
+    app,
+    resources={r"/*": {"origins": "*"}},
+    supports_credentials=True,
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -29,8 +36,19 @@ logger = logging.getLogger(__name__)
 # Get environment variables
 IS_DEVELOPMENT = os.environ.get("FLASK_ENV", "development") == "development"
 
-# Configure Socket.IO - Don't use eventlet for Python 3.12 compatibility
-socketio = SocketIO(app, cors_allowed_origins="*", logger=IS_DEVELOPMENT, engineio_logger=IS_DEVELOPMENT, ping_timeout=60, ping_interval=25, async_mode="threading")
+# Configure Socket.IO with improved settings for better connection reliability
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*", 
+    logger=IS_DEVELOPMENT, 
+    engineio_logger=IS_DEVELOPMENT, 
+    ping_timeout=60, 
+    ping_interval=25, 
+    async_mode="threading",
+    always_connect=True,
+    manage_session=False,
+    max_http_buffer_size=5 * 1024 * 1024  # 5 MB for larger messages
+)
 
 # Get JWT secret from environment
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-key")

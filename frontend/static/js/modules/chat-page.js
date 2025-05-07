@@ -20,16 +20,37 @@ const ChatPage = {
     console.log(`Initializing chat page with room ID: ${roomId}`);
     
     // Initialize state
-    stateManager.setMultiple({
+    this.state = {
       roomId,
       userId: AuthHelper.getUserId(),
       messages: [],
       isConnected: false,
-      lastMessageCheck: 0
-    });
+      lastMessageCheck: 0,
+      opponentId: null,
+      opponentName: null,
+      opponentStatus: 'offline'
+    };
     
     // Initialize UI elements
     this.initUI();
+    
+    // Fetch chat details to get opponent information
+    this.fetchChatDetails(roomId).then(() => {
+      // After getting chat details, connect to socket
+      return this.initSocketConnection();
+    }).then(() => {
+      // After socket is connected, load chat messages
+      return this.loadChatMessages();
+    }).catch(error => {
+      console.error("Setup failed:", error);
+      // If socket fails, still try to load messages via HTTP
+      this.loadChatMessages().catch(msgError => {
+        console.error("Also failed to load messages:", msgError);
+      });
+      
+      // Set up periodic message refresh with higher frequency since WebSocket failed
+      this.setupPeriodicMessageRefresh(10000); // Every 10 seconds
+    });
     
     // Add refresh-messages event listener
     document.addEventListener('refresh-messages', () => {
@@ -39,32 +60,105 @@ const ChatPage = {
         .catch(error => console.error('Message refresh failed:', error));
     });
     
-    // First initialize socket connection
-    this.initSocketConnection().then(() => {
-      // After socket is connected, load chat messages
-      this.loadChatMessages().catch(error => {
-        console.error("Failed to load initial messages:", error);
-      });
+    // Set up visibility change listener
+    document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
+    
+    // Set up window beforeunload listener
+    window.addEventListener('beforeunload', this.handleBeforeUnload.bind(this));
+    
+    // Set up periodic message refresh
+    this.setupPeriodicMessageRefresh();
+  },
+  
+  /**
+   * Fetch chat details including participants
+   * @param {string} chatId - The chat ID
+   */
+  async fetchChatDetails(chatId) {
+    try {
+      const chatData = await apiClient.getChat(chatId);
+      console.log('Chat details:', chatData);
       
-      // Set up visibility change listener
-      document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
-      
-      // Set up window beforeunload listener
-      window.addEventListener('beforeunload', this.handleBeforeUnload.bind(this));
-      
-      // Set up periodic message refresh (less frequent since we're relying more on WebSocket)
-      this.setupPeriodicMessageRefresh();
-    }).catch(error => {
-      console.error("Failed to initialize socket:", error);
-      
-      // If socket fails, still try to load messages via HTTP
-      this.loadChatMessages().catch(msgError => {
-        console.error("Also failed to load messages:", msgError);
-      });
-      
-      // Set up periodic message refresh with higher frequency since WebSocket failed
-      this.setupPeriodicMessageRefresh(10000); // Every 10 seconds
-    });
+      if (chatData && chatData.participants) {
+        const currentUserId = AuthHelper.getUserId();
+        
+        // Find the opponent (not the current user)
+        const opponent = chatData.participants.find(p => p.user_id !== currentUserId);
+        
+        if (opponent) {
+          this.state.opponentId = opponent.user_id;
+          this.state.opponentName = opponent.display_name || opponent.username || 'Chat Participant';
+          
+          // Update the UI with opponent's name
+          this.updateOpponentDisplay();
+        } else {
+          console.warn('Could not find opponent in chat participants');
+          // Set a default name
+          this.state.opponentName = 'Chat Participant';
+          this.updateOpponentDisplay();
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching chat details:', error);
+      // Set a fallback name
+      this.state.opponentName = 'Chat Participant';
+      this.updateOpponentDisplay();
+    }
+  },
+  
+  /**
+   * Update the opponent's display name and status in the UI
+   */
+  updateOpponentDisplay() {
+    const opponentName = this.state.opponentName;
+    const opponentStatus = this.state.opponentStatus;
+    
+    // Update name
+    const nameElement = document.getElementById('current-chat-name');
+    if (nameElement && opponentName) {
+      nameElement.textContent = opponentName;
+    }
+    
+    // Update status indicator
+    this.updateStatusIndicator(opponentStatus);
+  },
+  
+  /**
+   * Update the status indicator in the UI
+   * @param {string} status - The status: 'online', 'away', 'offline', or 'connecting'
+   */
+  updateStatusIndicator(status) {
+    const statusIndicator = document.getElementById('status-indicator');
+    const statusText = document.getElementById('chat-status');
+    
+    if (!statusIndicator || !statusText) return;
+    
+    // Remove all status classes
+    statusIndicator.classList.remove('online', 'away', 'offline', 'connecting');
+    
+    // Add the appropriate class and text
+    switch (status) {
+      case 'online':
+        statusIndicator.classList.add('online');
+        statusText.textContent = 'Online';
+        break;
+      case 'connecting':
+        statusIndicator.classList.add('connecting');
+        statusText.textContent = 'Connecting to chat server...';
+        break;
+      case 'away':
+        statusIndicator.classList.add('away');
+        statusText.textContent = 'Away';
+        break;
+      case 'offline':
+      default:
+        statusIndicator.classList.add('offline');
+        statusText.textContent = 'Offline';
+        break;
+    }
+    
+    // Store the status in state
+    this.state.opponentStatus = status;
   },
   
   /**
@@ -85,54 +179,164 @@ const ChatPage = {
   },
   
   /**
-   * Initialize socket connection
+   * Initialize socket connection with improved error handling and timeout
    * @returns {Promise} - Promise that resolves when socket is connected
    */
   async initSocketConnection() {
-    try {
-      await socketClient.init();
-      stateManager.set('isConnected', true);
-      
-      // Join the room
-      const roomId = stateManager.get('roomId');
-      const userId = stateManager.get('userId');
-      
-      socketClient.joinRoom({
-        room_id: roomId,
-        visitor_id: userId
-      });
-      
-      // Set up message handler
-      socketClient.on('message', this.handleIncomingMessage.bind(this));
-      
-      // Set up user status handlers
-      socketClient.on('user_active', this.handleUserActive.bind(this));
-      socketClient.on('user_away', this.handleUserAway.bind(this));
-      
-      // Request current status
-      socketClient.checkStatus({
-        room_id: roomId
-      });
-      
-      // Request unread count
-      socketClient.requestUnreadCount({
-        room_id: roomId,
-        visitor_id: userId
-      });
-      
-      // Set user as active
-      socketClient.setUserActive({
-        room_id: roomId,
-        visitor_id: userId
-      });
-      
-      console.log('Socket connection initialized successfully');
-      return Promise.resolve();
-    } catch (error) {
-      console.error('Socket initialization failed:', error);
-      this.showError('Could not connect to chat server. Messages will be sent via HTTP.');
-      return Promise.reject(error);
+    return new Promise((resolve, reject) => {
+      try {
+        console.log('Initializing socket connection to chat server...');
+        
+        // Update UI connection status
+        this.updateStatusIndicator('connecting');
+        const statusText = document.getElementById('chat-status');
+        if (statusText) {
+          statusText.textContent = 'Connecting to chat server...';
+        }
+        
+        // Create connection timeout
+        const connectionTimeout = setTimeout(() => {
+          console.error('Socket connection timeout after 15 seconds');
+          if (!window.SocketClient.isConnected()) {
+            // Update UI with connection error
+            if (statusText) {
+              statusText.textContent = 'Failed to connect to chat server. Trying to reconnect...';
+            }
+            
+            // Show error message to user
+            this.showError('Connection to chat server timed out. Messages will be sent via HTTP.');
+            
+            // Try HTTP fallback
+            reject(new Error('Connection timeout'));
+          }
+        }, 15000);
+        
+        // Check if client is already initialized and connected
+        if (window.SocketClient && window.SocketClient.isConnected()) {
+          console.log('Socket client already connected, joining room...');
+          
+          // Clear timeout
+          clearTimeout(connectionTimeout);
+          
+          // Join the room
+          const roomId = this.state.roomId;
+          window.SocketClient.joinRoom(roomId);
+          
+          // Set up event handlers
+          this._setupSocketEventHandlers();
+          
+          // Update UI
+          this.updateStatusIndicator('online');
+          if (statusText) {
+            statusText.textContent = 'Connected to chat server';
+          }
+          
+          // Resolve the promise
+          resolve();
+          return;
+        }
+        
+        // Initialize socket with event handlers
+        console.log('Initializing socket client...');
+        if (!window.SocketClient) {
+          console.error('SocketClient is not defined. Make sure socket-client.js is properly loaded.');
+          reject(new Error('SocketClient not found'));
+          return;
+        }
+        
+        window.SocketClient.init();
+        
+        // Set up connection change handler
+        const connectionHandler = (connected) => {
+          console.log(`Socket connection status changed: ${connected ? 'connected' : 'disconnected'}`);
+          
+          if (connected) {
+            // Clear timeout
+            clearTimeout(connectionTimeout);
+            
+            // Update UI connection status
+            this.updateStatusIndicator('online');
+            if (statusText) {
+              statusText.textContent = 'Connected to chat server';
+            }
+            
+            // Join the room
+            const roomId = this.state.roomId;
+            console.log(`Joining room ${roomId}...`);
+            window.SocketClient.joinRoom(roomId);
+            
+            // Set up event handlers
+            this._setupSocketEventHandlers();
+            
+            // Resolve the promise (only once)
+            resolve();
+            
+            // Remove this handler to prevent multiple resolves
+            window.SocketClient.off('connect', connectionHandler);
+          } else {
+            // Update UI connection status
+            this.updateStatusIndicator('offline');
+            if (statusText) {
+              statusText.textContent = 'Disconnected from chat server. Reconnecting...';
+            }
+          }
+        };
+        
+        // Register the connection handler
+        window.SocketClient.onConnectionChange(connectionHandler);
+        
+      } catch (error) {
+        console.error('Error setting up socket connection:', error);
+        
+        // Update UI with connection error
+        this.updateStatusIndicator('offline');
+        const statusText = document.getElementById('chat-status');
+        if (statusText) {
+          statusText.textContent = 'Failed to connect to chat server. Using HTTP fallback.';
+        }
+        
+        // Show error message to user
+        this.showError('An error occurred connecting to chat server. Messages will be sent via HTTP.');
+        
+        reject(error);
+      }
+    });
+  },
+  
+  /**
+   * Set up socket event handlers
+   * @private
+   */
+  _setupSocketEventHandlers() {
+    if (!window.SocketClient) {
+      console.error('SocketClient is not defined. Cannot set up event handlers.');
+      return;
     }
+    
+    // Set up message handler
+    window.SocketClient.on('message', this.handleIncomingMessage.bind(this));
+    
+    // Set up user status handlers
+    window.SocketClient.on('user_active', this.handleUserActive.bind(this));
+    window.SocketClient.on('user_away', this.handleUserAway.bind(this));
+    window.SocketClient.on('user_joined', this.handleUserJoined.bind(this));
+    
+    // Set up connection event handlers for the room
+    window.SocketClient.on('join_success', (data) => {
+      console.log('Successfully joined room:', data);
+      
+      // Update room state if needed
+      if (data.room_id === this.state.roomId) {
+        console.log('Room join confirmed by server');
+        
+        // Update UI to show connected status
+        this.updateStatusIndicator('online');
+        const statusText = document.getElementById('chat-status');
+        if (statusText) {
+          statusText.textContent = 'Connected to chat room';
+        }
+      }
+    });
   },
   
   /**
@@ -140,7 +344,7 @@ const ChatPage = {
    */
   initUI() {
     // Get UI elements
-    this.chatContainer = document.getElementById('chat-container');
+    this.chatContainer = document.getElementById('chat-container') || document.getElementById('chat-messages');
     this.messageInput = document.getElementById('message-input');
     this.sendButton = document.getElementById('send-button');
     
@@ -228,14 +432,14 @@ const ChatPage = {
     }
     
     // Skip duplicate messages
-    const messages = stateManager.get('messages') || [];
+    const messages = this.state.messages || [];
     
     // Check for duplicates by ID or content+timestamp
     const isDuplicate = messages.some(msg => 
       msg.message_id === data.message_id || 
       (msg.content === data.content && 
        msg.sender_id === data.sender_id && 
-       Math.abs(new Date(msg.created_at) - new Date(data.created_at)) < 5000)
+       Math.abs(new Date(msg.timestamp || msg.created_at) - new Date(data.timestamp || data.created_at)) < 5000)
     );
     
     if (isDuplicate) {
@@ -249,27 +453,102 @@ const ChatPage = {
       room_id: data.room_id,
       sender_id: data.sender_id,
       content: data.content,
-      created_at: data.created_at || new Date().toISOString(),
-      via_websocket: true // Mark that this came via WebSocket
+      message_type: data.message_type || 'text',
+      created_at: data.timestamp || data.created_at || new Date().toISOString(),
+      status: 'received'
     };
-    
-    console.log('Adding message to state and UI:', messageObj);
     
     // Add to state
     messages.push(messageObj);
-    stateManager.set('messages', messages);
+    this.state.messages = messages;
     
     // Get current user ID
-    const userId = stateManager.get('userId');
+    const userId = this.state.userId;
     
     // Add to UI
-    ChatMessage.addToContainer(this.chatContainer, messageObj, userId);
+    this.renderMessage(messageObj, userId !== messageObj.sender_id);
     
-    // Always scroll to bottom when new message arrives
-    ChatMessage.scrollToBottom(this.chatContainer);
+    // Play notification sound if the message is from someone else and tab is not visible
+    if (userId !== messageObj.sender_id && document.visibilityState !== 'visible') {
+      this.playNotificationSound();
+    }
+  },
+  
+  /**
+   * Render a message in the chat container
+   * @param {Object} message - The message to render
+   * @param {boolean} isIncoming - Whether the message is incoming (from someone else)
+   */
+  renderMessage(message, isIncoming = false) {
+    if (!this.chatContainer) {
+      console.error('Chat container not found');
+      return;
+    }
     
-    // Play notification sound
-    this.playNotificationSound();
+    // Create message element
+    const messageEl = document.createElement('div');
+    messageEl.className = `message ${isIncoming ? 'message-received' : 'message-sent'}`;
+    messageEl.dataset.messageId = message.message_id;
+    
+    // Format timestamp
+    const timestamp = new Date(message.created_at).toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    
+    // Set HTML content
+    messageEl.innerHTML = `
+      <div class="message-content">${message.content}</div>
+      <div class="message-time">${timestamp}</div>
+    `;
+    
+    // Add status indicator for outgoing messages
+    if (!isIncoming && message.status) {
+      const statusEl = document.createElement('div');
+      statusEl.className = 'message-status';
+      
+      switch (message.status) {
+        case 'sending':
+          statusEl.innerHTML = '<i class="fa fa-clock-o"></i>';
+          break;
+        case 'sent':
+          statusEl.innerHTML = '<i class="fa fa-check"></i>';
+          break;
+        case 'delivered':
+          statusEl.innerHTML = '<i class="fa fa-check-double"></i>';
+          break;
+        case 'read':
+          statusEl.innerHTML = '<i class="fa fa-check-double" style="color: blue;"></i>';
+          break;
+        case 'failed':
+          statusEl.innerHTML = '<i class="fa fa-exclamation-circle" style="color: red;"></i>';
+          break;
+        default:
+          statusEl.innerHTML = '';
+      }
+      
+      messageEl.appendChild(statusEl);
+    }
+    
+    // Add to container
+    this.chatContainer.appendChild(messageEl);
+    
+    // Scroll to bottom
+    this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+  },
+  
+  /**
+   * Handle user joined event
+   * @param {Object} data - User joined data
+   */
+  handleUserJoined(data) {
+    console.log('User joined:', data);
+    const opponentId = this.state.opponentId;
+    
+    // Check if the joined user is our opponent
+    if (data.user_id === opponentId) {
+      this.updateStatusIndicator('online');
+    }
   },
   
   /**
@@ -277,12 +556,12 @@ const ChatPage = {
    * @param {Object} data - User active data
    */
   handleUserActive(data) {
-    // Update UI to show user is active
-    const statusElement = document.getElementById('user-status');
-    if (statusElement) {
-      statusElement.textContent = 'Active';
-      statusElement.classList.add('active');
-      statusElement.classList.remove('away');
+    console.log('User active:', data);
+    const opponentId = this.state.opponentId;
+    
+    // Check if the active user is our opponent
+    if (data.user_id === opponentId) {
+      this.updateStatusIndicator('online');
     }
   },
   
@@ -291,12 +570,12 @@ const ChatPage = {
    * @param {Object} data - User away data
    */
   handleUserAway(data) {
-    // Update UI to show user is away
-    const statusElement = document.getElementById('user-status');
-    if (statusElement) {
-      statusElement.textContent = 'Away';
-      statusElement.classList.add('away');
-      statusElement.classList.remove('active');
+    console.log('User away:', data);
+    const opponentId = this.state.opponentId;
+    
+    // Check if the away user is our opponent
+    if (data.user_id === opponentId) {
+      this.updateStatusIndicator('away');
     }
   },
   
@@ -305,19 +584,43 @@ const ChatPage = {
    * Used to detect when the user switches tabs or windows
    */
   handleVisibilityChange() {
-    const roomId = stateManager.get('roomId');
-    const userId = stateManager.get('userId');
+    const roomId = this.state.roomId;
+    const userId = this.state.userId;
     
     if (document.visibilityState === 'visible') {
-      socketClient.setUserActive({
-        room_id: roomId,
-        visitor_id: userId
+      this.setUserActive(roomId, userId);
+    } else {
+      this.setUserAway(roomId, userId);
+    }
+  },
+  
+  /**
+   * Set user as active in the chat
+   * @param {string} roomId - The room ID
+   * @param {string} userId - The user ID
+   */
+  setUserActive(roomId, userId) {
+    if (window.SocketClient && window.SocketClient.sendUserStatus) {
+      window.SocketClient.sendUserStatus(roomId, true).catch(error => {
+        console.error('Error sending active status:', error);
       });
     } else {
-      socketClient.setUserAway({
-        room_id: roomId,
-        visitor_id: userId
+      console.warn('Socket client not initialized or missing sendUserStatus method');
+    }
+  },
+  
+  /**
+   * Set user as away in the chat
+   * @param {string} roomId - The room ID
+   * @param {string} userId - The user ID
+   */
+  setUserAway(roomId, userId) {
+    if (window.SocketClient && window.SocketClient.sendUserStatus) {
+      window.SocketClient.sendUserStatus(roomId, false).catch(error => {
+        console.error('Error sending away status:', error);
       });
+    } else {
+      console.warn('Socket client not initialized or missing sendUserStatus method');
     }
   },
   
@@ -326,8 +629,8 @@ const ChatPage = {
    * Used to detect when the user closes the browser or navigates away
    */
   handleBeforeUnload() {
-    const roomId = stateManager.get('roomId');
-    const userId = stateManager.get('userId');
+    const roomId = this.state.roomId;
+    const userId = this.state.userId;
     
     // Use navigator.sendBeacon for reliable delivery even when page is unloading
     if (navigator.sendBeacon) {
@@ -347,191 +650,177 @@ const ChatPage = {
   },
   
   /**
-   * Load chat messages from the API
+   * Load chat messages from API
    * @returns {Promise} - Promise that resolves when messages are loaded
    */
   async loadChatMessages() {
     return new Promise(async (resolve, reject) => {
       try {
-        const roomId = stateManager.get('roomId');
+        const roomId = this.state.roomId;
         console.log(`Loading messages for room: ${roomId}`);
         
-        // Get user ID for displaying messages
-        const userId = AuthHelper.getUserId();
+        // Check if chat container exists
+        if (!this.chatContainer) {
+          console.error('Chat container not found');
+          return reject(new Error('Chat container not found'));
+        }
         
-        try {
-          // Use the API client to fetch messages
-          const response = await apiClient.getChatMessages(roomId);
-          console.log('Messages API response:', response);
+        // Get messages from API
+        const result = await apiClient.getMessages(roomId);
+        
+        if (result && Array.isArray(result)) {
+          console.log(`Loaded ${result.length} messages`);
           
-          if (response.messages && Array.isArray(response.messages) && response.messages.length > 0) {
-            console.log(`Loaded ${response.messages.length} messages from history`);
-            
+          if (result.length > 0) {
             // Create a map of existing messages by message_id to avoid duplicates
             const existingMessages = {};
-            const messages = stateManager.get('messages') || [];
+            const messages = this.state.messages || [];
             messages.forEach(msg => {
               if (msg.message_id) {
                 existingMessages[msg.message_id] = true;
               }
             });
             
-            // Add only new messages to the state
-            const newMessages = [];
-            response.messages.forEach(msg => {
-              // Skip messages that are already in state
-              if (msg.message_id && existingMessages[msg.message_id]) {
-                return;
-              }
-              
-              // Format message to match our expected structure
-              const messageObj = {
+            // Filter out duplicates and format new messages
+            const newMessages = result
+              .filter(msg => !existingMessages[msg.message_id])
+              .map(msg => ({
                 message_id: msg.message_id,
                 room_id: msg.room_id || roomId,
                 sender_id: msg.sender_id,
                 content: msg.content,
-                created_at: msg.created_at,
-                via_http: true // Mark that this came via HTTP
-              };
+                message_type: msg.message_type || 'text',
+                created_at: msg.created_at || msg.timestamp || new Date().toISOString(),
+                status: 'received'
+              }));
               
-              newMessages.push(messageObj);
-              existingMessages[msg.message_id] = true;
+            // Get userId for checking if message is incoming  
+            const userId = this.state.userId;
+            
+            // Sort messages by created_at
+            const allMessages = [...messages, ...newMessages].sort((a, b) => {
+              return new Date(a.created_at) - new Date(b.created_at);
             });
             
-            if (newMessages.length > 0) {
-              // Add to existing messages
-              const updatedMessages = [...messages, ...newMessages];
+            // Update state
+            this.state.messages = allMessages;
+            
+            // Clear the container if this is the first render
+            if (messages.length === 0) {
+              this.chatContainer.innerHTML = '';
               
-              // Sort by created_at
-              updatedMessages.sort((a, b) => {
-                const dateA = new Date(a.created_at || 0);
-                const dateB = new Date(b.created_at || 0);
-                return dateA - dateB;
+              // Render all messages
+              allMessages.forEach(msg => {
+                this.renderMessage(msg, msg.sender_id !== userId);
               });
-              
-              // Update state
-              stateManager.set('messages', updatedMessages);
-              
-              // Clear the container if this is the first render
-              if (messages.length === 0) {
-                this.chatContainer.innerHTML = '';
-              }
-              
-              // Render the new messages
-              newMessages.forEach(msg => {
-                ChatMessage.addToContainer(this.chatContainer, msg, userId);
-              });
-              
-              console.log(`Added ${newMessages.length} new messages from HTTP API`);
             } else {
-              console.log('No new messages from HTTP API');
+              // Only render new messages
+              newMessages.forEach(msg => {
+                this.renderMessage(msg, msg.sender_id !== userId);
+              });
             }
-          } else {
-            console.log('No messages in history');
           }
           
-          // Always resolve the promise, even if there are no messages
-          resolve();
-        } catch (fetchError) {
-          console.error('Fetch error:', fetchError);
-          this.showError(`Network error: ${fetchError.message}`);
-          reject(fetchError);
+          // Resolve with messages
+          resolve(result);
+        } else {
+          console.warn('No messages or invalid response:', result);
+          resolve([]);
         }
       } catch (error) {
-        console.error('Failed to load chat messages:', error);
-        this.showError('Could not load chat messages. Please try again later.');
+        console.error('Error loading messages:', error);
+        this.showError('Failed to load messages. Please try again.');
         reject(error);
       }
     });
   },
   
   /**
-   * Send a message
+   * Send a message in the chat
    */
   sendMessage() {
-    const messageContent = this.messageInput.value.trim();
+    // Get message content
+    const content = this.messageInput.value.trim();
+    if (!content) return;
     
-    if (!messageContent) {
-      return;
-    }
+    // Clear input field
+    this.messageInput.value = '';
+    this.messageInput.focus();
     
-    const roomId = stateManager.get('roomId');
-    const userId = stateManager.get('userId');
+    const roomId = this.state.roomId;
+    const userId = this.state.userId;
     
     console.log(`Sending message in room ${roomId} from user ${userId}`);
     
-    // Generate a temporary ID for the message
-    const tempId = Date.now().toString();
+    // Create a temporary ID for the message
+    const tempId = `tmp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Create a message object
+    // Create message data object
     const messageData = {
-      room_id: roomId,
-      message: messageContent,
       message_id: tempId,
-      content: messageContent,
+      room_id: roomId,
       sender_id: userId,
+      content: content,
+      message_type: 'text',
       created_at: new Date().toISOString(),
-      sending: true // Mark as sending
+      status: 'sending'
     };
     
-    console.log('Message data:', messageData);
-    
-    // Clear the input
-    this.messageInput.value = '';
-    
-    // Add the message to the UI
-    ChatMessage.addToContainer(this.chatContainer, messageData, userId);
-    
     // Add the message to state
-    const messages = stateManager.get('messages') || [];
+    const messages = this.state.messages || [];
     messages.push(messageData);
-    stateManager.set('messages', messages);
+    this.state.messages = messages;
     
     // Try WebSocket first
-    const isSocketConnected = socketClient.connected;
-    let websocketSent = false;
-    
-    if (isSocketConnected) {
-      console.log('Sending message via WebSocket:', {
-        room_id: roomId,
-        message: messageContent,
-        message_id: tempId
-      });
-      
-      try {
-        socketClient.sendMessage({
-          room_id: roomId,
-          message: messageContent,
-          message_id: tempId
+    if (window.SocketClient && window.SocketClient.isConnected()) {
+      console.log('Sending message via WebSocket');
+      window.SocketClient.sendMessage(roomId, content, tempId)
+        .then(result => {
+          console.log('Message sent successfully via WebSocket:', result);
+          this.updateMessageStatus(tempId, { status: 'sent' });
+        })
+        .catch(error => {
+          console.error('Failed to send message via WebSocket:', error);
+          
+          // Fallback to HTTP
+          this.sendMessageViaHttp(roomId, content, tempId, userId)
+            .then(result => {
+              console.log('Message sent successfully via HTTP:', result);
+              this.updateMessageStatus(tempId, { status: 'sent', server_message_id: result.message_id });
+            })
+            .catch(httpError => {
+              console.error('Failed to send message via HTTP:', httpError);
+              this.updateMessageStatus(tempId, { status: 'failed' });
+              this.showError('Failed to send message. Please try again.');
+            });
         });
-        websocketSent = true;
-        console.log('Message sent via WebSocket');
-        
-        // Update message status in state
-        this.updateMessageStatus(tempId, { sending: false, sent_via_websocket: true });
-      } catch (socketError) {
-        console.error('Error sending message via WebSocket:', socketError);
-        websocketSent = false;
-      }
+    } else {
+      // If no WebSocket connection, use HTTP directly
+      console.log('No WebSocket connection, sending message via HTTP');
+      this.sendMessageViaHttp(roomId, content, tempId, userId)
+        .then(result => {
+          console.log('Message sent successfully via HTTP:', result);
+          this.updateMessageStatus(tempId, { status: 'sent', server_message_id: result.message_id });
+        })
+        .catch(error => {
+          console.error('Failed to send message via HTTP:', error);
+          this.updateMessageStatus(tempId, { status: 'failed' });
+          this.showError('Failed to send message. Please try again.');
+        });
     }
     
-    // If WebSocket failed or is not connected, send via HTTP immediately
-    if (!websocketSent) {
-      console.log('WebSocket unavailable, sending via HTTP immediately');
-      this.sendMessageViaHttp(roomId, messageContent, tempId, userId);
-    } else {
-      // Use HTTP as a backup if no WebSocket confirmation after delay
-      setTimeout(() => {
-        // Get the current message from state to see if it's been confirmed
-        const currentMessages = stateManager.get('messages') || [];
-        const message = currentMessages.find(m => m.message_id === tempId);
-        
-        if (message && message.sending) {
-          console.log('No WebSocket confirmation received, sending backup via HTTP');
-          this.sendMessageViaHttp(roomId, messageContent, tempId, userId);
-        }
-      }, 1500); // 1.5 second delay for WebSocket confirmation
-    }
+    // Check message delivery status after a delay
+    setTimeout(() => {
+      // Get the current message from state to see if it's been confirmed
+      const currentMessages = this.state.messages || [];
+      const message = currentMessages.find(m => m.message_id === tempId);
+      
+      if (message && message.status === 'sending') {
+        // Message is still in sending state after timeout, mark as uncertain
+        this.updateMessageStatus(tempId, { status: 'uncertain' });
+        this.showError('Message delivery status unknown. It may or may not have been delivered.');
+      }
+    }, 10000);
   },
   
   /**
@@ -540,62 +829,55 @@ const ChatPage = {
    * @param {Object} updates - Status updates
    */
   updateMessageStatus(messageId, updates) {
-    const messages = stateManager.get('messages') || [];
+    const messages = this.state.messages || [];
     const messageIndex = messages.findIndex(m => m.message_id === messageId);
     
     if (messageIndex >= 0) {
       messages[messageIndex] = { ...messages[messageIndex], ...updates };
-      stateManager.set('messages', messages);
+      this.state.messages = messages;
     }
   },
   
   /**
-   * Send a message via HTTP as a backup
-   * @param {string} roomId - Room ID
+   * Send a message via HTTP (used as fallback when WebSocket is not available)
+   * @param {string} roomId - Chat room ID
    * @param {string} message - Message content
-   * @param {string} messageId - Message ID
-   * @param {string} userId - User ID
+   * @param {string} messageId - Temporary message ID
+   * @param {string} userId - Sender user ID
+   * @returns {Promise} - Promise that resolves with message data when sent
    */
   async sendMessageViaHttp(roomId, message, messageId, userId) {
     try {
-      console.log(`Sending message via HTTP to room ${roomId}`);
+      console.log(`Sending message via HTTP API: ${message.substring(0, 30)}...`);
       
-      // Update message status in state
-      this.updateMessageStatus(messageId, { sending_via_http: true });
+      // Create request body
+      const requestBody = {
+        room_id: roomId,
+        content: message,
+        client_message_id: messageId,
+        sender_id: userId
+      };
       
-      const response = await fetch(`${window.location.origin}/api/chats/${roomId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        },
-        body: JSON.stringify({
-          message: message,
-          message_id: messageId,
-          sender_id: userId
-        })
+      // Call API to send message
+      const response = await apiClient.sendMessage(roomId, requestBody);
+      
+      // Update message status
+      this.updateMessageStatus(messageId, { 
+        status: 'sent', 
+        server_message_id: response.message_id || messageId,
+        sent_via: 'http'
       });
       
-      if (response.ok) {
-        console.log('Message sent successfully via HTTP');
-        this.updateMessageStatus(messageId, { 
-          sending: false, 
-          sending_via_http: false,
-          sent_via_http: true 
-        });
-      } else {
-        console.error('Failed to send message via HTTP:', await response.text());
-        this.updateMessageStatus(messageId, { 
-          sending_via_http: false,
-          error: 'HTTP send failed' 
-        });
-      }
+      // Return response
+      return response;
     } catch (error) {
       console.error('Error sending message via HTTP:', error);
-      this.updateMessageStatus(messageId, { 
-        sending_via_http: false,
-        error: error.message 
-      });
+      
+      // Update message status
+      this.updateMessageStatus(messageId, { status: 'failed', error: error.message });
+      
+      // Rethrow error
+      throw error;
     }
   },
   

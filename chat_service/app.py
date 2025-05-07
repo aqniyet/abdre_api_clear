@@ -858,9 +858,9 @@ def get_my_chats():
     """Get chats for the current user"""
     user_id = request.headers.get("X-User-ID")
     
-    if not user_id:
-        logger.error("No user ID provided in X-User-ID header")
-        return jsonify([]), 200  # Return empty list instead of error for better UX
+    if not user_id or user_id == "guest":
+        logger.error("No valid user ID provided in X-User-ID header")
+        return jsonify({"error": "Authentication required", "message": "Please login to view your conversations"}), 401
     
     logger.info(f"Getting chats for user: {user_id}")
     
@@ -877,7 +877,7 @@ def get_my_chats():
         try:
             # First try to get chats from participants table
             cur.execute("""
-                SELECT c.chat_id, c.created_at, 
+                SELECT c.chat_id, c.created_at, c.title,
                        (
                            SELECT content 
                            FROM messages 
@@ -896,20 +896,33 @@ def get_my_chats():
                            SELECT COUNT(*) 
                            FROM messages 
                            WHERE chat_id = c.chat_id
-                       ) as message_count
+                       ) as message_count,
+                       (
+                           SELECT COUNT(*) 
+                           FROM participants 
+                           WHERE chat_id = c.chat_id
+                       ) as participant_count,
+                       (
+                           SELECT encrypted 
+                           FROM chats 
+                           WHERE chat_id = c.chat_id
+                       ) as encrypted
                 FROM chats c
                 JOIN participants p ON c.chat_id = p.chat_id
                 WHERE p.user_id = %s
                 ORDER BY last_activity DESC NULLS LAST
             """, (user_id,))
-        except psycopg2.errors.UndefinedTable:
-            # If participants table doesn't exist, fall back to using messages
-            logger.warning("Participants table not found, using messages to determine user's chats")
+        except (psycopg2.errors.UndefinedTable, psycopg2.errors.UndefinedColumn) as e:
+            # If participants table doesn't exist or column is missing, fall back to using messages
+            logger.warning(f"Participants table issue: {str(e)}, using messages to determine user's chats")
             conn.rollback()  # Clear the error state
             
             # Get chats where the user has sent messages
             cur.execute("""
-                SELECT c.chat_id, c.created_at, 
+                SELECT DISTINCT 
+                       c.chat_id, 
+                       c.created_at,
+                       COALESCE(c.title, 'Chat ' || substring(c.chat_id, 1, 8)) as title,
                        (
                            SELECT content 
                            FROM messages 
@@ -923,18 +936,32 @@ def get_my_chats():
                            WHERE chat_id = c.chat_id 
                            ORDER BY created_at DESC 
                            LIMIT 1
-                       ) as last_activity,
+                       ) as last_message_time,
                        (
                            SELECT COUNT(*) 
                            FROM messages 
                            WHERE chat_id = c.chat_id
-                       ) as message_count
+                       ) as message_count,
+                       (
+                           SELECT COUNT(DISTINCT sender_id) 
+                           FROM messages 
+                           WHERE chat_id = c.chat_id
+                       ) as participant_count
                 FROM chats c
-                WHERE EXISTS (
-                    SELECT 1 FROM messages m WHERE m.chat_id = c.chat_id AND m.sender_id = %s
-                )
-                ORDER BY last_activity DESC NULLS LAST
-            """, (user_id,))
+                JOIN messages m ON c.chat_id = m.chat_id
+                WHERE m.sender_id = %s
+                   OR c.chat_id IN (
+                      SELECT DISTINCT chat_id 
+                      FROM messages 
+                      WHERE chat_id IN (
+                         SELECT chat_id 
+                         FROM messages 
+                         WHERE sender_id = %s
+                      )
+                   )
+                GROUP BY c.chat_id
+                ORDER BY MAX(m.created_at) DESC
+            """, (user_id, user_id))
         
         user_chats = []
         for row in cur.fetchall():
@@ -942,6 +969,8 @@ def get_my_chats():
                 # Format the dates safely
                 if row.get('last_activity') and isinstance(row['last_activity'], datetime.datetime):
                     last_activity = row['last_activity'].isoformat()
+                elif row.get('last_message_time') and isinstance(row['last_message_time'], datetime.datetime):
+                    last_activity = row['last_message_time'].isoformat()
                 else:
                     last_activity = None
                     
@@ -950,16 +979,43 @@ def get_my_chats():
                 else:
                     created_at = None
                 
+                # Get recipient information
+                recipient_name = None
+                recipient_status = "offline"
+                recipient_avatar = None
+                
+                try:
+                    # Try to get the recipient (other participant) info
+                    if row.get('chat_id'):
+                        # Query the messages to identify a user other than current user
+                        get_recipient_sql = """
+                            SELECT DISTINCT sender_id 
+                            FROM messages 
+                            WHERE chat_id = %s AND sender_id != %s 
+                            LIMIT 1
+                        """
+                        cur.execute(get_recipient_sql, (row['chat_id'], user_id))
+                        recipient_row = cur.fetchone()
+                        
+                        if recipient_row and recipient_row['sender_id']:
+                            recipient_name = recipient_row['sender_id']
+                            # In a real implementation, you would query user info service
+                except Exception as recipient_err:
+                    logger.error(f"Error getting recipient info: {str(recipient_err)}")
+                
                 # Create a standard chat object with all the expected fields
                 chat_data = {
-                    "chat_id": row["chat_id"],
-                    "id": row["chat_id"],  # Frontend expects this duplicate
-                    "name": f"Chat Room {row['chat_id'].split('-')[0]}",  # Generate a readable name
+                    "id": row["chat_id"],
+                    "title": row.get("title", f"Chat {row['chat_id'].split('-')[0]}"),
                     "last_message": row.get("last_message"),
+                    "last_message_time": last_activity,
                     "message_count": row.get("message_count", 0),
-                    "last_activity": last_activity,
                     "created_at": created_at,
-                    "participant_count": 2  # Default to 2 participants
+                    "participant_count": row.get("participant_count", 2),
+                    "encrypted": row.get("encrypted", False),
+                    "recipient_name": recipient_name,
+                    "recipient_status": recipient_status,
+                    "recipient_avatar": recipient_avatar
                 }
                 
                 user_chats.append(chat_data)
