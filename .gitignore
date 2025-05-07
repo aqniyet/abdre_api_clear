@@ -1,15 +1,17 @@
-# Python
+# Python bytecode and cache
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
 venv/
 ENV/
+env/
+
+# Build and distribution
 build/
-develop-eggs/
 dist/
+develop-eggs/
 downloads/
 eggs/
 .eggs/
@@ -23,21 +25,14 @@ wheels/
 .installed.cfg
 *.egg
 
-# Node.js
-node_modules/
-npm-debug.log
-yarn-debug.log
-yarn-error.log
-.npm
-.yarn-integrity
-.env
-.env.test
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Logs and databases
+logs/
+*.log
+*.sqlite
+*.db
+*.pickle
 
-# IDEs and editors
+# IDE and editor files
 .idea/
 .vscode/
 *.swp
@@ -50,37 +45,30 @@ yarn-error.log
 .settings/
 *.sublime-workspace
 .DS_Store
+Thumbs.db
 
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Node.js
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.npm
+.yarn-integrity
 
-# Database
-*.sqlite
-*.db
+# Environment files
+.env
+.env.*
+*.env
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+# Docker
+.dockerignore
 
-# Unit test / coverage reports
+# Deployment
+.vercel
+.netlify
+
+# Test artifacts
+.pytest_cache/
 htmlcov/
 .tox/
 .coverage
@@ -90,26 +78,27 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
-.pytest_cache/
-
-# Docker
-.dockerignore
-.env
-.env.dev
-.env.prod
-
-# Deployment
-.vercel
-.netlify
 
 # Temporary files
 *.tmp
 *.temp
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
+
+# Backup files
+cleanup-backup-*/
+*-backup-*/
+
+# Auxiliary scripts - explicitly ignoring
+fix-*.sh
+*fix*.sh
+*fix*.py
+run_*.sh
+create-test-*.sh
+test-*.sh
+*.test.js
+update_*.py
+check_*.py
+cleanup*.sh
+*-README*.md
 
 # Compiled files
 *.com
@@ -117,5 +106,4 @@ Thumbs.db
 *.dll
 *.exe
 *.o
-*.out
-*.so 
+*.out 
