@@ -65,6 +65,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     cleanupExistingInvitation();
                 }
                 
+                // Check if QRCodeGenerator is available
+                if (typeof QRCodeGenerator === 'undefined') {
+                    throw new Error('QR code generator library not available');
+                }
+                
                 // Generate the invitation using the ChatService
                 const invitation = await ChatService.createInvitation();
                 activeInvitationToken = invitation.invitation_token;
@@ -77,10 +82,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Generate QR code
                 qrCodeEl.innerHTML = ''; // Clear loading state
-                QRCodeGenerator.generateQR('qr-code', invitationUrl, {
+                const qrCodeGenerated = QRCodeGenerator.generateQR('qr-code', invitationUrl, {
                     width: 256,
                     height: 256
                 });
+                
+                if (!qrCodeGenerated) {
+                    throw new Error('Failed to generate QR code');
+                }
                 
                 // Update status
                 statusEl.textContent = 'Active';

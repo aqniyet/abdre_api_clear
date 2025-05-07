@@ -7,6 +7,7 @@ import os
 import json
 import uuid
 import logging
+import requests
 from datetime import datetime, timedelta
 
 # Import Flask and related libraries
@@ -33,6 +34,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", logger=IS_DEVELOPMENT, engine
 
 # Get JWT secret from environment
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-key")
+CHAT_SERVICE_URL = os.environ.get("CHAT_SERVICE_URL", "http://localhost:5504")
 
 # User tracking
 connected_clients = {}  # sid -> user data
