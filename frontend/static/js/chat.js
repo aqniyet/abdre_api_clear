@@ -472,40 +472,143 @@ const ChatClient = {
   },
   
   /**
-   * Send a message through the WebSocket
+   * Send a message
    */
   sendMessage: function() {
     if (!this.isConnected || !this.elements.messageInput) {
-      return;
+      this.showError('Cannot send message: not connected to chat server');
+      return false;
     }
     
+    // Get message text
     const messageText = this.elements.messageInput.value.trim();
-    if (!messageText) {
-      return;
+    if (!messageText) return false;
+    
+    console.log('Sending message via WebSocket:', messageText);
+    
+    // Generate temporary ID for message
+    const tempId = `tmp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    
+    // Create message object
+    const messageData = {
+      message_id: tempId,
+      room_id: this.chatId,
+      sender_id: AuthHelper.getUserId(),
+      content: messageText,
+      created_at: new Date().toISOString(),
+      message_type: 'text',
+      status: 'sending'
+    };
+    
+    // Add to local messages array for optimistic UI update
+    this.messages.push(messageData);
+    
+    // Add to UI immediately for responsive feel
+    if (this.elements.chatMessages) {
+      this.displayMessage(messageData, true);
     }
+    
+    // Clear input field right away
+    this.elements.messageInput.value = '';
+    this.elements.messageInput.focus();
     
     try {
-      const message = {
-        type: 'chat_message',
-        content: messageText,
-        chat_id: this.chatId
-      };
-      
-      // Check if we're using Socket.IO or traditional WebSocket
-      if (this.socket.emit) {
-        // Socket.IO
-        console.log('Sending message via Socket.IO:', message);
-        this.socket.emit('message', message);
-      } else {
-        // Traditional WebSocket
-        console.log('Sending message via WebSocket:', message);
-        this.socket.send(JSON.stringify(message));
+      // Use SocketClient if available (preferred)
+      if (window.SocketClient && window.SocketClient.sendMessage) {
+        window.SocketClient.sendMessage(this.chatId, messageText, tempId)
+          .then(result => {
+            console.log('Message sent successfully via SocketClient:', result);
+            this.updateMessageStatus(tempId, 'sent');
+          })
+          .catch(error => {
+            console.error('Error sending message via SocketClient:', error);
+            this.updateMessageStatus(tempId, 'failed');
+            this.showError('Failed to send message. Please try again.');
+          });
+      } 
+      // Fallback to Socket.IO if available
+      else if (this.socket && this.socket.emit) {
+        this.socket.emit('message', {
+          room_id: this.chatId,
+          content: messageText,
+          message_id: tempId,
+          sender_id: AuthHelper.getUserId()
+        });
+        
+        // Set timeout to check if message was sent successfully
+        setTimeout(() => {
+          const message = this.messages.find(m => m.message_id === tempId);
+          if (message && message.status === 'sending') {
+            // Message still in sending state after timeout
+            this.updateMessageStatus(tempId, 'uncertain');
+            this.showError('Message delivery status unknown. The message may not have been received.');
+          }
+        }, 10000);
+      } 
+      // No WebSocket connection available
+      else {
+        console.error('No WebSocket connection method available');
+        this.updateMessageStatus(tempId, 'failed');
+        this.showError('Cannot send message: connection to chat server not available.');
       }
-      
-      this.elements.messageInput.value = '';
     } catch (error) {
       console.error('Error sending message:', error);
+      this.updateMessageStatus(tempId, 'failed');
       this.showError('Failed to send message. Please try again.');
+    }
+    
+    return false; // Prevent form submission
+  },
+  
+  /**
+   * Update message status in UI
+   * @param {string} messageId The message ID
+   * @param {string} status The new status ('sent', 'delivered', 'read', 'failed', 'uncertain')
+   */
+  updateMessageStatus: function(messageId, status) {
+    // Update in messages array
+    const messageIndex = this.messages.findIndex(m => m.message_id === messageId);
+    if (messageIndex >= 0) {
+      this.messages[messageIndex].status = status;
+    }
+    
+    // Update in UI
+    const messageElement = document.querySelector(`.message[data-message-id="${messageId}"]`);
+    if (messageElement) {
+      // Remove existing status classes
+      messageElement.classList.remove('status-sending', 'status-sent', 'status-delivered', 'status-read', 'status-failed', 'status-uncertain');
+      
+      // Add new status class
+      messageElement.classList.add(`status-${status}`);
+      
+      // Update status indicator if exists
+      const statusIndicator = messageElement.querySelector('.message-status');
+      if (statusIndicator) {
+        let statusHTML = '';
+        
+        switch (status) {
+          case 'sending':
+            statusHTML = '<i class="fas fa-clock"></i>';
+            break;
+          case 'sent':
+            statusHTML = '<i class="fas fa-check"></i>';
+            break;
+          case 'delivered':
+            statusHTML = '<i class="fas fa-check-double"></i>';
+            break;
+          case 'read':
+            statusHTML = '<i class="fas fa-check-double" style="color: #0d6efd;"></i>';
+            break;
+          case 'failed':
+            statusHTML = '<i class="fas fa-exclamation-circle" style="color: #dc3545;"></i>';
+            break;
+          case 'uncertain':
+            statusHTML = '<i class="fas fa-question-circle" style="color: #ffc107;"></i>';
+            break;
+        }
+        
+        statusIndicator.innerHTML = statusHTML;
+      }
     }
   },
   

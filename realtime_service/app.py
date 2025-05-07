@@ -788,7 +788,7 @@ def handle_subscribe(data):
         logger.info(f"SUBSCRIBE - User {client['user_id']} subscribing to room {room}")
 
         # Join the Socket.IO room
-    join_room(room)
+        join_room(room)
 
         # Track room in client data if not already there
         if room not in client["rooms"]:
@@ -1035,13 +1035,13 @@ def handle_check_invitation(data):
                 "is_used": status_data.get("is_used", False),
                 "chat_id": status_data.get("chat_id")
             })
-    else:
-            error_data = response.json()
-            emit("invitation_status", {
-                "success": False,
-                "error": error_data.get("error", "Failed to check invitation status")
-            })
-    
+        else:
+                error_data = response.json()
+                emit("invitation_status", {
+                    "success": False,
+                    "error": error_data.get("error", "Failed to check invitation status")
+                })
+        
     except Exception as e:
         logger.error(f"Error checking invitation status: {str(e)}")
         emit("invitation_status", {
@@ -1133,16 +1133,22 @@ def handle_qr_scanned(data):
                 # Notify the host that their QR was scanned
                 for host_sid, host_client in connected_clients.items():
                     if host_client.get("user_id") == host_id:
-                emit("qr_scanned_notification", {
-                    "invitation_token": invitation_token,
+                        emit("qr_scanned_notification", {
+                            "invitation_token": invitation_token,
                             "scanner_id": user_id
-                }, room=host_sid)
+                        }, room=host_sid)
             
             # Acknowledge the event
             emit("qr_scanned_ack", {
                 "success": True,
                 "invitation_token": invitation_token,
                 "message": "QR scan recorded successfully"
+            })
+        else:
+            logger.warning(f"Failed to get invitation status for token {invitation_token}")
+            emit("qr_scanned_ack", {
+                "success": False,
+                "error": "Failed to get invitation status"
             })
         
     except Exception as e:

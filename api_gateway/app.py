@@ -1984,9 +1984,11 @@ def realtime_service_proxy(path):
 @app.route("/api/realtime/socket.io/", methods=["GET", "POST", "OPTIONS"])
 def socketio_proxy():
     """Proxy WebSocket connections to realtime service"""
-    # Forward the request to the realtime service
-    target_url = f"{REALTIME_SERVICE_URL}/socket.io/"
-
+    # Handle OPTIONS preflight request
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        return response
+        
     # For WebSocket upgrade requests, add a special header for client information
     if request.headers.get("Upgrade", "").lower() == "websocket":
         logger.info("WebSocket upgrade request detected, preparing to proxy")
@@ -2049,7 +2051,18 @@ def socketio_proxy():
             
             # Generate correct socket.io connection URL with proper parameters
             token = query_params.get("token", "guest")
+            chat_id = query_params.get("chat_id", "")
+            
+            # Include any additional query parameters that might be needed
+            additional_params = ""
+            for key, value in query_params.items():
+                if key not in ["token", "chat_id", "EIO", "transport"]:
+                    additional_params += f"&{key}={value}"
+            
             connection_url = f"{realtime_url}/socket.io/?EIO=4&transport=websocket&token={token}"
+            if chat_id:
+                connection_url += f"&chat_id={chat_id}"
+            connection_url += additional_params
             
             logger.info(f"Generated WebSocket connection URL: {connection_url}")
             
@@ -2102,8 +2115,13 @@ def socketio_proxy():
         if not token:
             token = "guest"
         
+        # Get chat_id if present
+        chat_id = request.args.get("chat_id", "")
+        
         # Generate connection details for client
         connection_url = f"{realtime_url}/socket.io/?EIO=4&transport=websocket&token={token}"
+        if chat_id:
+            connection_url += f"&chat_id={chat_id}"
         
         logger.info(f"Returning connection details: {connection_url}")
         
@@ -2116,19 +2134,51 @@ def socketio_proxy():
             "token_valid": auth_data is not None,
             "user_id": user_id,
             "auth_type": "standard" if auth_data else "guest",
-            "query_params": {"token": token},
+            "query_params": {"token": token, "chat_id": chat_id},
             "transport": "websocket"
         }), 200
 
     # For regular HTTP requests to Socket.IO (polling), use the standard proxy
-    logger.info(f"Socket.IO HTTP request (polling) proxied to: {target_url}")
-
-    # Special handling for OPTIONS requests
-    if request.method == "OPTIONS":
-        response = app.make_default_options_response()
-        return response
-
-    return proxy_request(target_url, "REALTIME_SERVICE_URL")
+    logger.info(f"Socket.IO HTTP request (polling) proxied to realtime service")
+    
+    # Forward to actual realtime service
+    target_url = f"{REALTIME_SERVICE_URL}/socket.io/"
+    if request.query_string:
+        target_url += f"?{request.query_string.decode('utf-8')}"
+    
+    # Add auth header if not present in request
+    headers = dict(request.headers)
+    if "Authorization" not in headers:
+        auth_data = authenticate_token()
+        if auth_data:
+            token = auth_data.get("token", "guest")
+            headers["Authorization"] = f"Bearer {token}"
+        else:
+            headers["Authorization"] = "Bearer guest"
+    
+    # Forward the request
+    try:
+        method = request.method
+        data = request.get_data()
+        
+        logger.info(f"Proxying Socket.IO {method} request to: {target_url}")
+        
+        if method == "GET":
+            response = requests.get(target_url, headers=headers, timeout=5)
+        elif method == "POST":
+            response = requests.post(target_url, headers=headers, data=data, timeout=5)
+        else:
+            return jsonify({"error": "Method not allowed"}), 405
+        
+        # Return the response from the realtime service
+        return (
+            response.content,
+            response.status_code,
+            {"Content-Type": response.headers.get("Content-Type", "application/json")}
+        )
+    except Exception as e:
+        logger.error(f"Error proxying Socket.IO request: {e}")
+        return jsonify({"error": "Socket.IO proxy error", "message": str(e)}), 500
 
 
 @app.route("/api/ws-test", methods=["POST", "OPTIONS"])

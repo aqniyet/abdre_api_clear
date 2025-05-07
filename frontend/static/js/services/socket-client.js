@@ -67,6 +67,8 @@ const SocketClient = {
     _directConnectionUrl: null,
     _typingTimeouts: new Map(),
     _messagesAwaitingDelivery: new Map(),
+    _initializing: false, // Flag to prevent multiple initialization attempts
+    _initialized: false, // Flag to track if initialization has been completed
     
     /**
      * Initialize the socket client
@@ -75,6 +77,21 @@ const SocketClient = {
      * @returns {SocketClient} - The initialized client for chaining
      */
     init(options = {}) {
+        // Prevent multiple initializations at once
+        if (this._initializing) {
+            console.log('Socket client initialization already in progress');
+            return this;
+        }
+        
+        // Return if already initialized and connected
+        if (this._initialized && this._connected) {
+            console.log('Socket client already initialized and connected');
+            return this;
+        }
+        
+        this._initializing = true;
+        console.log('Initializing socket client...');
+        
         // Merge default options with custom options
         const socketOptions = {
             ...this.config.options,
@@ -82,15 +99,16 @@ const SocketClient = {
         };
         
         // Add authentication token if available
-        const token = AuthHelper.getToken() || 'guest';
+        const token = this._getToken() || 'guest';
         socketOptions.query = { token };
         socketOptions.auth = { token };
         
         // Create socket instance
         try {
-            // Use socket.io-client from CDN (already loaded in HTML)
+            // Check if Socket.IO client is already available
             if (typeof io === 'undefined') {
                 console.error('Socket.IO client not loaded. Make sure to include socket.io-client.js');
+                this._initializing = false;
                 return this;
             }
             
@@ -99,17 +117,41 @@ const SocketClient = {
             this._checkConnectionMethod(socketOptions)
                 .then(() => {
                     console.log('Socket connection method determined, connecting...');
+                    this._initialized = true;
+                    this._initializing = false;
                 })
                 .catch(error => {
                     console.error('Error determining connection method:', error);
                     // Fall back to standard connection
                     this._initializeSocketConnection(this.config.url, socketOptions);
+                    this._initialized = true;
+                    this._initializing = false;
                 });
             
             return this;
         } catch (error) {
             console.error('Error initializing socket client:', error);
+            this._initializing = false;
             return this;
+        }
+    },
+    
+    /**
+     * Get the authentication token, either from AuthHelper or from localStorage directly
+     * @returns {string|null} The auth token or null if not found
+     * @private
+     */
+    _getToken() {
+        // Try to get the token from AuthHelper first
+        if (typeof AuthHelper !== 'undefined' && AuthHelper.getToken) {
+            return AuthHelper.getToken();
+        }
+        
+        // Fallback to localStorage
+        try {
+            return localStorage.getItem('auth_token');
+        } catch (e) {
+            return null;
         }
     },
     
@@ -125,7 +167,7 @@ const SocketClient = {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': `Bearer ${AuthHelper.getToken() || 'guest'}`
+                    'Authorization': `Bearer ${this._getToken() || 'guest'}`
                 }
             });
             
@@ -199,55 +241,66 @@ const SocketClient = {
             this._initializeSocketConnection(this._directConnectionUrl, socketOptions);
         } catch (error) {
             console.error('Error determining connection method:', error);
-            console.log('Falling back to standard connection');
-            
-            // Last resort fallback to current host with default realtime port
-            const isSecure = window.location.protocol === 'https:';
-            const host = window.location.hostname;
-            const port = '5506'; // Default port for realtime service
-            const protocol = isSecure ? 'https' : 'http';
-            
-            this._directConnectionUrl = `${protocol}://${host}:${port}`;
-            console.log('Using fallback connection URL:', this._directConnectionUrl);
-            
-            // Initialize Socket.IO connection
-            this._initializeSocketConnection(this._directConnectionUrl, socketOptions);
+            throw error;
         }
     },
     
     /**
-     * Initialize the actual Socket.IO connection
+     * Initialize the Socket.IO connection
+     * 
+     * @param {string} url - The URL to connect to
+     * @param {Object} options - Socket.IO connection options
+     * @private
      */
     _initializeSocketConnection(url, options) {
-        // Create the socket connection
-        this._socket = io(url, options);
-        
-        // Set up event listeners
-        this._setupEventListeners();
-        
-        // Start connection
-        this.connect();
-        
-        console.log('Socket client initialized with URL:', url);
+        try {
+            console.log(`Initializing Socket.IO connection to ${url} with options:`, options);
+            
+            // If a socket already exists, disconnect it first
+            if (this._socket) {
+                console.log('Disconnecting existing socket before creating a new one');
+                this.disconnect();
+            }
+            
+            // Create the Socket.IO instance
+            this._socket = io(url, options);
+            
+            // Set up event listeners
+            this._setupEventListeners();
+            
+            // Connect if not auto-connecting
+            if (!options.autoConnect) {
+                this.connect();
+            } else {
+                console.log('Socket configured for auto-connection');
+            }
+        } catch (error) {
+            console.error('Error initializing Socket.IO connection:', error);
+            this._notifyConnectionListeners(false);
+        }
     },
     
     /**
-     * Connect to the Socket.IO server
+     * Connect to the socket server
      */
     connect() {
         if (!this._socket) {
-            console.error('Socket not initialized. Call init() first.');
+            console.error('Cannot connect: Socket not initialized');
             return;
         }
         
         if (!this._socket.connected) {
             console.log('Connecting to socket server...');
             this._socket.connect();
+        } else {
+            console.log('Socket already connected');
+            // Make sure the UI knows we're connected
+            this._notifyConnectionListeners(true);
         }
     },
     
     /**
-     * Disconnect from the Socket.IO server
+     * Disconnect from the socket server
      */
     disconnect() {
         if (this._socket && this._socket.connected) {
@@ -261,6 +314,7 @@ const SocketClient = {
     
     /**
      * Check if socket is connected
+     * @returns {boolean} True if connected
      */
     isConnected() {
         return this._socket && this._socket.connected;
@@ -270,167 +324,136 @@ const SocketClient = {
      * Set up internal event listeners
      */
     _setupEventListeners() {
-        if (!this._socket) return;
+        if (!this._socket) {
+            console.error('Cannot set up event listeners: Socket not initialized');
+            return;
+        }
         
         // Connection events
-        this._socket.on(this.config.eventTypes.CONNECT, () => {
+        this._socket.on('connect', () => {
             console.log('Socket connected');
             this._connected = true;
-            this._reconnecting = false;
+            
+            // Notify listeners of connection
+            this._notifyConnectionListeners(true);
+            
+            // Re-subscribe to rooms
+            this._resubscribeRooms();
             
             // Start heartbeat
             this._startHeartbeat();
             
-            // Resubscribe to rooms after reconnection
-            this._resubscribeRooms();
-            
-            // Process queued messages
+            // Process any queued messages
             this._processQueue();
-            
-            // Retry any messages that were pending delivery when disconnected
-            this._retryPendingMessages();
-            
-            // Notify connection listeners
-            this._notifyConnectionListeners(true);
         });
         
-        this._socket.on(this.config.eventTypes.DISCONNECT, (reason) => {
+        this._socket.on('disconnect', (reason) => {
             console.log(`Socket disconnected: ${reason}`);
             this._connected = false;
             
+            // Notify listeners of disconnection
+            this._notifyConnectionListeners(false);
+            
             // Stop heartbeat
             this._stopHeartbeat();
+        });
+        
+        this._socket.on('connect_error', (error) => {
+            console.error('Socket connection error:', error);
+            this._connected = false;
             
-            // Notify connection listeners
+            // Notify listeners of connection error
             this._notifyConnectionListeners(false);
         });
         
-        this._socket.on(this.config.eventTypes.RECONNECT_ATTEMPT, (attempt) => {
-            console.log(`Socket reconnection attempt ${attempt}`);
-            this._reconnecting = true;
-        });
-        
-        this._socket.on(this.config.eventTypes.RECONNECT, () => {
-            console.log('Socket reconnected');
+        this._socket.on('reconnect', (attemptNumber) => {
+            console.log('Socket reconnected after', attemptNumber, 'attempts');
             this._connected = true;
             this._reconnecting = false;
             
-            // Start heartbeat
-            this._startHeartbeat();
+            // Notify listeners of reconnection
+            this._notifyConnectionListeners(true);
             
-            // Resubscribe to rooms
+            // Re-subscribe to rooms
             this._resubscribeRooms();
             
-            // Process queued messages
-            this._processQueue();
-            
-            // Retry any messages that were pending delivery
+            // Retry pending messages
             this._retryPendingMessages();
-            
-            // Notify connection listeners
-            this._notifyConnectionListeners(true);
         });
         
-        this._socket.on(this.config.eventTypes.ERROR, (error) => {
-            console.error('Socket error:', error);
+        this._socket.on('reconnecting', (attemptNumber) => {
+            console.log('Socket reconnection attempt', attemptNumber);
+            this._reconnecting = true;
+        });
+        
+        this._socket.on('reconnect_error', (error) => {
+            console.error('Socket reconnection error:', error);
             
-            // If not connected or reconnecting, try to reconnect
-            if (!this._connected && !this._reconnecting) {
-                console.log('Attempting to reconnect after error...');
-                this._socket.connect();
+            // If we've hit the max reconnection attempts, notify the UI
+            if (this._socket.io.reconnectionAttempts() === this._socket.io.reconnectionAttempts) {
+                this._notifyConnectionListeners(false);
             }
         });
         
-        // Setup pong handler for heartbeat
-        this._socket.on(this.config.eventTypes.PONG, (data) => {
-            const latency = Date.now() - new Date(data.received_ping).getTime();
-            console.log(`Socket heartbeat: latency ${latency}ms`);
-        });
-        
-        // Setup handlers for invitation flow
-        this._socket.on(this.config.eventTypes.INVITATION_STATUS, (data) => {
-            this._triggerHandlers(this.config.eventTypes.INVITATION_STATUS, data);
-        });
-        
-        this._socket.on(this.config.eventTypes.QR_SCANNED_NOTIFICATION, (data) => {
-            this._triggerHandlers(this.config.eventTypes.QR_SCANNED_NOTIFICATION, data);
-        });
-        
-        this._socket.on(this.config.eventTypes.INVITATION_ACCEPTED, (data) => {
-            this._triggerHandlers(this.config.eventTypes.INVITATION_ACCEPTED, data);
-        });
-        
-        // Chat message handler
-        this._socket.on(this.config.eventTypes.MESSAGE, (data) => {
-            this._triggerHandlers(this.config.eventTypes.MESSAGE, data);
-        });
-        
-        // User presence handlers
-        this._socket.on(this.config.eventTypes.JOIN, (data) => {
-            this._triggerHandlers(this.config.eventTypes.JOIN, data);
-        });
-        
-        this._socket.on(this.config.eventTypes.USER_ACTIVE, (data) => {
-            this._triggerHandlers(this.config.eventTypes.USER_ACTIVE, data);
-        });
-        
-        this._socket.on(this.config.eventTypes.USER_AWAY, (data) => {
-            this._triggerHandlers(this.config.eventTypes.USER_AWAY, data);
-        });
-        
-        // Typing indicators
-        this._socket.on(this.config.eventTypes.TYPING, (data) => {
-            // Trigger handlers for typing event
-            this._triggerHandlers(this.config.eventTypes.TYPING, data);
-        });
-        
-        this._socket.on(this.config.eventTypes.STOP_TYPING, (data) => {
-            this._triggerHandlers(this.config.eventTypes.STOP_TYPING, data);
-        });
-        
-        // Read receipts
-        this._socket.on(this.config.eventTypes.MESSAGE_READ, (data) => {
-            this._triggerHandlers(this.config.eventTypes.MESSAGE_READ, data);
-        });
-        
-        // Room creation
-        this._socket.on(this.config.eventTypes.ROOM_CREATED, (data) => {
-            this._triggerHandlers(this.config.eventTypes.ROOM_CREATED, data);
-        });
-        
-        // Handle message status updates
-        this._socket.on(this.config.eventTypes.MESSAGE_STATUS, (data) => {
-            // Update any tracked message status
-            if (data.client_message_id && this._messagesAwaitingDelivery.has(data.client_message_id)) {
-                const tracking = this._messagesAwaitingDelivery.get(data.client_message_id);
-                tracking.status = data.status;
-                
-                // Update resolver if message was delivered successfully
-                if (data.status === 'delivered' || data.status === 'read') {
-                    const responseData = {
-                        ...tracking.data,
-                        status: data.status,
-                        server_message_id: data.server_message_id
-                    };
-                    tracking.resolver(responseData);
-                } else if (data.status === 'failed') {
-                    tracking.rejecter(new Error(data.error || 'Message delivery failed'));
-                }
-            }
+        // Custom event listeners
+        this._socket.on('ping', (data) => {
+            console.log('Received ping from server:', data);
             
-            // Trigger handlers for message status event
-            this._triggerHandlers(this.config.eventTypes.MESSAGE_STATUS, data);
+            // Respond with pong
+            this._socket.emit('pong', { timestamp: Date.now() });
         });
         
-        // Handle room events
-        this._socket.on(this.config.eventTypes.JOIN_SUCCESS, (data) => {
-            // Trigger handlers for join success event
-            this._triggerHandlers(this.config.eventTypes.JOIN_SUCCESS, data);
+        // Set up standard event types from config
+        Object.values(this.config.eventTypes).forEach(eventType => {
+            if (!this._eventHandlers.has(eventType)) {
+                this._eventHandlers.set(eventType, new Set());
+            }
         });
         
-        this._socket.on(this.config.eventTypes.USER_JOINED, (data) => {
-            // Trigger handlers for user joined event
-            this._triggerHandlers(this.config.eventTypes.USER_JOINED, data);
+        // Set up room join success handler 
+        this._socket.on('join_success', (data) => {
+            console.log('Successfully joined room:', data);
+            
+            // Trigger custom event handlers
+            this._triggerHandlers('join_success', data);
+        });
+        
+        // Set up system message handler
+        this._socket.on('system_message', (data) => {
+            console.log('System message received:', data);
+            
+            // Trigger message handlers
+            this._triggerHandlers('message', data);
+        });
+        
+        // Set up chat message handler 
+        this._socket.on('chat_message', (data) => {
+            console.log('Chat message received:', data);
+            
+            // Trigger message handlers
+            this._triggerHandlers('message', data);
+        });
+        
+        // Set up user status handlers
+        this._socket.on('user_joined', (data) => {
+            console.log('User joined:', data);
+            
+            // Trigger user_joined handlers
+            this._triggerHandlers('user_joined', data);
+        });
+        
+        this._socket.on('user_active', (data) => {
+            console.log('User active:', data);
+            
+            // Trigger user_active handlers
+            this._triggerHandlers('user_active', data);
+        });
+        
+        this._socket.on('user_away', (data) => {
+            console.log('User away:', data);
+            
+            // Trigger user_away handlers
+            this._triggerHandlers('user_away', data);
         });
     },
     
@@ -1119,6 +1142,41 @@ document.addEventListener('DOMContentLoaded', () => {
     // Delay initialization slightly to ensure AuthHelper is fully loaded
     setTimeout(() => {
         SocketClient.init();
+        
+        // Add DOM manipulation to enable message form if socket connection is successful
+        SocketClient.onConnectionChange((connected) => {
+            // Find message input and send button and update disabled state
+            const messageInput = document.getElementById('message-input');
+            const sendButton = document.getElementById('send-button');
+            
+            if (messageInput) {
+                messageInput.disabled = !connected;
+            }
+            
+            if (sendButton) {
+                sendButton.disabled = !connected;
+            }
+            
+            // Update connection message
+            const connectionMessage = document.getElementById('connection-message');
+            if (connectionMessage) {
+                if (connected) {
+                    connectionMessage.classList.remove('alert-info', 'alert-danger');
+                    connectionMessage.classList.add('alert-success');
+                    connectionMessage.textContent = 'Connected to chat server!';
+                    
+                    // Hide the message after a delay
+                    setTimeout(() => {
+                        connectionMessage.style.display = 'none';
+                    }, 2000);
+                } else {
+                    connectionMessage.style.display = 'block';
+                    connectionMessage.classList.remove('alert-success', 'alert-info');
+                    connectionMessage.classList.add('alert-danger');
+                    connectionMessage.textContent = 'Disconnected from chat server. Trying to reconnect...';
+                }
+            }
+        });
     }, 300); // Increase timeout to 300ms
 });
 

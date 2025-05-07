@@ -15,6 +15,107 @@
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/static/css/style.css">
     
+    <!-- Additional styles for message status indicators -->
+    <style>
+        .message {
+            position: relative;
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 10px;
+            max-width: 75%;
+            word-break: break-word;
+        }
+        
+        .message-sent {
+            background-color: #dcf8c6;
+            margin-left: auto;
+            border-bottom-right-radius: 2px;
+        }
+        
+        .message-received {
+            background-color: #f1f0f0;
+            margin-right: auto;
+            border-bottom-left-radius: 2px;
+        }
+        
+        .message-time {
+            font-size: 0.7rem;
+            color: #999;
+            text-align: right;
+            margin-top: 2px;
+        }
+        
+        .message-status {
+            position: absolute;
+            bottom: 2px;
+            right: 5px;
+            font-size: 0.7rem;
+            color: #999;
+        }
+        
+        .status-sending .message-status {
+            color: #999;
+        }
+        
+        .status-sent .message-status {
+            color: #555;
+        }
+        
+        .status-delivered .message-status {
+            color: #0d6efd;
+        }
+        
+        .status-failed .message-status {
+            color: #dc3545;
+        }
+        
+        #connection-message {
+            transition: all 0.3s ease;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        
+        .status-indicator.online {
+            background-color: #28a745;
+        }
+        
+        .status-indicator.offline {
+            background-color: #dc3545;
+        }
+        
+        .status-indicator.away {
+            background-color: #ffc107;
+        }
+        
+        .status-indicator.connecting {
+            background-color: #17a2b8;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+        
+        /* Fix for Font Awesome icon alignment */
+        .message-status .fas {
+            font-size: 11px;
+            margin-right: 3px;
+        }
+        
+        /* Fix for chat container scroll */
+        #chat-messages {
+            overflow-y: auto;
+            max-height: 70vh;
+        }
+    </style>
+    
     <!-- Security headers -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self' http: https: ws: wss: data:; connect-src 'self' http: https: ws: wss:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://cdn.socket.io; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data:; font-src 'self' data: https://cdnjs.cloudflare.com;">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
@@ -66,10 +167,12 @@
                     </div>
                     
                     <div class="card-footer">
-                        <form id="message-form" class="message-form">
+                        <!-- Modified form with explicit onsubmit handler -->
+                        <form id="message-form" class="message-form" onsubmit="event.preventDefault(); event.stopPropagation(); ChatPage.sendMessage(); return false;" novalidate>
                             <div class="input-group">
                                 <input type="text" id="message-input" class="form-control" placeholder="Type a message..." disabled>
-                                <button type="submit" class="btn btn-primary" id="send-button" disabled>Send</button>
+                                <!-- Changed from type="submit" to type="button" with explicit onclick handler -->
+                                <button type="button" class="btn btn-primary" id="send-button" onclick="event.preventDefault(); ChatPage.sendMessage();" disabled>Send</button>
                             </div>
                             <div id="error-container" class="small text-danger mt-2 d-none"></div>
                         </form>
@@ -127,5 +230,173 @@
     
     <!-- Chat Script -->
     <script src="/static/js/chat.js"></script>
+    
+    <script>
+        // Ensure page doesn't refresh on form submission
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM fully loaded - initializing chat interface');
+            
+            // Debug the available elements
+            const debugElements = {
+                messageInput: document.getElementById('message-input'),
+                messageForm: document.getElementById('message-form'),
+                sendButton: document.getElementById('send-button'),
+                chatMessages: document.getElementById('chat-messages'),
+                statusIndicator: document.getElementById('status-indicator')
+            };
+            
+            console.log('Chat elements on DOM load:', {
+                messageInputExists: !!debugElements.messageInput,
+                messageFormExists: !!debugElements.messageForm,
+                sendButtonExists: !!debugElements.sendButton,
+                chatMessagesExists: !!debugElements.chatMessages,
+                statusIndicatorExists: !!debugElements.statusIndicator
+            });
+            
+            // Verify that Font Awesome is loading properly
+            if (!document.querySelector('.fa, .fas, .far, .fab')) {
+                console.warn('Font Awesome might not be loading properly, adding fallback styles');
+                
+                // Add fallback styles for icons if Font Awesome isn't loaded
+                const style = document.createElement('style');
+                style.innerHTML = `
+                    .message-status .fas.fa-clock::before,
+                    .message-status .fa-clock::before { content: "⌛"; }
+                    
+                    .message-status .fas.fa-check::before,
+                    .message-status .fa-check::before { content: "✓"; }
+                    
+                    .message-status .fas.fa-check-double::before,
+                    .message-status .fa-check-double::before { content: "✓✓"; }
+                    
+                    .message-status .fas.fa-exclamation-circle::before,
+                    .message-status .fa-exclamation-circle::before { content: "❗"; }
+                `;
+                document.head.appendChild(style);
+            }
+            
+            // Force button to be type="button" to prevent form submission
+            const sendButton = document.getElementById('send-button');
+            if (sendButton) {
+                sendButton.setAttribute('type', 'button');
+            }
+            
+            // Add global event listener for explicit form prevention
+            const messageForm = document.getElementById('message-form');
+            if (messageForm) {
+                messageForm.addEventListener('submit', function(event) {
+                    console.log('Global form submit handler activated');
+                    event.preventDefault();
+                    event.stopPropagation();
+                    
+                    // Try to submit message via ChatPage or global if available
+                    if (typeof ChatPage !== 'undefined' && ChatPage.sendMessage) {
+                        ChatPage.sendMessage();
+                    } else if (typeof ChatClient !== 'undefined' && ChatClient.sendMessage) {
+                        ChatClient.sendMessage();
+                    }
+                    
+                    return false;
+                }, true); // Use capturing to ensure this runs first
+            }
+            
+            // Ensure ChatPage is properly initialized
+            if (typeof ChatPage !== 'undefined') {
+                console.log('ChatPage module available, checking state...');
+                
+                // Ensure the chat page object's input element references are set
+                if (typeof ChatPage.initUI === 'function') {
+                    console.log('Explicitly calling ChatPage.initUI to ensure elements are properly captured');
+                    // Wait a short time to make sure all DOM elements are fully rendered
+                    setTimeout(() => {
+                        ChatPage.initUI();
+                        console.log('ChatPage UI re-initialized with current DOM state');
+                    }, 500);
+                }
+            }
+            
+            // Global references for elements - fallback if ChatPage can't find them
+            window.chatElements = {
+                messageInput: document.getElementById('message-input'),
+                messageForm: document.getElementById('message-form'),
+                sendButton: document.getElementById('send-button'),
+                chatMessages: document.getElementById('chat-messages')
+            };
+            
+            // Add a global sendMessage function as fallback
+            window.sendChatMessage = function() {
+                console.log('Global sendChatMessage called');
+                const input = document.getElementById('message-input');
+                
+                if (!input) {
+                    console.error('Message input still not found in global sendChatMessage');
+                    return;
+                }
+                
+                const content = input.value.trim();
+                if (!content) {
+                    console.log('Empty message, not sending');
+                    return;
+                }
+                
+                console.log('Attempting to send message using fallback method:', content);
+                
+                // Try different ways to send the message
+                if (typeof ChatPage !== 'undefined' && ChatPage.sendMessage) {
+                    ChatPage.sendMessage();
+                } else if (typeof ChatClient !== 'undefined' && ChatClient.sendMessage) {
+                    ChatClient.sendMessage();
+                } else if (typeof SocketClient !== 'undefined' && SocketClient.sendMessage) {
+                    const roomId = window.location.pathname.split('/').pop();
+                    SocketClient.sendMessage(roomId, content);
+                }
+                
+                // Clear input
+                input.value = '';
+            };
+            
+            // Update button click handler to use fallback
+            if (sendButton) {
+                console.log('Adding fallback click handler to send button');
+                sendButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (typeof ChatPage !== 'undefined' && ChatPage.sendMessage) {
+                        ChatPage.sendMessage();
+                    } else {
+                        window.sendChatMessage();
+                    }
+                    return false;
+                });
+            }
+            
+            // Monitor WebSocket connection status
+            const checkConnection = () => {
+                const isConnected = (
+                    (typeof ChatPage !== 'undefined' && ChatPage.isSocketConnected && ChatPage.isSocketConnected()) ||
+                    (typeof SocketClient !== 'undefined' && SocketClient.isConnected && SocketClient.isConnected()) ||
+                    (typeof window.io !== 'undefined' && window.io.socket && window.io.socket.connected)
+                );
+                
+                // Don't log on every check to reduce console spam
+                // console.log('WebSocket connection status check:', isConnected ? 'connected' : 'disconnected');
+                
+                // Enable/disable input based on connection status
+                const messageInput = document.getElementById('message-input');
+                const sendButton = document.getElementById('send-button');
+                
+                if (messageInput) {
+                    messageInput.disabled = !isConnected;
+                }
+                
+                if (sendButton) {
+                    sendButton.disabled = !isConnected;
+                }
+            };
+            
+            // Check connection status every 2 seconds
+            setInterval(checkConnection, 2000);
+        });
+    </script>
 </body>
 </html> 

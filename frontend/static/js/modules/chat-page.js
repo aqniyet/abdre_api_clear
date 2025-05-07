@@ -31,8 +31,33 @@ const ChatPage = {
       opponentStatus: 'offline'
     };
     
-    // Initialize UI elements
-    this.initUI();
+    // Wait for DOM to be fully loaded before initializing UI
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        console.log('DOM loaded - initializing UI elements');
+        this.initUI();
+        this.continueInit(roomId);
+      });
+    } else {
+      // DOM already loaded
+      console.log('DOM already loaded - initializing UI elements immediately');
+      this.initUI();
+      this.continueInit(roomId);
+    }
+  },
+  
+  /**
+   * Continue initialization after UI elements are set up
+   * @param {string} roomId - The room ID
+   */
+  continueInit(roomId) {
+    // Make sure message input and send button are initially disabled
+    if (this.messageInput) {
+      this.messageInput.disabled = true;
+    }
+    if (this.sendButton) {
+      this.sendButton.disabled = true;
+    }
     
     // Fetch chat details to get opponent information
     this.fetchChatDetails(roomId).then(() => {
@@ -141,6 +166,14 @@ const ChatPage = {
       case 'online':
         statusIndicator.classList.add('online');
         statusText.textContent = 'Online';
+        
+        // Enable message input and send button when online
+        if (this.messageInput) {
+          this.messageInput.disabled = false;
+        }
+        if (this.sendButton) {
+          this.sendButton.disabled = false;
+        }
         break;
       case 'connecting':
         statusIndicator.classList.add('connecting');
@@ -154,6 +187,14 @@ const ChatPage = {
       default:
         statusIndicator.classList.add('offline');
         statusText.textContent = 'Offline';
+        
+        // Disable message input and send button when offline
+        if (this.messageInput) {
+          this.messageInput.disabled = true;
+        }
+        if (this.sendButton) {
+          this.sendButton.disabled = true;
+        }
         break;
     }
     
@@ -179,13 +220,13 @@ const ChatPage = {
   },
   
   /**
-   * Initialize socket connection with improved error handling and timeout
-   * @returns {Promise} - Promise that resolves when socket is connected
+   * Initialize socket connection to the chat server
+   * @returns {Promise} Promise that resolves when connected
    */
-  async initSocketConnection() {
+  initSocketConnection() {
     return new Promise((resolve, reject) => {
       try {
-        console.log('Initializing socket connection to chat server...');
+        console.log('Initializing socket connection to the chat server');
         
         // Update UI connection status
         this.updateStatusIndicator('connecting');
@@ -197,93 +238,147 @@ const ChatPage = {
         // Create connection timeout
         const connectionTimeout = setTimeout(() => {
           console.error('Socket connection timeout after 15 seconds');
-          if (!window.SocketClient.isConnected()) {
+          if (!this.isSocketConnected()) {
             // Update UI with connection error
             if (statusText) {
               statusText.textContent = 'Failed to connect to chat server. Trying to reconnect...';
             }
             
             // Show error message to user
-            this.showError('Connection to chat server timed out. Messages will be sent via HTTP.');
+            this.showError('Connection to chat server timed out. Please check your internet connection.');
             
-            // Try HTTP fallback
+            // Try to reconnect
+            this.attemptReconnection();
+            
+            // Reject promise
             reject(new Error('Connection timeout'));
           }
         }, 15000);
         
-        // Check if client is already initialized and connected
-        if (window.SocketClient && window.SocketClient.isConnected()) {
-          console.log('Socket client already connected, joining room...');
-          
-          // Clear timeout
-          clearTimeout(connectionTimeout);
-          
-          // Join the room
-          const roomId = this.state.roomId;
-          window.SocketClient.joinRoom(roomId);
-          
-          // Set up event handlers
-          this._setupSocketEventHandlers();
-          
-          // Update UI
-          this.updateStatusIndicator('online');
-          if (statusText) {
-            statusText.textContent = 'Connected to chat server';
-          }
-          
-          // Resolve the promise
-          resolve();
-          return;
-        }
-        
-        // Initialize socket with event handlers
-        console.log('Initializing socket client...');
-        if (!window.SocketClient) {
-          console.error('SocketClient is not defined. Make sure socket-client.js is properly loaded.');
-          reject(new Error('SocketClient not found'));
-          return;
-        }
-        
-        window.SocketClient.init();
-        
-        // Set up connection change handler
-        const connectionHandler = (connected) => {
-          console.log(`Socket connection status changed: ${connected ? 'connected' : 'disconnected'}`);
-          
-          if (connected) {
-            // Clear timeout
-            clearTimeout(connectionTimeout);
-            
-            // Update UI connection status
-            this.updateStatusIndicator('online');
-            if (statusText) {
-              statusText.textContent = 'Connected to chat server';
-            }
-            
-            // Join the room
-            const roomId = this.state.roomId;
-            console.log(`Joining room ${roomId}...`);
-            window.SocketClient.joinRoom(roomId);
-            
-            // Set up event handlers
-            this._setupSocketEventHandlers();
-            
-            // Resolve the promise (only once)
-            resolve();
-            
-            // Remove this handler to prevent multiple resolves
-            window.SocketClient.off('connect', connectionHandler);
-          } else {
-            // Update UI connection status
-            this.updateStatusIndicator('offline');
-            if (statusText) {
-              statusText.textContent = 'Disconnected from chat server. Reconnecting...';
-            }
-          }
+        // Helper function to check socket connection
+        this.isSocketConnected = () => {
+          // Check both possible ways the socket client might be available
+          return (window.SocketClient && window.SocketClient.isConnected && window.SocketClient.isConnected()) || 
+                 (this.socketClient && this.socketClient.isConnected && this.socketClient.isConnected()) ||
+                 (typeof io !== 'undefined' && io.socket && io.socket.connected);
         };
         
-        // Register the connection handler
-        window.SocketClient.onConnectionChange(connectionHandler);
+        // Attempt to get socket connection info from API
+        this.getSocketConnectionInfo()
+          .then(connectionInfo => {
+            // Check if client is already initialized and connected
+            if (this.isSocketConnected()) {
+              console.log('Socket client already connected, joining room...');
+              
+              // Clear timeout
+              clearTimeout(connectionTimeout);
+              
+              // Get the socket client reference
+              const socketClient = window.SocketClient || this.socketClient;
+              
+              // Join the room
+              const roomId = this.state.roomId;
+              socketClient.joinRoom(roomId);
+              
+              // Set up event handlers
+              this._setupSocketEventHandlers();
+              
+              // Update UI
+              this.updateStatusIndicator('online');
+              if (statusText) {
+                statusText.textContent = 'Connected to chat server';
+              }
+              
+              // Resolve the promise
+              resolve();
+              return;
+            }
+            
+            // Initialize socket with event handlers
+            console.log('Initializing socket client with connection info:', connectionInfo);
+            
+            // Store a reference to SocketClient (global or local)
+            this.socketClient = window.SocketClient || this.socketClient;
+            
+            if (!this.socketClient) {
+              console.warn('SocketClient is not defined in window. Looking for Socket.IO client...');
+              
+              // Check if Socket.IO client is loaded directly
+              if (typeof io !== 'undefined') {
+                console.log('Socket.IO client found');
+                // Connect using Socket.IO with the connection URL from API
+                this.connectWithSocketIO(connectionInfo, connectionTimeout, resolve, reject);
+                return;
+              } else {
+                console.error('Neither SocketClient nor Socket.IO client found. Cannot establish connection.');
+                reject(new Error('Socket client not found'));
+                return;
+              }
+            }
+            
+            // Initialize the socket client
+            this.socketClient.init();
+            
+            // Set up connection change handler
+            const connectionHandler = (connected) => {
+              console.log(`Socket connection status changed: ${connected ? 'connected' : 'disconnected'}`);
+              
+              if (connected) {
+                // Clear timeout
+                clearTimeout(connectionTimeout);
+                
+                // Update UI connection status
+                this.updateStatusIndicator('online');
+                if (statusText) {
+                  statusText.textContent = 'Connected to chat server';
+                }
+                
+                // Join the room
+                const roomId = this.state.roomId;
+                console.log(`Joining room ${roomId}...`);
+                this.socketClient.joinRoom(roomId);
+                
+                // Set up event handlers
+                this._setupSocketEventHandlers();
+                
+                // Enable message input
+                if (this.messageInput) {
+                  this.messageInput.disabled = false;
+                  this.messageInput.focus();
+                }
+                if (this.sendButton) {
+                  this.sendButton.disabled = false;
+                }
+                
+                // Resolve the promise (only once)
+                resolve();
+                
+                // Remove this handler to prevent multiple resolves
+                this.socketClient.off('connect', connectionHandler);
+              } else {
+                // Update UI connection status
+                this.updateStatusIndicator('offline');
+                if (statusText) {
+                  statusText.textContent = 'Disconnected from chat server. Reconnecting...';
+                }
+                
+                // Disable inputs
+                if (this.messageInput) {
+                  this.messageInput.disabled = true;
+                }
+                if (this.sendButton) {
+                  this.sendButton.disabled = true;
+                }
+              }
+            };
+            
+            // Register the connection handler
+            this.socketClient.onConnectionChange(connectionHandler);
+          })
+          .catch(error => {
+            console.error('Error getting socket connection info:', error);
+            reject(error);
+          });
         
       } catch (error) {
         console.error('Error setting up socket connection:', error);
@@ -296,7 +391,7 @@ const ChatPage = {
         }
         
         // Show error message to user
-        this.showError('An error occurred connecting to chat server. Messages will be sent via HTTP.');
+        this.showError('An error occurred connecting to chat server. Please try refreshing the page.');
         
         reject(error);
       }
@@ -304,25 +399,237 @@ const ChatPage = {
   },
   
   /**
+   * Get WebSocket connection information from API
+   * @returns {Promise} Promise that resolves with connection info
+   */
+  getSocketConnectionInfo() {
+    return new Promise((resolve, reject) => {
+      const apiUrl = '/api/realtime/check-connection';
+      
+      fetch(apiUrl)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`API returned ${response.status}: ${response.statusText}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          console.log('Socket connection info:', data);
+          resolve(data);
+        })
+        .catch(error => {
+          console.error('Error fetching socket connection info:', error);
+          reject(error);
+        });
+    });
+  },
+  
+  /**
+   * Connect using Socket.IO directly
+   * @param {Object} connectionInfo Connection info from API
+   * @param {number} connectionTimeout Timeout ID to clear on success
+   * @param {Function} resolve Promise resolve function
+   * @param {Function} reject Promise reject function
+   */
+  connectWithSocketIO(connectionInfo, connectionTimeout, resolve, reject) {
+    try {
+      if (typeof io === 'undefined') {
+        console.error('Socket.IO client not loaded');
+        reject(new Error('Socket.IO client not loaded'));
+        return;
+      }
+      
+      // Get connection URL and parameters
+      const url = connectionInfo.websocket_url || connectionInfo.realtime_service;
+      const path = connectionInfo.socket_io_path || '/socket.io';
+      
+      console.log(`Connecting to Socket.IO at ${url} with path ${path}`);
+      
+      // Get auth token
+      const token = AuthHelper.getToken() || 'guest';
+      
+      // Connect to Socket.IO
+      const socket = io(url, {
+        path: path,
+        transports: ['websocket', 'polling'],
+        query: { token, chat_id: this.state.roomId },
+        auth: { token }
+      });
+      
+      // Store socket reference
+      this.socket = socket;
+      
+      // Create adapter to match SocketClient interface
+      this.socketClient = {
+        _socket: socket,
+        isConnected: () => socket.connected,
+        init: () => {
+          // Socket.IO already initializes on creation
+        },
+        onConnectionChange: (callback) => {
+          socket.on('connect', () => callback(true));
+          socket.on('disconnect', () => callback(false));
+        },
+        joinRoom: (roomId) => {
+          socket.emit('join', { room_id: roomId });
+        },
+        on: (event, handler) => {
+          socket.on(event, handler);
+        },
+        off: (event, handler) => {
+          socket.off(event, handler);
+        },
+        sendMessage: (roomId, content, messageId) => {
+          return new Promise((resolve, reject) => {
+            const messageData = {
+              room_id: roomId,
+              content: content,
+              message_id: messageId,
+              sender_id: AuthHelper.getUserId()
+            };
+            
+            socket.emit('message', messageData);
+            
+            // Set up a handler for message status
+            const statusHandler = (data) => {
+              if (data.message_id === messageId) {
+                if (data.status === 'delivered') {
+                  resolve(data);
+                } else {
+                  reject(new Error(data.error || 'Message sending failed'));
+                }
+                socket.off('message_status', statusHandler);
+              }
+            };
+            
+            socket.on('message_status', statusHandler);
+            
+            // Set timeout for status response
+            setTimeout(() => {
+              socket.off('message_status', statusHandler);
+              resolve({ message_id: messageId, status: 'sent' });
+            }, 5000);
+          });
+        }
+      };
+      
+      // Handle socket connect event
+      socket.on('connect', () => {
+        console.log('Socket.IO connected');
+        
+        // Clear connection timeout
+        clearTimeout(connectionTimeout);
+        
+        // Join the room
+        socket.emit('join', { room_id: this.state.roomId });
+        
+        // Set up event handlers
+        this._setupSocketEventHandlers();
+        
+        // Update UI
+        this.updateStatusIndicator('online');
+        const statusText = document.getElementById('chat-status');
+        if (statusText) {
+          statusText.textContent = 'Connected to chat server';
+        }
+        
+        // Enable message input
+        if (this.messageInput) {
+          this.messageInput.disabled = false;
+          this.messageInput.focus();
+        }
+        if (this.sendButton) {
+          this.sendButton.disabled = false;
+        }
+        
+        // Resolve the promise
+        resolve();
+      });
+      
+      // Handle socket error event
+      socket.on('connect_error', (error) => {
+        console.error('Socket.IO connection error:', error);
+        
+        // Update UI
+        this.updateStatusIndicator('offline');
+        const statusText = document.getElementById('chat-status');
+        if (statusText) {
+          statusText.textContent = 'Failed to connect to chat server';
+        }
+        
+        // Show error
+        this.showError('Error connecting to chat server: ' + error.message);
+        
+        // Reject promise if this is the initial connection
+        reject(error);
+      });
+      
+    } catch (error) {
+      console.error('Error connecting with Socket.IO:', error);
+      reject(error);
+    }
+  },
+  
+  /**
+   * Attempt to reconnect to the socket server
+   */
+  attemptReconnection() {
+    console.log('Attempting to reconnect to socket server...');
+    
+    // Update UI
+    const statusText = document.getElementById('chat-status');
+    if (statusText) {
+      statusText.textContent = 'Attempting to reconnect...';
+    }
+    
+    // Try to reconnect after a delay
+    setTimeout(() => {
+      this.initSocketConnection()
+        .then(() => {
+          console.log('Reconnection successful');
+          
+          // Load messages to ensure we didn't miss any
+          this.loadChatMessages()
+            .then(() => console.log('Messages loaded after reconnection'))
+            .catch(error => console.error('Error loading messages after reconnection:', error));
+        })
+        .catch(error => {
+          console.error('Reconnection failed:', error);
+          
+          // Update UI
+          if (statusText) {
+            statusText.textContent = 'Reconnection failed. Will try again...';
+          }
+          
+          // Try again
+          this.attemptReconnection();
+        });
+    }, 5000);
+  },
+  
+  /**
    * Set up socket event handlers
    * @private
    */
   _setupSocketEventHandlers() {
-    if (!window.SocketClient) {
+    // Get the socket client reference
+    const socketClient = this.socketClient || window.SocketClient;
+    
+    if (!socketClient) {
       console.error('SocketClient is not defined. Cannot set up event handlers.');
       return;
     }
     
     // Set up message handler
-    window.SocketClient.on('message', this.handleIncomingMessage.bind(this));
+    socketClient.on('message', this.handleIncomingMessage.bind(this));
     
     // Set up user status handlers
-    window.SocketClient.on('user_active', this.handleUserActive.bind(this));
-    window.SocketClient.on('user_away', this.handleUserAway.bind(this));
-    window.SocketClient.on('user_joined', this.handleUserJoined.bind(this));
+    socketClient.on('user_active', this.handleUserActive.bind(this));
+    socketClient.on('user_away', this.handleUserAway.bind(this));
+    socketClient.on('user_joined', this.handleUserJoined.bind(this));
     
     // Set up connection event handlers for the room
-    window.SocketClient.on('join_success', (data) => {
+    socketClient.on('join_success', (data) => {
       console.log('Successfully joined room:', data);
       
       // Update room state if needed
@@ -334,6 +641,15 @@ const ChatPage = {
         const statusText = document.getElementById('chat-status');
         if (statusText) {
           statusText.textContent = 'Connected to chat room';
+        }
+        
+        // Enable message input and send button
+        if (this.messageInput) {
+          this.messageInput.disabled = false;
+          this.messageInput.focus();
+        }
+        if (this.sendButton) {
+          this.sendButton.disabled = false;
         }
       }
     });
@@ -347,17 +663,72 @@ const ChatPage = {
     this.chatContainer = document.getElementById('chat-container') || document.getElementById('chat-messages');
     this.messageInput = document.getElementById('message-input');
     this.sendButton = document.getElementById('send-button');
+    this.messageForm = document.getElementById('message-form');
     
-    // Add event listeners
-    this.sendButton.addEventListener('click', this.sendMessage.bind(this));
-    this.messageInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        this.sendMessage();
-      }
+    console.log('Initializing chat UI with elements:', {
+      chatContainer: !!this.chatContainer,
+      messageInput: !!this.messageInput,
+      sendButton: !!this.sendButton,
+      messageForm: !!this.messageForm
     });
+    
+    // CRITICAL: Fix form submission to prevent page refresh
+    if (this.messageForm) {
+      // Remove any existing event listeners by cloning and replacing the form
+      const oldForm = this.messageForm;
+      const newForm = oldForm.cloneNode(true);
+      oldForm.parentNode.replaceChild(newForm, oldForm);
+      this.messageForm = newForm;
+      
+      // Re-fetch input and button elements after form replacement
+      this.messageInput = document.getElementById('message-input');
+      this.sendButton = document.getElementById('send-button');
+      
+      // Log elements after refresh
+      console.log('Re-initialized chat UI elements:', {
+        messageInput: !!this.messageInput,
+        sendButton: !!this.sendButton
+      });
+      
+      // Add submit event listener with preventDefault to stop page refresh
+      this.messageForm.addEventListener('submit', (e) => {
+        console.log('Form submit intercepted');
+        e.preventDefault();
+        e.stopPropagation();
+        this.sendMessage();
+        return false; // Extra prevention of default behavior
+      });
+    }
+    
+    // Add button click event directly (not through the form)
+    if (this.sendButton) {
+      this.sendButton.addEventListener('click', (e) => {
+        console.log('Send button clicked directly');
+        e.preventDefault();
+        e.stopPropagation();
+        this.sendMessage();
+        return false;
+      });
+    }
+    
+    // For Enter key in input field
+    if (this.messageInput) {
+      this.messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          console.log('Enter key pressed in input field');
+          e.preventDefault();
+          e.stopPropagation();
+          this.sendMessage();
+          return false;
+        }
+      });
+    }
 
     // Add share link functionality
     this.addShareLinkButton();
+    
+    // Log initialization of UI elements
+    console.log('Chat UI elements initialized with form submission prevention');
   },
   
   /**
@@ -425,52 +796,70 @@ const ChatPage = {
   handleIncomingMessage(data) {
     console.log('Received incoming message via WebSocket:', data);
     
-    // Validate the message data
-    if (!data || !data.content || !data.sender_id) {
-      console.error('Invalid message data received:', data);
-      return;
-    }
-    
-    // Skip duplicate messages
-    const messages = this.state.messages || [];
-    
-    // Check for duplicates by ID or content+timestamp
-    const isDuplicate = messages.some(msg => 
-      msg.message_id === data.message_id || 
-      (msg.content === data.content && 
-       msg.sender_id === data.sender_id && 
-       Math.abs(new Date(msg.timestamp || msg.created_at) - new Date(data.timestamp || data.created_at)) < 5000)
-    );
-    
-    if (isDuplicate) {
-      console.log('Skipping duplicate message:', data.message_id);
-      return;
-    }
-    
-    // Format message object if needed
-    const messageObj = {
-      message_id: data.message_id,
-      room_id: data.room_id,
-      sender_id: data.sender_id,
-      content: data.content,
-      message_type: data.message_type || 'text',
-      created_at: data.timestamp || data.created_at || new Date().toISOString(),
-      status: 'received'
-    };
-    
-    // Add to state
-    messages.push(messageObj);
-    this.state.messages = messages;
-    
-    // Get current user ID
-    const userId = this.state.userId;
-    
-    // Add to UI
-    this.renderMessage(messageObj, userId !== messageObj.sender_id);
-    
-    // Play notification sound if the message is from someone else and tab is not visible
-    if (userId !== messageObj.sender_id && document.visibilityState !== 'visible') {
-      this.playNotificationSound();
+    try {
+      // Validate the message data
+      if (!data || !data.content) {
+        console.error('Invalid message data received:', data);
+        return;
+      }
+      
+      // Skip duplicate messages
+      const messages = this.state.messages || [];
+      
+      // Check for duplicates by ID or content+timestamp+sender
+      const isDuplicate = messages.some(msg => 
+        msg.message_id === data.message_id || 
+        (msg.content === data.content && 
+         msg.sender_id === data.sender_id && 
+         Math.abs(new Date(msg.timestamp || msg.created_at) - new Date(data.timestamp || data.created_at)) < 5000)
+      );
+      
+      if (isDuplicate) {
+        console.log('Skipping duplicate message:', data.message_id || data.content);
+        return;
+      }
+      
+      // Format message object if needed
+      const messageObj = {
+        message_id: data.message_id || `recv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        room_id: data.room_id || this.state.roomId,
+        sender_id: data.sender_id || data.user_id,
+        content: data.content,
+        message_type: data.message_type || 'text',
+        created_at: data.timestamp || data.created_at || new Date().toISOString(),
+        status: 'received'
+      };
+      
+      // Add to state
+      messages.push(messageObj);
+      this.state.messages = messages;
+      
+      // Get current user ID
+      const userId = this.state.userId;
+      
+      // Only render if it's not our own message (to avoid duplicates)
+      if (userId !== messageObj.sender_id) {
+        // Add to UI
+        this.renderMessage(messageObj, true); // true = incoming message
+        
+        // Play notification sound if the message is from someone else and tab is not visible
+        if (document.visibilityState !== 'visible') {
+          this.playNotificationSound();
+        }
+      } else {
+        // If it's our message coming back from the server, update the status
+        const existingMessage = messages.find(
+          m => m.content === messageObj.content && 
+               m.sender_id === messageObj.sender_id && 
+               m.status === 'sending'
+        );
+        
+        if (existingMessage) {
+          this.updateMessageStatus(existingMessage.message_id, 'delivered');
+        }
+      }
+    } catch (error) {
+      console.error('Error handling incoming message:', error);
     }
   },
   
@@ -485,56 +874,80 @@ const ChatPage = {
       return;
     }
     
-    // Create message element
-    const messageEl = document.createElement('div');
-    messageEl.className = `message ${isIncoming ? 'message-received' : 'message-sent'}`;
-    messageEl.dataset.messageId = message.message_id;
+    console.log(`Rendering ${isIncoming ? 'incoming' : 'outgoing'} message:`, message);
     
-    // Format timestamp
-    const timestamp = new Date(message.created_at).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-    
-    // Set HTML content
-    messageEl.innerHTML = `
-      <div class="message-content">${message.content}</div>
-      <div class="message-time">${timestamp}</div>
-    `;
-    
-    // Add status indicator for outgoing messages
-    if (!isIncoming && message.status) {
-      const statusEl = document.createElement('div');
-      statusEl.className = 'message-status';
+    try {
+      // Create message element
+      const messageEl = document.createElement('div');
+      messageEl.className = `message ${isIncoming ? 'message-received' : 'message-sent'}`;
+      messageEl.dataset.messageId = message.message_id;
       
-      switch (message.status) {
-        case 'sending':
-          statusEl.innerHTML = '<i class="fa fa-clock-o"></i>';
-          break;
-        case 'sent':
-          statusEl.innerHTML = '<i class="fa fa-check"></i>';
-          break;
-        case 'delivered':
-          statusEl.innerHTML = '<i class="fa fa-check-double"></i>';
-          break;
-        case 'read':
-          statusEl.innerHTML = '<i class="fa fa-check-double" style="color: blue;"></i>';
-          break;
-        case 'failed':
-          statusEl.innerHTML = '<i class="fa fa-exclamation-circle" style="color: red;"></i>';
-          break;
-        default:
-          statusEl.innerHTML = '';
+      // Add status class for outgoing messages
+      if (!isIncoming && message.status) {
+        messageEl.classList.add(`status-${message.status}`);
       }
       
-      messageEl.appendChild(statusEl);
+      // Format timestamp
+      const timestamp = new Date(message.created_at).toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+      
+      // Set HTML content
+      messageEl.innerHTML = `
+        <div class="message-content">${message.content}</div>
+        <div class="message-time">${timestamp}</div>
+      `;
+      
+      // Add status indicator for outgoing messages
+      if (!isIncoming) {
+        const statusEl = document.createElement('div');
+        statusEl.className = 'message-status';
+        
+        switch (message.status) {
+          case 'sending':
+            statusEl.innerHTML = '<i class="fas fa-clock"></i>';
+            break;
+          case 'sent':
+            statusEl.innerHTML = '<i class="fas fa-check"></i>';
+            break;
+          case 'delivered':
+            statusEl.innerHTML = '<i class="fas fa-check-double"></i>';
+            break;
+          case 'read':
+            statusEl.innerHTML = '<i class="fas fa-check-double text-primary"></i>';
+            break;
+          case 'failed':
+            statusEl.innerHTML = '<i class="fas fa-exclamation-circle text-danger"></i>';
+            break;
+          default:
+            statusEl.innerHTML = '';
+        }
+        
+        messageEl.appendChild(statusEl);
+      }
+      
+      // Add to container
+      this.chatContainer.appendChild(messageEl);
+      
+      // Scroll to bottom
+      this.scrollToBottom();
+    } catch (error) {
+      console.error('Error rendering message:', error);
     }
-    
-    // Add to container
-    this.chatContainer.appendChild(messageEl);
-    
-    // Scroll to bottom
-    this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+  },
+  
+  /**
+   * Scroll the chat container to the bottom
+   */
+  scrollToBottom() {
+    try {
+      if (this.chatContainer) {
+        this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+      }
+    } catch (error) {
+      console.error('Error scrolling to bottom:', error);
+    }
   },
   
   /**
@@ -739,145 +1152,226 @@ const ChatPage = {
    * Send a message in the chat
    */
   sendMessage() {
-    // Get message content
-    const content = this.messageInput.value.trim();
-    if (!content) return;
-    
-    // Clear input field
-    this.messageInput.value = '';
-    this.messageInput.focus();
-    
-    const roomId = this.state.roomId;
-    const userId = this.state.userId;
-    
-    console.log(`Sending message in room ${roomId} from user ${userId}`);
-    
-    // Create a temporary ID for the message
-    const tempId = `tmp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    // Create message data object
-    const messageData = {
-      message_id: tempId,
-      room_id: roomId,
-      sender_id: userId,
-      content: content,
-      message_type: 'text',
-      created_at: new Date().toISOString(),
-      status: 'sending'
-    };
-    
-    // Add the message to state
-    const messages = this.state.messages || [];
-    messages.push(messageData);
-    this.state.messages = messages;
-    
-    // Try WebSocket first
-    if (window.SocketClient && window.SocketClient.isConnected()) {
-      console.log('Sending message via WebSocket');
-      window.SocketClient.sendMessage(roomId, content, tempId)
-        .then(result => {
-          console.log('Message sent successfully via WebSocket:', result);
-          this.updateMessageStatus(tempId, { status: 'sent' });
-        })
-        .catch(error => {
-          console.error('Failed to send message via WebSocket:', error);
-          
-          // Fallback to HTTP
-          this.sendMessageViaHttp(roomId, content, tempId, userId)
-            .then(result => {
-              console.log('Message sent successfully via HTTP:', result);
-              this.updateMessageStatus(tempId, { status: 'sent', server_message_id: result.message_id });
-            })
-            .catch(httpError => {
-              console.error('Failed to send message via HTTP:', httpError);
-              this.updateMessageStatus(tempId, { status: 'failed' });
-              this.showError('Failed to send message. Please try again.');
-            });
-        });
-    } else {
-      // If no WebSocket connection, use HTTP directly
-      console.log('No WebSocket connection, sending message via HTTP');
-      this.sendMessageViaHttp(roomId, content, tempId, userId)
-        .then(result => {
-          console.log('Message sent successfully via HTTP:', result);
-          this.updateMessageStatus(tempId, { status: 'sent', server_message_id: result.message_id });
-        })
-        .catch(error => {
-          console.error('Failed to send message via HTTP:', error);
-          this.updateMessageStatus(tempId, { status: 'failed' });
-          this.showError('Failed to send message. Please try again.');
-        });
-    }
-    
-    // Check message delivery status after a delay
-    setTimeout(() => {
-      // Get the current message from state to see if it's been confirmed
-      const currentMessages = this.state.messages || [];
-      const message = currentMessages.find(m => m.message_id === tempId);
-      
-      if (message && message.status === 'sending') {
-        // Message is still in sending state after timeout, mark as uncertain
-        this.updateMessageStatus(tempId, { status: 'uncertain' });
-        this.showError('Message delivery status unknown. It may or may not have been delivered.');
-      }
-    }, 10000);
-  },
-  
-  /**
-   * Update message status in state
-   * @param {string} messageId - Message ID
-   * @param {Object} updates - Status updates
-   */
-  updateMessageStatus(messageId, updates) {
-    const messages = this.state.messages || [];
-    const messageIndex = messages.findIndex(m => m.message_id === messageId);
-    
-    if (messageIndex >= 0) {
-      messages[messageIndex] = { ...messages[messageIndex], ...updates };
-      this.state.messages = messages;
-    }
-  },
-  
-  /**
-   * Send a message via HTTP (used as fallback when WebSocket is not available)
-   * @param {string} roomId - Chat room ID
-   * @param {string} message - Message content
-   * @param {string} messageId - Temporary message ID
-   * @param {string} userId - Sender user ID
-   * @returns {Promise} - Promise that resolves with message data when sent
-   */
-  async sendMessageViaHttp(roomId, message, messageId, userId) {
     try {
-      console.log(`Sending message via HTTP API: ${message.substring(0, 30)}...`);
+      console.log('ChatPage.sendMessage called');
       
-      // Create request body
-      const requestBody = {
+      // Direct DOM query for message input as a fallback
+      let messageInput = this.messageInput;
+      
+      if (!messageInput) {
+        console.warn('Message input not found in ChatPage object, trying direct DOM query');
+        messageInput = document.getElementById('message-input');
+        
+        // If found, update the object reference
+        if (messageInput) {
+          this.messageInput = messageInput;
+        }
+      }
+      
+      // Final check if input was found
+      if (!messageInput) {
+        console.error('Message input element not found. Cannot send message.');
+        this.showError('Message input not found. Please refresh the page.');
+        return;
+      }
+      
+      // Get message content
+      const content = messageInput.value.trim();
+      if (!content) {
+        console.log('Empty message, not sending');
+        return;
+      }
+      
+      console.log(`Attempting to send message: "${content}"`);
+      
+      // Verify socket connection - making sure the method exists
+      if (typeof this.isSocketConnected !== 'function') {
+        console.warn('this.isSocketConnected is not a function, defining it now');
+        
+        // Define the isSocketConnected function if it doesn't exist
+        this.isSocketConnected = () => {
+          // Check both possible ways the socket client might be available
+          return (window.SocketClient && window.SocketClient.isConnected && window.SocketClient.isConnected()) || 
+                 (this.socketClient && this.socketClient.isConnected && this.socketClient.isConnected()) ||
+                 (typeof io !== 'undefined' && io.socket && io.socket.connected);
+        };
+      }
+      
+      // Now check the connection
+      if (!this.isSocketConnected()) {
+        console.error('Cannot send message: Socket not connected');
+        this.showError('Cannot send message: No connection to chat server. Please wait for connection or refresh the page.');
+        return;
+      }
+      
+      // Clear input field immediately for better UX
+      messageInput.value = '';
+      messageInput.focus();
+      
+      // Check if state exists, initialize if needed
+      if (!this.state) {
+        console.warn('State object is undefined, initializing it now');
+        // Get room ID from URL as fallback
+        const pathParts = window.location.pathname.split('/');
+        const roomId = pathParts[pathParts.length - 1];
+        
+        this.state = {
+          roomId: roomId,
+          userId: typeof AuthHelper !== 'undefined' && AuthHelper.getUserId ? AuthHelper.getUserId() : 'unknown',
+          messages: [],
+          isConnected: this.isSocketConnected(),
+          lastMessageCheck: 0,
+          opponentId: null,
+          opponentName: null,
+          opponentStatus: 'offline'
+        };
+        
+        console.log('Initialized state object with roomId:', roomId);
+      }
+      
+      const roomId = this.state.roomId;
+      const userId = this.state.userId;
+      
+      console.log(`Sending message in room ${roomId} from user ${userId} via WebSocket`);
+      
+      // Create a temporary ID for the message
+      const tempId = `tmp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Create message data object
+      const messageData = {
+        message_id: tempId,
         room_id: roomId,
-        content: message,
-        client_message_id: messageId,
-        sender_id: userId
+        sender_id: userId,
+        content: content,
+        message_type: 'text',
+        created_at: new Date().toISOString(),
+        status: 'sending'
       };
       
-      // Call API to send message
-      const response = await apiClient.sendMessage(roomId, requestBody);
+      // Add the message to state and UI immediately for responsive UX
+      if (!this.state.messages) {
+        this.state.messages = [];
+      }
       
-      // Update message status
-      this.updateMessageStatus(messageId, { 
-        status: 'sent', 
-        server_message_id: response.message_id || messageId,
-        sent_via: 'http'
-      });
+      this.state.messages.push(messageData);
       
-      // Return response
-      return response;
+      // Render the message optimistically with our own user ID as sender
+      this.renderMessage(messageData, false); // false = not an incoming message (we sent it)
+      
+      // Send message via WebSocket
+      const socketClient = this.socketClient || window.SocketClient;
+      
+      if (socketClient && typeof socketClient.sendMessage === 'function') {
+        console.log('Using socketClient.sendMessage to send message:', {roomId, content, tempId});
+        
+        socketClient.sendMessage(roomId, content, tempId)
+          .then(result => {
+            console.log('Message sent successfully via WebSocket:', result);
+            
+            // Update message status in UI
+            this.updateMessageStatus(tempId, 'sent');
+            
+            // Play send sound if available
+            if (typeof this.playMessageSentSound === 'function') {
+              this.playMessageSentSound();
+            }
+          })
+          .catch(error => {
+            console.error('Failed to send message via WebSocket:', error);
+            
+            // Update message status in UI
+            this.updateMessageStatus(tempId, 'failed');
+            
+            // Show error message
+            this.showError('Failed to send message. Please check your connection and try again.');
+          });
+      } else if (window.io && this.socket) {
+        // Direct Socket.IO fallback
+        console.log('Using direct Socket.IO emit to send message');
+        
+        this.socket.emit('message', {
+          room_id: roomId,
+          content: content,
+          message_id: tempId,
+          sender_id: userId
+        });
+        
+        // Update the message status to sent since we don't have proper delivery confirmation
+        setTimeout(() => {
+          this.updateMessageStatus(tempId, 'sent');
+        }, 500);
+      } else {
+        console.error('No WebSocket connection method available');
+        
+        // Update message status in UI
+        this.updateMessageStatus(tempId, 'failed');
+        
+        // Show error message
+        this.showError('Connection to chat server is not available. Please refresh the page.');
+      }
     } catch (error) {
-      console.error('Error sending message via HTTP:', error);
+      console.error('Error in sendMessage:', error);
+      this.showError('An error occurred while sending the message.');
+    }
+  },
+  
+  /**
+   * Update the status of a message in the UI
+   * @param {string} messageId - Message ID
+   * @param {string} status - New status ('sending', 'sent', 'delivered', 'read', 'failed')
+   */
+  updateMessageStatus(messageId, status) {
+    console.log(`Updating message ${messageId} status to ${status}`);
+    
+    try {
+      // Update in state
+      const messages = this.state.messages || [];
+      const messageIndex = messages.findIndex(m => m.message_id === messageId);
       
-      // Update message status
-      this.updateMessageStatus(messageId, { status: 'failed', error: error.message });
-      
-      // Rethrow error
-      throw error;
+      if (messageIndex >= 0) {
+        messages[messageIndex].status = status;
+        this.state.messages = messages;
+        
+        // Update in DOM
+        const messageElement = document.querySelector(`.message[data-message-id="${messageId}"]`);
+        if (messageElement) {
+          // Remove previous status classes
+          messageElement.classList.remove('status-sending', 'status-sent', 'status-delivered', 'status-read', 'status-failed');
+          
+          // Add new status class
+          messageElement.classList.add(`status-${status}`);
+          
+          // Update status icon if it exists
+          const statusIcon = messageElement.querySelector('.message-status');
+          if (statusIcon) {
+            let iconHTML = '';
+            
+            switch (status) {
+              case 'sending':
+                iconHTML = '<i class="fas fa-clock"></i>';
+                break;
+              case 'sent':
+                iconHTML = '<i class="fas fa-check"></i>';
+                break;
+              case 'delivered':
+                iconHTML = '<i class="fas fa-check-double"></i>';
+                break;
+              case 'read':
+                iconHTML = '<i class="fas fa-check-double text-primary"></i>';
+                break;
+              case 'failed':
+                iconHTML = '<i class="fas fa-exclamation-circle text-danger"></i>';
+                break;
+              default:
+                iconHTML = '';
+            }
+            
+            statusIcon.innerHTML = iconHTML;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error updating message status:', error);
     }
   },
   
@@ -955,6 +1449,55 @@ const ChatPage = {
     } catch (error) {
       // Ignore errors with audio - not critical
       console.warn('Could not play notification sound:', error);
+    }
+  },
+  
+  /**
+   * Play a message sent sound
+   */
+  playMessageSentSound() {
+    try {
+      // Create audio context
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // Create oscillator for a simple beep sound
+      const oscillator = audioContext.createOscillator();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 1000; // Higher frequency for sent sound
+      
+      // Create gain node to control volume
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = 0.05; // Low volume
+      
+      // Connect nodes
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Play sound
+      oscillator.start();
+      
+      // Stop after 100ms
+      setTimeout(() => {
+        oscillator.stop();
+      }, 100);
+    } catch (error) {
+      console.warn('Could not play message sent sound:', error);
+    }
+  },
+  
+  /**
+   * Check if socket is connected
+   * @returns {boolean} True if socket is connected
+   */
+  isSocketConnected() {
+    try {
+      // Check both possible ways the socket client might be available
+      return (window.SocketClient && window.SocketClient.isConnected && window.SocketClient.isConnected()) || 
+             (this.socketClient && this.socketClient.isConnected && this.socketClient.isConnected()) ||
+             (typeof io !== 'undefined' && io.socket && io.socket.connected);
+    } catch (error) {
+      console.error('Error checking socket connection:', error);
+      return false;
     }
   }
 }; 
