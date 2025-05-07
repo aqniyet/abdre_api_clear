@@ -11,7 +11,7 @@ const MyChatsList = {
     wsEndpoint: '/api/realtime/socket.io',
     refreshInterval: 60000, // 1 minute in milliseconds
     maxRetries: 3,
-    defaultAvatar: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23CCCCCC"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>'
+    defaultAvatar: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%235C6BC0"><circle cx="12" cy="12" r="12" fill="%23E8EAF6"/><path d="M12 6c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm0 10c2.7 0 5.8 1.29 6 2H6c.23-.72 3.31-2 6-2zm0-12C6.48 4 2 8.48 2 14s4.48 10 10 10 10-4.48 10-10S17.52 4 12 4zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="%235C6BC0"/></svg>'
   },
   
   // State
@@ -36,7 +36,6 @@ const MyChatsList = {
     errorState: null,
     errorMessage: null,
     retryBtn: null,
-    newChatBtn: null,
     emptyNewChatBtn: null,
     chatSearch: null,
     newChatModal: null,
@@ -112,7 +111,6 @@ const MyChatsList = {
     this.elements.errorState = document.getElementById('error-state');
     this.elements.errorMessage = document.getElementById('error-message');
     this.elements.retryBtn = document.getElementById('retry-btn');
-    this.elements.newChatBtn = document.getElementById('new-chat-btn');
     this.elements.emptyNewChatBtn = document.getElementById('empty-new-chat-btn');
     this.elements.chatSearch = document.getElementById('chat-search');
     this.elements.newChatModal = document.getElementById('new-chat-modal');
@@ -140,13 +138,7 @@ const MyChatsList = {
       });
     }
     
-    // New chat buttons
-    if (this.elements.newChatBtn) {
-      this.elements.newChatBtn.addEventListener('click', () => {
-        this.showNewChatModal();
-      });
-    }
-    
+    // Empty state new chat button
     if (this.elements.emptyNewChatBtn) {
       this.elements.emptyNewChatBtn.addEventListener('click', () => {
         this.showNewChatModal();
@@ -215,39 +207,120 @@ const MyChatsList = {
         this.handleInvitationAccepted(event);
       });
     }
+    
+    // Setup mutation observer to handle fallback avatars
+    this.setupAvatarFallbackObserver();
+  },
+  
+  /**
+   * Setup mutation observer to handle fallback avatars
+   */
+  setupAvatarFallbackObserver: function() {
+    // Create a mutation observer to watch for changes to the DOM
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+          // Check for any fallback avatars that need initials
+          const fallbackAvatars = document.querySelectorAll('img.avatar-fallback[data-initials]');
+          fallbackAvatars.forEach(this.applyInitialsToAvatar);
+        }
+      });
+    });
+    
+    // Start observing the chat container for added nodes
+    if (this.elements.chatsContainer) {
+      observer.observe(this.elements.chatsContainer, { childList: true, subtree: true });
+    }
+    
+    // Also handle any existing fallback avatars
+    document.addEventListener('DOMContentLoaded', () => {
+      const fallbackAvatars = document.querySelectorAll('img.avatar-fallback[data-initials]');
+      fallbackAvatars.forEach(this.applyInitialsToAvatar);
+    });
+  },
+  
+  /**
+   * Apply initials to a fallback avatar image
+   * @param {HTMLImageElement} img - The image element
+   */
+  applyInitialsToAvatar: function(img) {
+    const initials = img.getAttribute('data-initials');
+    if (!initials) return;
+    
+    // Create a canvas to draw the initials
+    const canvas = document.createElement('canvas');
+    canvas.width = 48;
+    canvas.height = 48;
+    const ctx = canvas.getContext('2d');
+    
+    // Draw background
+    ctx.fillStyle = '#E8EAF6';
+    ctx.fillRect(0, 0, 48, 48);
+    
+    // Draw initials
+    ctx.fillStyle = '#5C6BC0';
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(initials, 24, 24);
+    
+    // Set canvas as image source
+    img.src = canvas.toDataURL('image/png');
   },
   
   /**
    * Fetch chats from the API
    */
   fetchChats: function() {
-    // Show loader
+    this.hideError();
     this.showLoader();
-    
-    // Reset error state
     this.state.hasError = false;
     this.state.errorMessage = '';
+    
+    // Check if user is authenticated
+    if (!window.AuthHelper || !AuthHelper.isAuthenticated()) {
+      console.error("Authentication required to fetch chats");
+      this.state.hasError = true;
+      this.state.errorMessage = 'Please log in to view your conversations';
+      this.showError();
+      this.hideLoader();
+      return;
+    }
     
     // Get auth headers
     const headers = AuthHelper.getAuthHeaders();
     
-    console.log('Fetching chats...');
+    console.log('Fetching chats for current user...');
     
     fetch('/api/my-chats', {
       method: 'GET',
       headers: headers,
     })
     .then(response => {
+      if (response.status === 401) {
+        // Authentication error
+        throw new Error('Authentication required');
+      }
+      
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
+      
       return response.json();
     })
     .then(data => {
       console.log('Chats fetched successfully:', data);
       
-      // Store chats in state
-      this.state.chats = Array.isArray(data) ? data : (data.chats || []);
+      // Store chats in state - handle both array and object formats
+      if (Array.isArray(data)) {
+        this.state.chats = data;
+      } else if (data && Array.isArray(data.chats)) {
+        this.state.chats = data.chats;
+      } else {
+        // Invalid data format, set to empty array
+        console.warn('Invalid data format received from API:', data);
+        this.state.chats = [];
+      }
       
       // Sort chats by last message timestamp
       this.sortChats();
@@ -261,7 +334,21 @@ const MyChatsList = {
     .catch(error => {
       console.error('Error fetching chats:', error);
       
-      // Increment retry count
+      if (error.message === 'Authentication required') {
+        // Authentication error
+        this.state.hasError = true;
+        this.state.errorMessage = 'Please log in to view your conversations';
+        this.showError();
+        
+        // Redirect to login after a short delay
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 2000);
+        
+        return;
+      }
+      
+      // Increment retry count for other errors
       this.state.retryCount++;
       
       if (this.state.retryCount <= this.config.maxRetries) {
@@ -371,6 +458,12 @@ const MyChatsList = {
             title="${isOnline ? 'Online' : 'Offline'}"></span>
     `;
     
+    // Get avatar URL with fallback
+    const avatarUrl = this.getAvatarUrl(chat);
+    const defaultAvatarPath = this.config.defaultAvatar;
+    const chatName = chat.title || chat.recipient_name || 'Unnamed Chat';
+    const initials = this.getInitials(chatName);
+    
     // Determine if the chat is encrypted
     const encryptionBadge = chat.encrypted ? 
       `<span class="badge bg-success rounded-pill ms-2" title="End-to-end encrypted">
@@ -381,14 +474,15 @@ const MyChatsList = {
     chatItem.innerHTML = `
       <div class="d-flex align-items-start">
         <div class="chat-avatar me-3 position-relative">
-          <img src="${chat.recipient_avatar || this.config.defaultAvatar}" alt="${chat.recipient_name || 'User'}" 
-               class="rounded-circle" width="48" height="48">
+          <img src="${avatarUrl}" alt="${chatName}" 
+               class="rounded-circle" width="48" height="48" 
+               onerror="this.src='${defaultAvatarPath}'; this.classList.add('avatar-fallback'); this.setAttribute('data-initials', '${initials}');">
           ${statusIndicator}
         </div>
         <div class="flex-grow-1 min-width-0">
           <div class="d-flex justify-content-between align-items-center">
             <h6 class="mb-0 text-truncate">
-              ${chat.title || chat.recipient_name || 'Unnamed Chat'}
+              ${chatName}
               ${encryptionBadge}
             </h6>
             <small class="text-muted ms-2 flex-shrink-0">${timeDisplay}</small>
@@ -403,6 +497,63 @@ const MyChatsList = {
     `;
     
     return chatItem;
+  },
+  
+  /**
+   * Get avatar URL for a chat
+   * @param {Object} chat - Chat data
+   * @returns {string} - Avatar URL
+   */
+  getAvatarUrl: function(chat) {
+    // First try recipient_avatar
+    if (chat.recipient_avatar && typeof chat.recipient_avatar === 'string' && chat.recipient_avatar.trim() !== '') {
+      // If it's a data URL or absolute URL, use it directly
+      if (chat.recipient_avatar.startsWith('data:') || chat.recipient_avatar.startsWith('http')) {
+        return chat.recipient_avatar;
+      }
+      
+      // Otherwise, it's a relative path, make sure it's properly formatted
+      if (!chat.recipient_avatar.startsWith('/')) {
+        return '/' + chat.recipient_avatar;
+      }
+      
+      return chat.recipient_avatar;
+    }
+    
+    // Try group_avatar for group chats
+    if (chat.group_avatar && typeof chat.group_avatar === 'string' && chat.group_avatar.trim() !== '') {
+      if (chat.group_avatar.startsWith('data:') || chat.group_avatar.startsWith('http')) {
+        return chat.group_avatar;
+      }
+      
+      if (!chat.group_avatar.startsWith('/')) {
+        return '/' + chat.group_avatar;
+      }
+      
+      return chat.group_avatar;
+    }
+    
+    // Use default avatar
+    return this.config.defaultAvatar;
+  },
+  
+  /**
+   * Get initials from name for fallback avatar display
+   * @param {string} name - Name to get initials from
+   * @returns {string} - Initials (1-2 characters)
+   */
+  getInitials: function(name) {
+    if (!name || typeof name !== 'string') return '?';
+    
+    const names = name.trim().split(' ');
+    
+    if (names.length === 1) {
+      // Single name, get first character
+      return names[0].charAt(0).toUpperCase();
+    }
+    
+    // Multiple names, get first character of first and last name
+    return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
   },
   
   /**
@@ -613,8 +764,16 @@ const MyChatsList = {
    * Generate QR invitation
    */
   generateQrInvitation: async function() {
-    if (!window.QRCodeGenerator || !window.InvitationManager) {
-      console.error('QRCodeGenerator or InvitationManager not available');
+    // Check dependencies
+    if (!window.QRCodeGenerator) {
+      console.error('QRCodeGenerator not available');
+      this.showQrError('QR code generation library not available. Please refresh the page and try again.');
+      return;
+    }
+    
+    if (!window.InvitationManager) {
+      console.error('InvitationManager not available');
+      this.showQrError('Invitation management service not available. Please refresh the page and try again.');
       return;
     }
     
@@ -644,11 +803,25 @@ const MyChatsList = {
         scanStatusEl.className = 'alert alert-info';
       }
       
+      // Set up error listeners
+      const handleInvitationError = (event) => {
+        console.error('Invitation generation error event:', event.detail);
+        this.showQrError(event.detail.error || 'Failed to generate invitation code');
+      };
+      
+      document.addEventListener('invitationGenerationError', handleInvitationError);
+      
       // Generate invitation
+      console.log('Starting invitation generation...');
       const invitation = await InvitationManager.generateInvitation();
+      console.log('Invitation generated:', invitation);
+      
+      // Remove error listener
+      document.removeEventListener('invitationGenerationError', handleInvitationError);
       
       // Create invitation URL
       const invitationUrl = QRCodeGenerator.createInvitationURL(invitation.invitation_token);
+      console.log('Generated invitation URL:', invitationUrl);
       
       // Display URL
       if (this.elements.invitationLinkInput) {
@@ -658,10 +831,19 @@ const MyChatsList = {
       // Generate QR code
       if (qrCodeEl) {
         qrCodeEl.innerHTML = ''; // Clear loading state
-        QRCodeGenerator.generateQR('qr-code', invitationUrl, {
+        const qrCode = QRCodeGenerator.generateQR('qr-code', invitationUrl, {
           width: 240,
           height: 240
         });
+        
+        if (!qrCode) {
+          console.error('QR code generation returned null');
+          // Avoid showing an error if the QRCode element already contains error message
+          if (!qrCodeEl.querySelector('.alert-danger')) {
+            this.showQrError('Failed to render QR code. Please try again.');
+          }
+          return;
+        }
       }
       
       // Update status indicators
@@ -677,24 +859,45 @@ const MyChatsList = {
       
     } catch (error) {
       console.error('Error generating QR invitation:', error);
-      
-      // Show error in UI
-      const qrCodeEl = document.getElementById('qr-code');
-      if (qrCodeEl) {
-        qrCodeEl.innerHTML = `
-          <div class="alert alert-danger">
-            <i class="fas fa-exclamation-circle me-2"></i>
-            Failed to generate QR code: ${error.message || 'Unknown error'}
-          </div>
-        `;
-      }
-      
-      // Update status indicator
-      const statusEl = document.getElementById('invitation-status');
-      if (statusEl) {
-        statusEl.textContent = 'Error';
-        statusEl.className = 'badge bg-danger';
-      }
+      this.showQrError(error.message || 'Unknown error generating QR code');
+    }
+  },
+  
+  /**
+   * Handle invitation generation error
+   */
+  handleInvitationError: function(event) {
+    console.error('Invitation generation error event:', event.detail);
+    MyChatsList.showQrError(event.detail.error || 'Failed to generate invitation code');
+  },
+  
+  /**
+   * Show QR code generation error
+   */
+  showQrError: function(errorMessage) {
+    // Show error in UI
+    const qrCodeEl = document.getElementById('qr-code');
+    if (qrCodeEl) {
+      qrCodeEl.innerHTML = `
+        <div class="alert alert-danger">
+          <i class="fas fa-exclamation-circle me-2"></i>
+          ${errorMessage || 'Unknown error'}
+        </div>
+      `;
+    }
+    
+    // Update status indicator
+    const statusEl = document.getElementById('invitation-status');
+    if (statusEl) {
+      statusEl.textContent = 'Error';
+      statusEl.className = 'badge bg-danger';
+    }
+    
+    // Update scan status
+    const scanStatusEl = document.getElementById('scan-status');
+    if (scanStatusEl) {
+      scanStatusEl.textContent = 'Failed to generate QR code. Please try again.';
+      scanStatusEl.className = 'alert alert-danger';
     }
   },
   

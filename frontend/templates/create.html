@@ -98,11 +98,16 @@
 </head>
 
 <body>
-    <header class="bg-primary text-white py-3">
+    <!-- Standardized Menu Bar -->
+    <header class="bg-primary text-white py-2 menu-bar">
         <div class="container-fluid">
             <div class="row align-items-center">
                 <div class="col-6">
-                    <h1 class="fs-3 mb-0"><a href="/my-chats" class="text-white text-decoration-none">ABDRE Chat</a></h1>
+                    <h1 class="fs-3 mb-0">
+                        <a href="/my-chats" class="text-white text-decoration-none d-flex align-items-center">
+                            <span class="brand-logo me-2">ABDRE Chat</span>
+                        </a>
+                    </h1>
                 </div>
                 <div class="col-6 text-end">
                     <div id="auth-status">
@@ -197,16 +202,16 @@
     <!-- Bootstrap Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
     
-    <!-- QRCode.js from CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-    
     <!-- Socket.IO from CDN -->
     <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.6.1/dist/socket.io.min.js"></script>
     
     <!-- Auth Helper - MUST BE LOADED FIRST -->
     <script src="/static/js/utils/auth-helper.js"></script>
     
-    <!-- QR Code Generator -->
+    <!-- QRCode.js library - load before QR generator utility -->
+    <script src="/static/js/libs/qrcode.min.js"></script>
+    
+    <!-- QR Code Generator utility -->
     <script src="/static/js/utils/qrcode-generator.js"></script>
     
     <!-- API Client -->
@@ -220,5 +225,24 @@
     
     <!-- Create Chat Page Script -->
     <script src="/static/js/modules/create-chat-page.js"></script>
+    
+    <!-- Check if QRCodeGenerator is available -->
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        if (typeof QRCodeGenerator === 'undefined') {
+          console.error('QRCodeGenerator not available');
+          document.getElementById('qr-code').innerHTML = `
+            <div class="alert alert-danger">
+              QR code generation library not available. Please refresh the page and try again.
+            </div>
+          `;
+        } else {
+          console.log('QRCodeGenerator is available');
+        }
+      });
+    </script>
+    
+    <!-- Menu Bar Component -->
+    <script src="/static/js/components/menu-bar.js"></script>
 </body>
 </html> 

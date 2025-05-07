@@ -29,9 +29,9 @@ const ChatClient = {
     connectionStatus: null,
     connectionMessage: null,
     errorContainer: null,
-    chatList: null,
     currentChatName: null,
-    chatParticipants: null,
+    statusIndicator: null,
+    chatStatus: null,
     reconnectButton: null
   },
   
@@ -43,6 +43,13 @@ const ChatClient = {
    */
   init: function() {
     console.log('Initializing Chat Client...');
+    
+    // Check if we should use the ChatPage module
+    if (typeof ChatPage !== 'undefined') {
+      console.log('ChatPage module detected, delegating initialization');
+      ChatPage.init();
+      return;
+    }
     
     // Cache DOM elements
     this.cacheElements();
@@ -65,8 +72,8 @@ const ChatClient = {
       // Load chat details
       this.loadChatDetails(this.chatId);
     } else {
-      // Load available chats
-      this.loadAvailableChats();
+      // Redirect to chats page if no chat ID
+      window.location.href = '/my-chats';
     }
     
     console.log('Chat Client initialized');
@@ -83,9 +90,9 @@ const ChatClient = {
     this.elements.connectionStatus = document.getElementById('connection-status');
     this.elements.connectionMessage = document.getElementById('connection-message');
     this.elements.errorContainer = document.getElementById('error-container');
-    this.elements.chatList = document.getElementById('chat-list');
     this.elements.currentChatName = document.getElementById('current-chat-name');
-    this.elements.chatParticipants = document.getElementById('chat-participants');
+    this.elements.statusIndicator = document.getElementById('status-indicator');
+    this.elements.chatStatus = document.getElementById('chat-status');
     this.elements.reconnectButton = document.getElementById('reconnect-button');
     
     // Initialize connection error modal
@@ -101,14 +108,6 @@ const ChatClient = {
       this.elements.messageForm.addEventListener('submit', (e) => {
         e.preventDefault();
         this.sendMessage();
-      });
-    }
-    
-    // New chat button
-    const newChatBtn = document.getElementById('new-chat-btn');
-    if (newChatBtn) {
-      newChatBtn.addEventListener('click', () => {
-        window.location.href = '/chat/new';
       });
     }
     
@@ -320,6 +319,19 @@ const ChatClient = {
           type: 'system_message',
           ...data
         })});
+      });
+      
+      // Add handlers for user status events
+      this.socket.on('user_joined', (data) => {
+        this.handleSocketUserJoined(data);
+      });
+      
+      this.socket.on('user_active', (data) => {
+        this.handleSocketUserActive(data);
+      });
+      
+      this.socket.on('user_away', (data) => {
+        this.handleSocketUserAway(data);
       });
       
       // Store chat ID
@@ -631,7 +643,25 @@ const ChatClient = {
     })
     .then(data => {
       if (data && data.name) {
+        // Set the chat name in the header
         this.elements.currentChatName.textContent = data.name;
+      }
+      
+      // Handle opponent name and status indicators
+      if (data && data.participants && Array.isArray(data.participants)) {
+        const currentUserId = AuthHelper.getUserId();
+        
+        // Find opponent (not the current user)
+        const opponent = data.participants.find(p => p.user_id !== currentUserId);
+        
+        if (opponent) {
+          // Set opponent name
+          const opponentName = opponent.display_name || opponent.username || 'Chat Participant';
+          this.elements.currentChatName.textContent = opponentName;
+          
+          // Initialize status as offline
+          this.updateStatusIndicator('offline');
+        }
       }
     })
     .catch(error => {
@@ -640,65 +670,98 @@ const ChatClient = {
   },
   
   /**
+   * Update the status indicator
+   * @param {string} status - The status: 'online', 'away', or 'offline'
+   */
+  updateStatusIndicator: function(status) {
+    if (!this.elements.statusIndicator || !this.elements.chatStatus) return;
+    
+    // Remove all status classes
+    this.elements.statusIndicator.classList.remove('online', 'away', 'offline');
+    
+    // Add the appropriate class and text
+    switch (status) {
+      case 'online':
+        this.elements.statusIndicator.classList.add('online');
+        this.elements.chatStatus.textContent = 'Online';
+        break;
+      case 'away':
+        this.elements.statusIndicator.classList.add('away');
+        this.elements.chatStatus.textContent = 'Away';
+        break;
+      case 'offline':
+      default:
+        this.elements.statusIndicator.classList.add('offline');
+        this.elements.chatStatus.textContent = 'Offline';
+        break;
+    }
+  },
+  
+  /**
+   * Handle Socket.IO 'user_joined' event
+   * @param {Object} data - Event data
+   */
+  handleSocketUserJoined: function(data) {
+    console.log('User joined:', data);
+    
+    // Get current user ID to identify if the joined user is the opponent
+    const currentUserId = AuthHelper.getUserId();
+    
+    // If the joined user is not the current user, update status to online
+    if (data.user_id !== currentUserId) {
+      this.updateStatusIndicator('online');
+    }
+  },
+  
+  /**
+   * Handle Socket.IO 'user_active' event
+   * @param {Object} data - Event data
+   */
+  handleSocketUserActive: function(data) {
+    console.log('User active:', data);
+    
+    // Get current user ID to identify if the active user is the opponent
+    const currentUserId = AuthHelper.getUserId();
+    
+    // If the active user is not the current user, update status to online
+    if (data.user_id !== currentUserId) {
+      this.updateStatusIndicator('online');
+    }
+  },
+  
+  /**
+   * Handle Socket.IO 'user_away' event
+   * @param {Object} data - Event data
+   */
+  handleSocketUserAway: function(data) {
+    console.log('User away:', data);
+    
+    // Get current user ID to identify if the away user is the opponent
+    const currentUserId = AuthHelper.getUserId();
+    
+    // If the away user is not the current user, update status to away
+    if (data.user_id !== currentUserId) {
+      this.updateStatusIndicator('away');
+    }
+  },
+  
+  /**
    * Load available chats from the API
+   * Note: This function is no longer used in single chat view
    */
   loadAvailableChats: function() {
-    if (!this.elements.chatList) return;
-    
-    fetch('/api/chats', {
-      headers: AuthHelper.getAuthHeaders()
-    })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error('Failed to load chats');
-      }
-      return response.json();
-    })
-    .then(data => {
-      this.renderChatList(data.chats || []);
-    })
-    .catch(error => {
-      console.error('Error loading chats:', error);
-      this.elements.chatList.innerHTML = `
-        <div class="p-3 text-center text-danger">
-          <p class="mb-0">Failed to load chats. Please try again.</p>
-        </div>
-      `;
-    });
+    // This function is no longer needed since the chat list is removed
+    console.log('Chat list panel has been removed, skipping loadAvailableChats');
   },
   
   /**
    * Render the list of available chats
+   * Note: This function is no longer used in single chat view
    * @param {Array} chats List of chat rooms
    */
   renderChatList: function(chats) {
-    if (!this.elements.chatList) return;
-    
-    if (!chats || chats.length === 0) {
-      this.elements.chatList.innerHTML = `
-        <div class="p-3 text-center text-muted small">
-          <p class="mb-0">No chats available.</p>
-          <p class="mb-0 mt-2">Create a new chat to get started.</p>
-        </div>
-      `;
-      return;
-    }
-    
-    let html = '';
-    chats.forEach(chat => {
-      const isActive = chat.id === this.chatId;
-      html += `
-        <a href="/chat/${chat.id}" class="list-group-item list-group-item-action ${isActive ? 'active' : ''}">
-          <div class="d-flex w-100 justify-content-between">
-            <h6 class="mb-1">${this.escapeHtml(chat.name)}</h6>
-            <small>${this.formatDate(chat.last_activity)}</small>
-          </div>
-          <small>${chat.participant_count} participant${chat.participant_count !== 1 ? 's' : ''}</small>
-        </a>
-      `;
-    });
-    
-    this.elements.chatList.innerHTML = html;
+    // This function is no longer needed since the chat list is removed
+    console.log('Chat list panel has been removed, skipping renderChatList');
   },
   
   /**

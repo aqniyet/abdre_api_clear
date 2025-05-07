@@ -20,11 +20,16 @@
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
 </head>
 <body>
-    <header class="bg-primary text-white py-3">
+    <!-- Standardized Menu Bar -->
+    <header class="bg-primary text-white py-2 menu-bar">
         <div class="container-fluid">
             <div class="row align-items-center">
                 <div class="col-6">
-                    <h1 class="fs-3 mb-0"><a href="/my-chats" class="text-white text-decoration-none">ABDRE Chat</a></h1>
+                    <h1 class="fs-3 mb-0">
+                        <a href="/my-chats" class="text-white text-decoration-none d-flex align-items-center">
+                            <span class="brand-logo me-2">ABDRE Chat</span>
+                        </a>
+                    </h1>
                 </div>
                 <div class="col-6 text-end">
                     <div id="auth-status">
@@ -41,9 +46,6 @@
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h2 class="h3 mb-0">My Conversations</h2>
                     <div>
-                        <button type="button" id="new-chat-btn" class="btn btn-outline-primary me-2">
-                            <i class="fas fa-user-plus me-2"></i> Add User
-                        </button>
                         <button type="button" id="qr-invite-btn" class="btn btn-primary">
                             <i class="fas fa-qrcode me-2"></i> QR Invite
                         </button>
@@ -234,6 +236,12 @@
     
     <!-- Invitation Manager -->
     <script src="/static/js/utils/invitation-manager.js"></script>
+    
+    <!-- API Client -->
+    <script src="/static/js/services/api-client.js"></script>
+    
+    <!-- Menu Bar Component -->
+    <script src="/static/js/components/menu-bar.js"></script>
     
     <!-- My Chats Script -->
     <script src="/static/js/modules/my-chats-page.js"></script>

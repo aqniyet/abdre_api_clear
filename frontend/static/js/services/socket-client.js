@@ -119,15 +119,99 @@ const SocketClient = {
      */
     async _checkConnectionMethod(socketOptions) {
         try {
-            console.log('Connecting directly to realtime service on http://localhost:5506');
-            // Always use direct connection to realtime service
-            this._directConnectionUrl = 'http://localhost:5506';
-            this._initializeSocketConnection('http://localhost:5506', socketOptions);
+            // First attempt to check with the API gateway to get the correct connection URL
+            console.log('Checking connection details with API gateway...');
+            const response = await fetch('/api/realtime/socket.io/', {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${AuthHelper.getToken() || 'guest'}`
+                }
+            });
+            
+            // Log the status code to debug
+            console.log(`API gateway response status: ${response.status}`);
+            
+            if (response.ok) {
+                try {
+                    const data = await response.json();
+                    console.log('Received connection details from API gateway:', data);
+                    
+                    if (data.connection_url) {
+                        console.log('Using API-provided connection URL:', data.connection_url);
+                        this._directConnectionUrl = data.connection_url;
+                        
+                        // Extract base URL without query parameters for Socket.IO
+                        let connectionBase = data.connection_url.split('?')[0];
+                        if (connectionBase.endsWith('/socket.io/')) {
+                            connectionBase = connectionBase.substring(0, connectionBase.length - 10);
+                        }
+                        
+                        // Handle WebSocket protocol in URL
+                        if (connectionBase.startsWith('ws://') || connectionBase.startsWith('wss://')) {
+                            // Socket.IO requires http:// or https:// in the constructor
+                            // It will handle the protocol upgrade to WebSocket
+                            connectionBase = connectionBase.replace('ws://', 'http://');
+                            connectionBase = connectionBase.replace('wss://', 'https://');
+                        }
+                        
+                        console.log('Using Socket.IO connection base URL:', connectionBase);
+                        
+                        // Add any additional query params from the API response
+                        if (data.query_params) {
+                            socketOptions.query = {
+                                ...socketOptions.query,
+                                ...data.query_params
+                            };
+                        }
+                        
+                        // Add transport preference
+                        if (data.transport) {
+                            socketOptions.transports = [data.transport, 'polling'];
+                        }
+                        
+                        // Initialize Socket.IO connection with the provided URL
+                        this._initializeSocketConnection(connectionBase, socketOptions);
+                        return;
+                    }
+                } catch (jsonError) {
+                    console.error('Error parsing API response JSON:', jsonError);
+                }
+            }
+            
+            // Fallback to direct connection if API gateway doesn't provide URL
+            console.warn('API gateway did not provide a valid connection URL, falling back to direct connection');
+            console.log('Connecting directly to realtime service');
+            
+            // Determine host and protocol - use WebSocket for direct connection
+            const isSecure = window.location.protocol === 'https:';
+            const host = window.location.hostname;
+            const port = '5506'; // Default port for realtime service
+            
+            // Socket.IO requires http:// or https:// in the constructor
+            // It will handle the protocol upgrade to WebSocket
+            const protocol = isSecure ? 'https' : 'http';
+            
+            this._directConnectionUrl = `${protocol}://${host}:${port}`;
+            console.log('Using direct connection URL:', this._directConnectionUrl);
+            
+            // Initialize Socket.IO connection
+            this._initializeSocketConnection(this._directConnectionUrl, socketOptions);
         } catch (error) {
-            console.error('Error initializing direct connection:', error);
+            console.error('Error determining connection method:', error);
             console.log('Falling back to standard connection');
-            // Fallback to API gateway proxy as last resort
-            this._initializeSocketConnection(this.config.url, socketOptions);
+            
+            // Last resort fallback to current host with default realtime port
+            const isSecure = window.location.protocol === 'https:';
+            const host = window.location.hostname;
+            const port = '5506'; // Default port for realtime service
+            const protocol = isSecure ? 'https' : 'http';
+            
+            this._directConnectionUrl = `${protocol}://${host}:${port}`;
+            console.log('Using fallback connection URL:', this._directConnectionUrl);
+            
+            // Initialize Socket.IO connection
+            this._initializeSocketConnection(this._directConnectionUrl, socketOptions);
         }
     },
     
