@@ -38,12 +38,12 @@ IS_DEVELOPMENT = os.environ.get("FLASK_ENV", "development") == "development"
 
 # Configure Socket.IO with improved settings for better connection reliability
 socketio = SocketIO(
-    app, 
-    cors_allowed_origins="*", 
-    logger=IS_DEVELOPMENT, 
-    engineio_logger=IS_DEVELOPMENT, 
-    ping_timeout=60, 
-    ping_interval=25, 
+    app,
+    cors_allowed_origins="*",
+    logger=IS_DEVELOPMENT,
+    engineio_logger=IS_DEVELOPMENT,
+    ping_timeout=60,
+    ping_interval=25,
     async_mode="threading",
     always_connect=True,
     manage_session=False,
@@ -569,7 +569,7 @@ def handle_user_away(data):
     if not client:
         logger.error(f"USER_AWAY ERROR - No client found for SID {sid}")
         return
-
+    
     try:
         room_id = data.get("room_id")
         
@@ -788,7 +788,7 @@ def handle_subscribe(data):
         logger.info(f"SUBSCRIBE - User {client['user_id']} subscribing to room {room}")
 
         # Join the Socket.IO room
-        join_room(room)
+    join_room(room)
 
         # Track room in client data if not already there
         if room not in client["rooms"]:
@@ -1035,7 +1035,7 @@ def handle_check_invitation(data):
                 "is_used": status_data.get("is_used", False),
                 "chat_id": status_data.get("chat_id")
             })
-        else:
+    else:
             error_data = response.json()
             emit("invitation_status", {
                 "success": False,
@@ -1133,10 +1133,10 @@ def handle_qr_scanned(data):
                 # Notify the host that their QR was scanned
                 for host_sid, host_client in connected_clients.items():
                     if host_client.get("user_id") == host_id:
-                        emit("qr_scanned_notification", {
-                            "invitation_token": invitation_token,
+                emit("qr_scanned_notification", {
+                    "invitation_token": invitation_token,
                             "scanner_id": user_id
-                        }, room=host_sid)
+                }, room=host_sid)
             
             # Acknowledge the event
             emit("qr_scanned_ack", {

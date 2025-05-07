@@ -6,7 +6,7 @@
     "url": "http://localhost:9001",
     "health_endpoint": "/health",
     "status": "offline",
-    "last_check": 1746635882.473234,
+    "last_check": 1746637023.0348892,
     "metadata": {}
   },
   "user_service": {
@@ -16,7 +16,7 @@
     "url": "http://localhost:9002",
     "health_endpoint": "/health",
     "status": "offline",
-    "last_check": 1746635882.4738402,
+    "last_check": 1746637023.035966,
     "metadata": {}
   },
   "oauth_service": {
@@ -26,7 +26,7 @@
     "url": "http://localhost:9003",
     "health_endpoint": "/health",
     "status": "offline",
-    "last_check": 1746635882.4775693,
+    "last_check": 1746637023.0389132,
     "metadata": {}
   },
   "chat_service": {
@@ -36,7 +36,7 @@
     "url": "http://localhost:9004",
     "health_endpoint": "/health",
     "status": "offline",
-    "last_check": 1746635882.478269,
+    "last_check": 1746637023.039417,
     "metadata": {}
   },
   "realtime_service": {
@@ -46,7 +46,7 @@
     "url": "http://localhost:9006",
     "health_endpoint": "/health",
     "status": "offline",
-    "last_check": 1746635882.478751,
+    "last_check": 1746637023.0398684,
     "metadata": {}
   }
 }
