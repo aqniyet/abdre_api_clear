@@ -1,0 +1,7 @@
+Flask==2.2.5
+Flask-Cors==3.0.10
+PyJWT==2.6.0
+requests==2.31.0
+python-dotenv==1.0.0
+pyjwt==2.6.0
+logging==0.4.9.6 
