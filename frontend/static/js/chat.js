@@ -1,6 +1,7 @@
 /**
  * ABDRE Chat Client
  * Handles WebSocket connections and messaging for the chat system
+ * Updated to support server-side rendering and full-width layout
  */
 
 const ChatClient = {
@@ -32,7 +33,8 @@ const ChatClient = {
     currentChatName: null,
     statusIndicator: null,
     chatStatus: null,
-    reconnectButton: null
+    reconnectButton: null,
+    clearChatBtn: null
   },
   
   // Error modal
@@ -43,6 +45,20 @@ const ChatClient = {
    */
   init: function() {
     console.log('Initializing Chat Client...');
+    
+    // Check for server-side rendering
+    const isServerRendered = document.getElementById('messages-json') !== null;
+    
+    if (isServerRendered) {
+      console.log('Server-side rendering detected, delegating to ChatEnhancer');
+      // Let the enhancer handle everything for server-rendered pages
+      if (typeof ChatEnhancer !== 'undefined') {
+        // ChatEnhancer will initialize itself on DOMContentLoaded
+        return;
+      }
+      
+      console.warn('ChatEnhancer not available for server-rendered page, falling back to client-side rendering');
+    }
     
     // Check if we should use the ChatPage module
     if (typeof ChatPage !== 'undefined') {
@@ -94,6 +110,7 @@ const ChatClient = {
     this.elements.statusIndicator = document.getElementById('status-indicator');
     this.elements.chatStatus = document.getElementById('chat-status');
     this.elements.reconnectButton = document.getElementById('reconnect-button');
+    this.elements.clearChatBtn = document.getElementById('clear-chat-btn');
     
     // Initialize connection error modal
     this.connectionErrorModal = new bootstrap.Modal(document.getElementById('connection-error-modal'));
@@ -116,6 +133,16 @@ const ChatClient = {
       this.elements.reconnectButton.addEventListener('click', () => {
         this.connectionErrorModal.hide();
         this.reconnect();
+      });
+    }
+    
+    // Clear chat button
+    if (this.elements.clearChatBtn) {
+      this.elements.clearChatBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (confirm('Are you sure you want to clear all messages in this chat?')) {
+          this.clearChat();
+        }
       });
     }
     
@@ -850,7 +877,7 @@ const ChatClient = {
   
   /**
    * Load available chats from the API
-   * Note: This function is no longer used in single chat view
+   * Note: This function is no longer used in full-width layout
    */
   loadAvailableChats: function() {
     // This function is no longer needed since the chat list is removed
@@ -859,7 +886,7 @@ const ChatClient = {
   
   /**
    * Render the list of available chats
-   * Note: This function is no longer used in single chat view
+   * Note: This function is no longer used in full-width layout
    * @param {Array} chats List of chat rooms
    */
   renderChatList: function(chats) {
@@ -977,6 +1004,53 @@ const ChatClient = {
     if (container) {
       container.scrollTop = container.scrollHeight;
     }
+  },
+  
+  /**
+   * Clear all messages in current chat
+   */
+  clearChat: function() {
+    if (!this.chatId) return;
+    
+    // Clear messages in the UI
+    if (this.elements.chatMessages) {
+      this.elements.chatMessages.innerHTML = `
+        <div class="text-center p-5">
+          <div class="text-muted mb-3">
+            <i class="fas fa-comments fa-3x"></i>
+          </div>
+          <p>No messages yet. Start the conversation!</p>
+        </div>
+        <div id="connection-message" class="alert alert-info text-center">
+          Connected to chat server.
+        </div>
+      `;
+    }
+    
+    // Clear messages array
+    this.messages = [];
+    
+    // Show success message
+    this.showSuccess('Chat cleared successfully');
+  },
+  
+  /**
+   * Show a success message in the error container (reuses the container)
+   * @param {string} message Success message to display
+   */
+  showSuccess: function(message) {
+    if (!this.elements.errorContainer) return;
+    
+    this.elements.errorContainer.textContent = message;
+    this.elements.errorContainer.classList.remove('d-none', 'text-danger');
+    this.elements.errorContainer.classList.add('text-success');
+    
+    // Hide after 5 seconds
+    setTimeout(() => {
+      this.elements.errorContainer.classList.add('d-none');
+      this.elements.errorContainer.classList.remove('text-success');
+      this.elements.errorContainer.classList.add('text-danger');
+    }, 5000);
   }
 };
 

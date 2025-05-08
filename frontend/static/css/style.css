@@ -613,8 +613,8 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Make message container use more vertical space in full-width view */
 #message-container {
-  height: calc(100vh - 250px);
-  min-height: 300px;
+  height: calc(100vh - 220px);
+  min-height: 400px;
   max-height: 100%;
 }
 
@@ -629,21 +629,61 @@ h1, h2, h3, h4, h5, h6 {
   margin: 0 auto;
 }
 
+/* Improve message spacing in full-width view */
+.message-wrapper {
+  padding: 0.25rem 0;
+}
+
+/* Enhance the look of chat card in full-width view */
+.card {
+  border-radius: 0.5rem;
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+/* Better spacing for card header in full-width view */
+.card-header {
+  padding: 0.75rem 1.25rem;
+}
+
 @media (min-width: 992px) {
   /* Larger screens - center the input field and limit width for better readability */
   .card-footer .input-group {
     max-width: 80%;
     margin: 0 auto;
   }
+  
+  /* Center the messages for better readability on large screens */
+  .message-wrapper {
+    margin: 0 auto;
+    max-width: 85%;
+  }
 }
 
 /* Make back button more visible */
-.fs-3 .fas.fa-arrow-left {
+.menu-bar a:hover .fa-chevron-left {
+  transform: translateX(-3px);
   transition: transform 0.2s ease;
 }
 
-.fs-3:hover .fas.fa-arrow-left {
-  transform: translateX(-3px);
+/* Improved dropdown styles */
+.dropdown-menu {
+  border: none;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+  border-radius: 0.5rem;
+}
+
+.dropdown-item {
+  padding: 0.5rem 1rem;
+  transition: background-color 0.2s ease;
+}
+
+.dropdown-item:hover {
+  background-color: #f8f9fa;
+}
+
+.dropdown-item .fas {
+  width: 20px;
+  text-align: center;
 }
 
 /* Authentication Pages */
