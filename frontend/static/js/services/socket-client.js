@@ -51,7 +51,8 @@ const SocketClient = {
             READ_RECEIPT: 'read_receipt',
             MESSAGE_STATUS: 'message_status',
             JOIN_SUCCESS: 'join_success',
-            USER_JOINED: 'user_joined'
+            USER_JOINED: 'user_joined',
+            CHECK_INVITATION_STATUS: 'check_invitation_status'
         }
     },
     
@@ -263,14 +264,14 @@ const SocketClient = {
             }
             
             // Create the Socket.IO instance
-            this._socket = io(url, options);
-            
-            // Set up event listeners
-            this._setupEventListeners();
-            
+        this._socket = io(url, options);
+        
+        // Set up event listeners
+        this._setupEventListeners();
+        
             // Connect if not auto-connecting
             if (!options.autoConnect) {
-                this.connect();
+        this.connect();
             } else {
                 console.log('Socket configured for auto-connection');
             }
@@ -398,7 +399,7 @@ const SocketClient = {
         // Custom event listeners
         this._socket.on('ping', (data) => {
             console.log('Received ping from server:', data);
-            
+        
             // Respond with pong
             this._socket.emit('pong', { timestamp: Date.now() });
         });
@@ -421,7 +422,7 @@ const SocketClient = {
         // Set up system message handler
         this._socket.on('system_message', (data) => {
             console.log('System message received:', data);
-            
+        
             // Trigger message handlers
             this._triggerHandlers('message', data);
         });
@@ -433,7 +434,7 @@ const SocketClient = {
             // Trigger message handlers
             this._triggerHandlers('message', data);
         });
-        
+                
         // Set up user status handlers
         this._socket.on('user_joined', (data) => {
             console.log('User joined:', data);
@@ -1053,7 +1054,7 @@ const SocketClient = {
         
         if (!this._socket || !this._socket.connected) {
             this._queuedMessages.push({
-                event: 'check_invitation_status',
+                event: this.config.eventTypes.CHECK_INVITATION_STATUS,
                 data: { invitation_token: token }
             });
             
@@ -1061,7 +1062,7 @@ const SocketClient = {
             return;
         }
         
-        this._socket.emit('check_invitation_status', {
+        this._socket.emit(this.config.eventTypes.CHECK_INVITATION_STATUS, {
             invitation_token: token
         });
     },

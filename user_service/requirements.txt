@@ -1,8 +1,0 @@
--r ./requirements-base.txt
-
-# Service-specific dependencies
-psycopg2-binary==2.9.1
-alembic==1.7.1
-marshmallow==3.13.0
-email-validator==1.1.3
-

@@ -1,187 +1,292 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Login - ABDRE Chat</title>
+{% extends "layouts/base.html" %}
+
+{% block title %}Login - ABDRE Chat{% endblock %}
+
+{% block additional_css %}
+<style>
+    .login-page {
+        background-color: #f8f9fa;
+    }
     
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    .auth-showcase {
+        background-color: var(--primary-color);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+    }
     
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    .auth-showcase-content {
+        max-width: 80%;
+    }
     
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/style.css">
+    .auth-form-container {
+        max-width: 450px;
+        width: 90%;
+        padding: 2rem;
+        background-color: white;
+        border-radius: 0.5rem;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
     
-    <!-- Security headers -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http: https: ws: wss: data:; connect-src 'self' http: https: ws: wss:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com https://appleid.apple.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data:; font-src 'self' data: https://cdnjs.cloudflare.com; frame-src https://accounts.google.com https://appleid.apple.com;">
-    <meta http-equiv="X-Content-Type-Options" content="nosniff">
-    <meta name="referrer" content="no-referrer-when-downgrade">
-</head>
-<body class="login-page">
-    <div class="container-fluid">
-        <div class="row min-vh-100">
-            <!-- Left side - Brand showcase -->
-            <div class="col-lg-6 d-none d-lg-flex auth-showcase">
-                <div class="auth-showcase-content">
-                    <h1 class="display-4 mb-4">ABDRE Chat</h1>
-                    <p class="lead">Secure, encrypted messaging with blockchain verification.</p>
-                </div>
+    .nav-pills .nav-link {
+        border-radius: 0.25rem;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+    }
+    
+    .nav-pills .nav-link.active {
+        background-color: var(--primary-color);
+    }
+    
+    .btn-oauth {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.5rem 1rem;
+        border-radius: 0.25rem;
+        font-weight: 500;
+        transition: all 0.15s ease-in-out;
+    }
+    
+    .btn-oauth i {
+        margin-right: 0.75rem;
+        font-size: 1.25rem;
+    }
+    
+    .btn-google {
+        background-color: white;
+        color: #757575;
+        border: 1px solid #ddd;
+    }
+    
+    .btn-google:hover {
+        background-color: #f1f1f1;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .btn-apple {
+        background-color: #000;
+        color: white;
+        border: 1px solid #000;
+    }
+    
+    .btn-apple:hover {
+        background-color: #333;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+    
+    .divider {
+        display: flex;
+        align-items: center;
+        margin: 1.5rem 0;
+        color: #6c757d;
+    }
+    
+    .divider::before,
+    .divider::after {
+        content: "";
+        flex: 1;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .divider span {
+        padding: 0 1rem;
+    }
+    
+    .password-input-container {
+        position: relative;
+    }
+    
+    .password-toggle {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        color: #6c757d;
+        cursor: pointer;
+        padding: 0.25rem;
+    }
+    
+    .password-toggle:hover {
+        color: var(--primary-color);
+    }
+    
+    .guest-access .btn-link {
+        color: var(--primary-color);
+        text-decoration: none;
+        font-weight: 500;
+    }
+    
+    .guest-access .btn-link:hover {
+        text-decoration: underline;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+    <div class="row min-vh-100 g-0">
+        <!-- Left side - Brand showcase -->
+        <div class="col-lg-6 d-none d-lg-flex auth-showcase">
+            <div class="auth-showcase-content">
+                <h1 class="display-4 mb-4">ABDRE Chat</h1>
+                <p class="lead">Secure, encrypted messaging with blockchain verification.</p>
             </div>
-            
-            <!-- Right side - Login/Register form -->
-            <div class="col-lg-6 d-flex align-items-center justify-content-center">
-                <div class="auth-form-container">
-                    <div class="text-center mb-4">
+        </div>
+        
+        <!-- Right side - Login/Register form -->
+        <div class="col-lg-6 d-flex align-items-center justify-content-center">
+            <div class="auth-form-container">
+                <div class="text-center mb-4">
                         <h2 class="h3 mb-0">ABDRE Chat</h2>
-                        <h3 class="h4 mb-3" id="form-title">Welcome Back</h3>
-                        <p class="text-muted" id="form-subtitle">Sign in to continue to ABDRE Chat</p>
+                    <h3 class="h4 mb-3" id="form-title">Welcome Back</h3>
+                    <p class="text-muted" id="form-subtitle">Sign in to continue to ABDRE Chat</p>
+                </div>
+                
+                <!-- Form Mode Switcher -->
+                <div class="nav nav-pills nav-justified mb-4" id="auth-tabs">
+                    <button class="nav-link active" id="login-tab" data-mode="login">Sign In</button>
+                    <button class="nav-link" id="register-tab" data-mode="register">Create Account</button>
+                </div>
+                
+                <!-- OAuth Buttons -->
+                <div class="oauth-buttons mb-4">
+                    <button type="button" id="google-login" class="btn btn-oauth btn-google w-100 mb-2">
+                        <i class="fab fa-google"></i>
+                        <span>Continue with Google</span>
+                    </button>
+                    <button type="button" id="apple-login" class="btn btn-oauth btn-apple w-100">
+                        <i class="fab fa-apple"></i>
+                        <span>Continue with Apple</span>
+                    </button>
+                </div>
+                
+                <!-- Divider -->
+                <div class="divider mb-4">
+                    <span>OR</span>
+                </div>
+                
+                <!-- Login Form -->
+                <form id="login-form" class="mb-4" novalidate autocomplete="on">
+                    <!-- CSRF Token (hidden field) -->
+                    <input type="hidden" id="login-csrf-token" name="csrf_token">
+                    
+                    <!-- Error Alert -->
+                    <div class="alert alert-danger d-none" id="login-error" role="alert"></div>
+                    
+                    <div class="mb-3">
+                        <label for="login-username" class="form-label">Email or Username</label>
+                        <input type="text" class="form-control" id="login-username" name="username" required 
+                               autocomplete="username" autofocus spellcheck="false">
+                        <div class="invalid-feedback">Please enter your username or email address.</div>
                     </div>
                     
-                    <!-- Form Mode Switcher -->
-                    <div class="nav nav-pills nav-justified mb-4" id="auth-tabs">
-                        <button class="nav-link active" id="login-tab" data-mode="login">Sign In</button>
-                        <button class="nav-link" id="register-tab" data-mode="register">Create Account</button>
+                    <div class="mb-3">
+                        <label for="login-password" class="form-label">Password</label>
+                        <div class="password-input-container">
+                            <input type="password" class="form-control" id="login-password" name="password" required 
+                                   autocomplete="current-password">
+                            <button type="button" class="password-toggle" aria-label="Toggle password visibility">
+                                <i class="far fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="invalid-feedback">Please enter your password.</div>
+                        <div class="d-flex justify-content-end mt-1">
+                            <a href="/forgot-password" class="small text-decoration-none">Forgot password?</a>
+                        </div>
                     </div>
                     
-                    <!-- OAuth Buttons -->
-                    <div class="oauth-buttons mb-4">
-                        <button type="button" id="google-login" class="btn btn-oauth btn-google w-100 mb-2">
-                            <i class="fab fa-google"></i>
-                            <span>Continue with Google</span>
-                        </button>
-                        <button type="button" id="apple-login" class="btn btn-oauth btn-apple w-100">
-                            <i class="fab fa-apple"></i>
-                            <span>Continue with Apple</span>
-                        </button>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="remember-me" name="remember">
+                        <label class="form-check-label" for="remember-me">
+                            Remember me
+                        </label>
                     </div>
                     
-                    <!-- Divider -->
-                    <div class="divider mb-4">
-                        <span>OR</span>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary" id="login-button">Sign In</button>
+                    </div>
+                </form>
+                
+                <!-- Register Form (initially hidden) -->
+                <form id="register-form" class="mb-4 d-none" novalidate autocomplete="on">
+                    <!-- CSRF Token (hidden field) -->
+                    <input type="hidden" id="register-csrf-token" name="csrf_token">
+                    
+                    <!-- Error Alert -->
+                    <div class="alert alert-danger d-none" id="register-error" role="alert"></div>
+                    
+                    <div class="mb-3">
+                        <label for="register-username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="register-username" name="username" required 
+                               autocomplete="username" autofocus spellcheck="false" minlength="3" maxlength="30">
+                        <div class="invalid-feedback">Username must be 3-30 characters long.</div>
                     </div>
                     
-                    <!-- Login Form -->
-                    <form id="login-form" class="mb-4" novalidate autocomplete="on">
-                        <!-- CSRF Token (hidden field) -->
-                        <input type="hidden" id="login-csrf-token" name="csrf_token">
-                        
-                        <!-- Error Alert -->
-                        <div class="alert alert-danger d-none" id="login-error" role="alert"></div>
-                        
-                        <div class="mb-3">
-                            <label for="login-username" class="form-label">Email or Username</label>
-                            <input type="text" class="form-control" id="login-username" name="username" required 
-                                   autocomplete="username" autofocus spellcheck="false">
-                            <div class="invalid-feedback">Please enter your username or email address.</div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="login-password" class="form-label">Password</label>
-                            <div class="password-input-container">
-                                <input type="password" class="form-control" id="login-password" name="password" required 
-                                       autocomplete="current-password">
-                                <button type="button" class="password-toggle" aria-label="Toggle password visibility">
-                                    <i class="far fa-eye"></i>
-                                </button>
-                            </div>
-                            <div class="invalid-feedback">Please enter your password.</div>
-                            <div class="d-flex justify-content-end mt-1">
-                                <a href="/forgot-password" class="small text-decoration-none">Forgot password?</a>
-                            </div>
-                        </div>
-                        
-                        <div class="form-check mb-3">
-                            <input class="form-check-input" type="checkbox" id="remember-me" name="remember">
-                            <label class="form-check-label" for="remember-me">
-                                Remember me
-                            </label>
-                        </div>
-                        
-                        <div class="d-grid">
-                            <button type="submit" class="btn btn-primary" id="login-button">Sign In</button>
-                        </div>
-                    </form>
-                    
-                    <!-- Register Form (initially hidden) -->
-                    <form id="register-form" class="mb-4 d-none" novalidate autocomplete="on">
-                        <!-- CSRF Token (hidden field) -->
-                        <input type="hidden" id="register-csrf-token" name="csrf_token">
-                        
-                        <!-- Error Alert -->
-                        <div class="alert alert-danger d-none" id="register-error" role="alert"></div>
-                        
-                        <div class="mb-3">
-                            <label for="register-username" class="form-label">Username</label>
-                            <input type="text" class="form-control" id="register-username" name="username" required 
-                                   autocomplete="username" autofocus spellcheck="false" minlength="3" maxlength="30">
-                            <div class="invalid-feedback">Username must be 3-30 characters long.</div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="register-email" class="form-label">Email</label>
-                            <input type="email" class="form-control" id="register-email" name="email" required 
-                                   autocomplete="email" spellcheck="false">
-                            <div class="invalid-feedback">Please enter a valid email address.</div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="register-password" class="form-label">Password</label>
-                            <div class="password-input-container">
-                                <input type="password" class="form-control" id="register-password" name="password" required 
-                                       autocomplete="new-password" minlength="8">
-                                <button type="button" class="password-toggle" aria-label="Toggle password visibility">
-                                    <i class="far fa-eye"></i>
-                                </button>
-                            </div>
-                            <div class="form-text small text-muted">Password must be at least 8 characters long.</div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="register-confirm-password" class="form-label">Confirm Password</label>
-                            <div class="password-input-container">
-                                <input type="password" class="form-control" id="register-confirm-password" name="confirm_password" required 
-                                       autocomplete="new-password">
-                                <button type="button" class="password-toggle" aria-label="Toggle password visibility">
-                                    <i class="far fa-eye"></i>
-                                </button>
-                            </div>
-                            <div class="invalid-feedback">Passwords must match.</div>
-                        </div>
-                        
-                        <div class="d-grid">
-                            <button type="submit" class="btn btn-primary" id="register-submit-btn">Create Account</button>
-                        </div>
-                    </form>
-                    
-                    <!-- Guest Access -->
-                    <div class="guest-access text-center mb-4">
-                        <p class="small mb-2">Don't want to create an account?</p>
-                        <button type="button" id="guest-access" class="btn btn-link">
-                            Continue as Guest
-                        </button>
+                    <div class="mb-3">
+                        <label for="register-email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="register-email" name="email" required 
+                               autocomplete="email" spellcheck="false">
+                        <div class="invalid-feedback">Please enter a valid email address.</div>
                     </div>
                     
-                    <!-- Terms and Privacy -->
-                    <div class="terms-privacy text-center small text-muted mb-3">
-                        By signing in or creating an account, you agree to our 
-                        <a href="/terms" class="text-decoration-none">Terms of Service</a> and 
-                        <a href="/privacy" class="text-decoration-none">Privacy Policy</a>
+                    <div class="mb-3">
+                        <label for="register-password" class="form-label">Password</label>
+                        <div class="password-input-container">
+                            <input type="password" class="form-control" id="register-password" name="password" required 
+                                   autocomplete="new-password" minlength="8">
+                            <button type="button" class="password-toggle" aria-label="Toggle password visibility">
+                                <i class="far fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="form-text small text-muted">Password must be at least 8 characters long.</div>
                     </div>
+                    
+                    <div class="mb-3">
+                        <label for="register-confirm-password" class="form-label">Confirm Password</label>
+                        <div class="password-input-container">
+                            <input type="password" class="form-control" id="register-confirm-password" name="confirm_password" required 
+                                   autocomplete="new-password">
+                            <button type="button" class="password-toggle" aria-label="Toggle password visibility">
+                                <i class="far fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="invalid-feedback">Passwords must match.</div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary" id="register-submit-btn">Create Account</button>
+                    </div>
+                </form>
+                
+                <!-- Guest Access -->
+                <div class="guest-access text-center mb-4">
+                    <p class="small mb-2">Don't want to create an account?</p>
+                    <button type="button" id="guest-access" class="btn btn-link">
+                        Continue as Guest
+                    </button>
+                </div>
+                
+                <!-- Terms and Privacy -->
+                <div class="terms-privacy text-center small text-muted mb-3">
+                    By signing in or creating an account, you agree to our 
+                    <a href="/terms" class="text-decoration-none">Terms of Service</a> and 
+                    <a href="/privacy" class="text-decoration-none">Privacy Policy</a>
                 </div>
             </div>
         </div>
     </div>
+</div>
+{% endblock %}
 
-    <!-- Bootstrap Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
-    
-    <!-- Auth Helper -->
-    <script src="/static/js/utils/auth-helper.js"></script>
-    
-    <!-- Login Script -->
-    <script src="/static/js/login.js"></script>
-</body>
-</html>
+{% block scripts %}
+<!-- API Client -->
+<script src="/static/js/services/api-client.js"></script>
+
+<!-- Login Script -->
+<script src="/static/js/login.js"></script>
+{% endblock %}

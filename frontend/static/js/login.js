@@ -210,14 +210,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const password = document.getElementById('login-password').value;
         const rememberMe = document.getElementById('remember-me').checked;
         
-        // Immediate client-side validation before API call
-        if (!username || username.trim() === '') {
-            showLoginError('Username or email is required');
-            return;
-        }
-        
-        if (!password || password.length < 1) {
-            showLoginError('Password is required');
+        // Immediate client-side validation
+        if (!validateLoginForm(username, password)) {
             return;
         }
         
@@ -226,79 +220,95 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        // Get login button and save original text
+        const loginButton = document.getElementById('login-button');
+        const originalBtnText = loginButton.textContent;
+        
         try {
+            // Hide previous error message
             loginError.classList.add('d-none');
             
             // Show loading state
-            const originalBtnText = loginButton.textContent;
             loginButton.disabled = true;
             loginButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Signing in...';
             
             // Sanitize input
             const sanitizedUsername = sanitizeInput(username);
             
-            // Create an AbortController for timeout handling
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-            
-            try {
-                // Call the authentication API with timeout
-                const response = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': csrfToken
-                    },
-                    body: JSON.stringify({
-                        username: sanitizedUsername, 
-                        password,
-                        remember_me: rememberMe
-                    }),
-                    credentials: 'include', // Include cookies
-                    signal: controller.signal // Add abort signal for timeout
-                });
-                
-                // Clear the timeout since the request completed
-                clearTimeout(timeoutId);
-                
-                const data = await response.json();
-                
-                if (!response.ok) {
-                    // Handle failed login
-                    handleFailedAttempt();
-                    throw new Error(data.message || data.error || 'Login failed. Please check your credentials.');
-                }
-                
-                // Reset failed attempts counter on success
-                failedAttempts.count = 0;
-                
-                // Store auth token
-                if (window.AuthHelper && AuthHelper.saveAuth) {
-                    AuthHelper.saveAuth(data);
-                } else if (window.AuthHelper && AuthHelper.setToken) {
-                    AuthHelper.setToken(data.token, rememberMe);
-                }
-                
-                // Show success message
-                showLoginError('Login successful! Redirecting...', true);
-                
-                // Redirect to chat with slight delay
-                setTimeout(() => {
+            if (window.ApiClient && ApiClient.login) {
+                try {
+                    // Use ApiClient for login
+                    const loginResult = await ApiClient.login({
+                        username: sanitizedUsername,
+                        password: password,
+                        remember: rememberMe
+                    });
+                    
+                    console.log('Login successful');
+                    
+                    // Redirect to chat page
                     window.location.href = '/my-chats';
-                }, 1000);
-            } catch (fetchError) {
-                // Handle abort/timeout specifically
-                if (fetchError.name === 'AbortError') {
-                    throw new Error('Login request timed out. Please try again.');
+                } catch (error) {
+                    console.error('Login error:', error);
+                    
+                    showLoginError(error.message || 'Login failed. Please check your credentials.');
+                    handleFailedAttempt();
                 }
-                throw fetchError;
+            } else {
+                // Fallback to direct API call if ApiClient is not available
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+                
+                try {
+                    // Call the authentication API with timeout
+                    const response = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': csrfToken
+                        },
+                        body: JSON.stringify({
+                            username: sanitizedUsername,
+                            password: password,
+                            remember: rememberMe
+                        }),
+                        signal: controller.signal,
+                        credentials: 'include' // Include cookies
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    if (!response.ok) {
+                        const data = await response.json().catch(() => ({}));
+                        throw new Error(data.error || `Login failed (${response.status})`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    // Store auth data
+                    if (window.AuthHelper) {
+                        AuthHelper.saveAuth(data);
+                    } else {
+                        // Fallback storage if AuthHelper not available
+                        localStorage.setItem('authToken', data.token);
+                        localStorage.setItem('userData', JSON.stringify(data.user));
+                    }
+                    
+                    // Redirect to dashboard
+                    window.location.href = '/my-chats';
+                } catch (error) {
+                    clearTimeout(timeoutId);
+                    
+                    if (error.name === 'AbortError') {
+                        showLoginError('Login request timed out. Please try again.');
+                    } else {
+                        showLoginError(error.message || 'Login failed. Please check your credentials.');
+                        handleFailedAttempt();
+                    }
+                }
             }
-            
-        } catch (error) {
-            console.error('Login error:', error);
-            showLoginError(error.message || 'An unexpected error occurred. Please try again.');
         } finally {
-            // Always restore button state
+            // Reset button state
             loginButton.disabled = false;
             loginButton.textContent = originalBtnText;
         }
@@ -313,14 +323,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const password = document.getElementById('register-password').value;
         const confirmPassword = document.getElementById('register-confirm-password').value;
         
-        // Validate inputs
-        if (!username) {
-            showRegisterError('Username is required');
+        // Validate form
+        if (!username || username.length < 3 || username.length > 30) {
+            showRegisterError('Username must be between 3 and 30 characters');
             return;
         }
         
-        if (!email || !email.includes('@')) {
-            showRegisterError('A valid email address is required');
+        if (!email || !/\S+@\S+\.\S+/.test(email)) {
+            showRegisterError('Please enter a valid email address');
             return;
         }
         
@@ -329,134 +339,238 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // Validate password match
         if (password !== confirmPassword) {
             showRegisterError('Passwords do not match');
             return;
         }
         
+        // Get register button and save original text
+        const registerBtn = document.getElementById('register-submit-btn');
+        const originalBtnText = registerBtn.textContent;
+        
         try {
             registerError.classList.add('d-none');
             
             // Show loading state
-            const submitBtn = registerForm.querySelector('button[type="submit"]');
-            const originalBtnText = submitBtn.textContent;
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Creating account...';
+            registerBtn.disabled = true;
+            registerBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Creating account...';
             
-            // Sanitize inputs
-            const sanitizedUsername = sanitizeInput(username);
-            const sanitizedEmail = sanitizeInput(email);
-            
-            // Call the registration API
-            const response = await fetch('/api/auth/register', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken
-                },
-                body: JSON.stringify({
-                    username: sanitizedUsername,
-                    email: sanitizedEmail,
-                    password
-                }),
-                credentials: 'include'
-            });
-            
-            const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.message || data.error || 'Registration failed. Please try again.');
-            }
-            
-            // Store auth token if auto-login after registration
-            if (data.token && window.AuthHelper) {
-                if (AuthHelper.saveAuth) {
-                    AuthHelper.saveAuth(data);
-                } else if (AuthHelper.setToken) {
-                    AuthHelper.setToken(data.token, true);
+            if (window.ApiClient && ApiClient.register) {
+                try {
+                    // Use ApiClient for registration
+                    const registerResult = await ApiClient.register({
+                        username: sanitizeInput(username),
+                        email: sanitizeInput(email),
+                        password: password
+                    });
+                    
+                    console.log('Registration successful');
+                    
+                    // Switch to login form
+                    switchFormMode('login');
+                    
+                    // Show success message in login form
+                    showLoginError('Account created successfully! Please sign in.', true);
+                } catch (error) {
+                    console.error('Registration error:', error);
+                    showRegisterError(error.message || 'Registration failed. Please try again.');
                 }
+            } else if (window.AuthHelper && AuthHelper.register) {
+                // Fall back to AuthHelper register
+                const registerResult = await AuthHelper.register({
+                    username: sanitizeInput(username),
+                    email: sanitizeInput(email),
+                    password: password
+                });
                 
-                // Show success and redirect
-                showRegisterError('Registration successful! Redirecting...');
-                registerError.classList.remove('alert-danger');
-                registerError.classList.add('alert-success');
-                
-                setTimeout(() => {
-                    window.location.href = '/my-chats';
-                }, 1500);
+                if (registerResult.success) {
+                    // Switch to login form
+                    switchFormMode('login');
+                    
+                    // Show success message in login form
+                    showLoginError('Account created successfully! Please sign in.', true);
+                } else {
+                    showRegisterError(registerResult.error || 'Registration failed. Please try again.');
+                }
             } else {
-                // Show success message and switch to login
-                registerForm.reset();
-                switchFormMode('login');
-                showLoginError('Registration successful! Please sign in with your new account.', true);
+                // Fallback to direct API call
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                
+                try {
+                    const response = await fetch('/api/auth/register', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': csrfToken
+                        },
+                        body: JSON.stringify({
+                            username: sanitizeInput(username),
+                            email: sanitizeInput(email),
+                            password: password
+                        }),
+                        signal: controller.signal,
+                        credentials: 'include'
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    if (!response.ok) {
+                        const data = await response.json().catch(() => ({}));
+                        throw new Error(data.error || `Registration failed (${response.status})`);
+                    }
+                    
+                    // Switch to login form
+                    switchFormMode('login');
+                    
+                    // Show success message in login form
+                    showLoginError('Account created successfully! Please sign in.', true);
+                } catch (error) {
+                    clearTimeout(timeoutId);
+                    
+                    if (error.name === 'AbortError') {
+                        showRegisterError('Registration request timed out. Please try again.');
+                    } else {
+                        showRegisterError(error.message || 'Registration failed. Please try again.');
+                    }
+                }
             }
-            
-        } catch (error) {
-            console.error('Registration error:', error);
-            showRegisterError(error.message || 'An unexpected error occurred');
-            
-            // Reset button
-            const submitBtn = registerForm.querySelector('button[type="submit"]');
-            submitBtn.disabled = false;
-            submitBtn.textContent = originalBtnText;
+        } finally {
+            // Reset button state
+            registerBtn.disabled = false;
+            registerBtn.textContent = originalBtnText;
         }
     });
 
-    // OAuth login handlers
-    googleLoginBtn.addEventListener('click', () => {
-        // Redirect to Google OAuth endpoint
-        window.location.href = '/api/auth/oauth/google';
+    // Google login handler
+    googleLoginBtn.addEventListener('click', function() {
+        if (window.ApiClient && ApiClient.oauth) {
+            ApiClient.oauth.google()
+                .then(() => {
+                    window.location.href = '/my-chats';
+                })
+                .catch(error => {
+                    console.error('Google login error:', error);
+                    showLoginError('Google login failed. Please try again.');
+                });
+        } else if (window.AuthHelper && AuthHelper.oauthGoogle) {
+            AuthHelper.oauthGoogle()
+                .then(result => {
+                    if (result.success) {
+                        window.location.href = '/my-chats';
+                    } else {
+                        showLoginError(result.error || 'Google login failed. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Google login error:', error);
+                    showLoginError('Google login failed. Please try again.');
+                });
+        } else {
+            // Fallback to redirect
+            window.location.href = '/api/auth/oauth/google';
+        }
     });
     
-    appleLoginBtn.addEventListener('click', () => {
-        // Redirect to Apple OAuth endpoint
-        window.location.href = '/api/auth/oauth/apple';
+    // Apple login handler
+    appleLoginBtn.addEventListener('click', function() {
+        if (window.ApiClient && ApiClient.oauth) {
+            ApiClient.oauth.apple()
+                .then(() => {
+                    window.location.href = '/my-chats';
+                })
+                .catch(error => {
+                    console.error('Apple login error:', error);
+                    showLoginError('Apple login failed. Please try again.');
+                });
+        } else if (window.AuthHelper && AuthHelper.oauthApple) {
+            AuthHelper.oauthApple()
+                .then(result => {
+                    if (result.success) {
+                        window.location.href = '/my-chats';
+                    } else {
+                        showLoginError(result.error || 'Apple login failed. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Apple login error:', error);
+                    showLoginError('Apple login failed. Please try again.');
+                });
+        } else {
+            // Fallback to redirect
+            window.location.href = '/api/auth/oauth/apple';
+        }
     });
     
-    // Guest access handler
-    guestAccessBtn.addEventListener('click', async () => {
+    // Handle guest access button
+    guestAccessBtn.addEventListener('click', async function() {
+        // Save original button text
+        const originalText = this.textContent;
+        
         try {
             // Show loading state
-            const originalBtnText = guestAccessBtn.textContent;
-            guestAccessBtn.disabled = true;
-            guestAccessBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Continuing...';
             
-            // Call the guest login API
-            const response = await fetch('/api/auth/guest', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken
-                },
-                credentials: 'include'
-            });
-            
-            const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.message || data.error || 'Guest access failed. Please try again.');
-            }
-            
-            // Store guest token
-            if (window.AuthHelper) {
-                if (AuthHelper.saveAuth) {
-                    AuthHelper.saveAuth(data);
-                } else if (AuthHelper.setToken) {
-                    AuthHelper.setToken(data.token, false);
+            if (window.ApiClient && ApiClient.loginAsGuest) {
+                try {
+                    // Use ApiClient for guest login
+                    await ApiClient.loginAsGuest();
+                    
+                    // Redirect to chat
+                    window.location.href = '/my-chats';
+                } catch (error) {
+                    console.error('Guest login error:', error);
+                    showLoginError('Failed to continue as guest. Please try again.');
+                }
+            } else if (window.AuthHelper && AuthHelper.loginAsGuest) {
+                // Use AuthHelper for guest login
+                const result = await AuthHelper.loginAsGuest();
+                
+                if (result.success) {
+                    window.location.href = '/my-chats';
+                } else {
+                    showLoginError(result.error || 'Failed to continue as guest. Please try again.');
+                }
+            } else {
+                // Fallback to direct API call
+                try {
+                    const response = await fetch('/api/auth/visitor', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': csrfToken
+                        },
+                        credentials: 'include'
+                    });
+                    
+                    if (!response.ok) {
+                        const data = await response.json().catch(() => ({}));
+                        throw new Error(data.error || 'Failed to continue as guest');
+                    }
+                    
+                    const data = await response.json();
+                    
+                    // Store visitor token
+                    if (window.AuthHelper) {
+                        AuthHelper.saveAuth(data);
+                    } else {
+                        // Fallback storage
+                        localStorage.setItem('visitorId', data.visitor_id);
+                        localStorage.setItem('authToken', data.token);
+                    }
+                    
+                    // Redirect to chat
+                    window.location.href = '/my-chats';
+                } catch (error) {
+                    console.error('Guest login error:', error);
+                    showLoginError('Failed to continue as guest. Please try again.');
                 }
             }
-            
-            // Redirect to chat
-            window.location.href = '/my-chats';
-            
-        } catch (error) {
-            console.error('Guest access error:', error);
-            showLoginError(error.message || 'Failed to access as guest. Please try again.');
-            
-            // Reset button
-            guestAccessBtn.disabled = false;
-            guestAccessBtn.textContent = originalBtnText;
+        } finally {
+            // Reset button state
+            this.disabled = false;
+            this.textContent = originalText;
         }
     });
     

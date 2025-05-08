@@ -2,18 +2,42 @@
 <header class="bg-primary text-white py-2 menu-bar">
     <div class="container-fluid">
         <div class="row align-items-center">
-            <div class="col-6">
+            <div class="col-6 col-md-4">
                 <h1 class="fs-3 mb-0">
                     <a href="/my-chats" class="text-white text-decoration-none d-flex align-items-center">
-                        <span class="brand-logo me-2">ABDRE Chat</span>
+                        <span class="brand-logo">ABDRE Chat</span>
                     </a>
                 </h1>
             </div>
-            <div class="col-6 text-end">
-                <div id="auth-status">
-                    <!-- Will be populated by JavaScript -->
+            <div class="col-6 col-md-8 text-end">
+                <!-- Notification Icon (Only shown when logged in) -->
+                <div id="notification-container" class="d-none d-inline-block me-3 position-relative">
+                    <button class="btn btn-link text-white p-0 border-0" id="notification-button">
+                        <i class="fas fa-bell fs-5"></i>
+                        <span id="notification-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none">
+                            0
+                        </span>
+                    </button>
                 </div>
+                
+                <!-- Auth Status Area -->
+                <div id="auth-status" class="d-inline-block">
+                    <!-- Will be populated by JavaScript with either user info or login button -->
+                    <a href="/login" class="btn btn-sm btn-outline-light">
+                        <i class="fas fa-sign-in-alt me-1"></i> Login
+                    </a>
+                </div>
+                
+                <!-- Mobile Menu Toggle (Only visible on mobile) -->
+                <button id="mobile-menu-toggle" class="d-md-none btn btn-link text-white ms-2 p-0 border-0 d-none">
+                    <i class="fas fa-bars fs-5"></i>
+                </button>
             </div>
         </div>
+    </div>
+    
+    <!-- Mobile Menu (hidden by default) -->
+    <div id="mobile-menu" class="d-none bg-white shadow-sm w-100">
+        <!-- Will be populated by JavaScript -->
     </div>
 </header> 

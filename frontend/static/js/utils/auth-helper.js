@@ -19,7 +19,7 @@ window.AuthHelper = {
     sessionCheckEndpoint: '/api/auth/check-session',
     refreshEndpoint: '/api/auth/refresh',
     logoutEndpoint: '/api/auth/logout',
-    guestLoginEndpoint: '/api/auth/get-or-create-visitor-id',
+    guestLoginEndpoint: '/api/auth/visitor',
     setUserNameEndpoint: '/api/auth/set-user-name',
     oauthGoogleEndpoint: '/api/auth/oauth/google',
     oauthAppleEndpoint: '/api/auth/oauth/apple',

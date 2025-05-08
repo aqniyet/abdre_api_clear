@@ -35,7 +35,7 @@ const ChatPage = {
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
         console.log('DOM loaded - initializing UI elements');
-        this.initUI();
+    this.initUI();
         this.continueInit(roomId);
       });
     } else {
@@ -83,16 +83,16 @@ const ChatPage = {
       this.loadChatMessages()
         .then(() => console.log('Message refresh completed'))
         .catch(error => console.error('Message refresh failed:', error));
-    });
-    
-    // Set up visibility change listener
-    document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
-    
-    // Set up window beforeunload listener
-    window.addEventListener('beforeunload', this.handleBeforeUnload.bind(this));
-    
+      });
+      
+      // Set up visibility change listener
+      document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
+      
+      // Set up window beforeunload listener
+      window.addEventListener('beforeunload', this.handleBeforeUnload.bind(this));
+      
     // Set up periodic message refresh
-    this.setupPeriodicMessageRefresh();
+      this.setupPeriodicMessageRefresh();
   },
   
   /**
@@ -113,7 +113,7 @@ const ChatPage = {
         if (opponent) {
           this.state.opponentId = opponent.user_id;
           this.state.opponentName = opponent.display_name || opponent.username || 'Chat Participant';
-          
+      
           // Update the UI with opponent's name
           this.updateOpponentDisplay();
         } else {
@@ -275,8 +275,8 @@ const ChatPage = {
               
               // Get the socket client reference
               const socketClient = window.SocketClient || this.socketClient;
-              
-              // Join the room
+      
+      // Join the room
               const roomId = this.state.roomId;
               socketClient.joinRoom(roomId);
               
@@ -482,7 +482,7 @@ const ChatPage = {
         sendMessage: (roomId, content, messageId) => {
           return new Promise((resolve, reject) => {
             const messageData = {
-              room_id: roomId,
+        room_id: roomId,
               content: content,
               message_id: messageId,
               sender_id: AuthHelper.getUserId()
@@ -619,15 +619,15 @@ const ChatPage = {
       console.error('SocketClient is not defined. Cannot set up event handlers.');
       return;
     }
-    
-    // Set up message handler
-    socketClient.on('message', this.handleIncomingMessage.bind(this));
-    
-    // Set up user status handlers
-    socketClient.on('user_active', this.handleUserActive.bind(this));
-    socketClient.on('user_away', this.handleUserAway.bind(this));
+      
+      // Set up message handler
+      socketClient.on('message', this.handleIncomingMessage.bind(this));
+      
+      // Set up user status handlers
+      socketClient.on('user_active', this.handleUserActive.bind(this));
+      socketClient.on('user_away', this.handleUserAway.bind(this));
     socketClient.on('user_joined', this.handleUserJoined.bind(this));
-    
+      
     // Set up connection event handlers for the room
     socketClient.on('join_success', (data) => {
       console.log('Successfully joined room:', data);
@@ -650,7 +650,7 @@ const ChatPage = {
         }
         if (this.sendButton) {
           this.sendButton.disabled = false;
-        }
+    }
       }
     });
   },
@@ -713,15 +713,15 @@ const ChatPage = {
     
     // For Enter key in input field
     if (this.messageInput) {
-      this.messageInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
+    this.messageInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
           console.log('Enter key pressed in input field');
           e.preventDefault();
           e.stopPropagation();
-          this.sendMessage();
+        this.sendMessage();
           return false;
-        }
-      });
+      }
+    });
     }
 
     // Add share link functionality
@@ -797,54 +797,54 @@ const ChatPage = {
     console.log('Received incoming message via WebSocket:', data);
     
     try {
-      // Validate the message data
+    // Validate the message data
       if (!data || !data.content) {
-        console.error('Invalid message data received:', data);
-        return;
-      }
-      
-      // Skip duplicate messages
+      console.error('Invalid message data received:', data);
+      return;
+    }
+    
+    // Skip duplicate messages
       const messages = this.state.messages || [];
-      
+    
       // Check for duplicates by ID or content+timestamp+sender
-      const isDuplicate = messages.some(msg => 
-        msg.message_id === data.message_id || 
-        (msg.content === data.content && 
-         msg.sender_id === data.sender_id && 
+    const isDuplicate = messages.some(msg => 
+      msg.message_id === data.message_id || 
+      (msg.content === data.content && 
+       msg.sender_id === data.sender_id && 
          Math.abs(new Date(msg.timestamp || msg.created_at) - new Date(data.timestamp || data.created_at)) < 5000)
-      );
-      
-      if (isDuplicate) {
+    );
+    
+    if (isDuplicate) {
         console.log('Skipping duplicate message:', data.message_id || data.content);
-        return;
-      }
-      
-      // Format message object if needed
-      const messageObj = {
+      return;
+    }
+    
+    // Format message object if needed
+    const messageObj = {
         message_id: data.message_id || `recv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         room_id: data.room_id || this.state.roomId,
         sender_id: data.sender_id || data.user_id,
-        content: data.content,
+      content: data.content,
         message_type: data.message_type || 'text',
         created_at: data.timestamp || data.created_at || new Date().toISOString(),
         status: 'received'
-      };
-      
-      // Add to state
-      messages.push(messageObj);
+    };
+    
+    // Add to state
+    messages.push(messageObj);
       this.state.messages = messages;
-      
-      // Get current user ID
+    
+    // Get current user ID
       const userId = this.state.userId;
-      
+    
       // Only render if it's not our own message (to avoid duplicates)
       if (userId !== messageObj.sender_id) {
-        // Add to UI
+    // Add to UI
         this.renderMessage(messageObj, true); // true = incoming message
-        
+    
         // Play notification sound if the message is from someone else and tab is not visible
         if (document.visibilityState !== 'visible') {
-          this.playNotificationSound();
+    this.playNotificationSound();
         }
       } else {
         // If it's our message coming back from the server, update the status
@@ -1080,7 +1080,7 @@ const ChatPage = {
         
         // Get messages from API
         const result = await apiClient.getMessages(roomId);
-        
+          
         if (result && Array.isArray(result)) {
           console.log(`Loaded ${result.length} messages`);
           
@@ -1113,14 +1113,14 @@ const ChatPage = {
             // Sort messages by created_at
             const allMessages = [...messages, ...newMessages].sort((a, b) => {
               return new Date(a.created_at) - new Date(b.created_at);
-            });
-            
-            // Update state
+              });
+              
+              // Update state
             this.state.messages = allMessages;
-            
-            // Clear the container if this is the first render
-            if (messages.length === 0) {
-              this.chatContainer.innerHTML = '';
+              
+              // Clear the container if this is the first render
+              if (messages.length === 0) {
+                this.chatContainer.innerHTML = '';
               
               // Render all messages
               allMessages.forEach(msg => {
@@ -1172,9 +1172,9 @@ const ChatPage = {
       if (!messageInput) {
         console.error('Message input element not found. Cannot send message.');
         this.showError('Message input not found. Please refresh the page.');
-        return;
-      }
-      
+      return;
+    }
+    
       // Get message content
       const content = messageInput.value.trim();
       if (!content) {
@@ -1231,20 +1231,20 @@ const ChatPage = {
       
       const roomId = this.state.roomId;
       const userId = this.state.userId;
-      
+    
       console.log(`Sending message in room ${roomId} from user ${userId} via WebSocket`);
-      
+    
       // Create a temporary ID for the message
       const tempId = `tmp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
+    
       // Create message data object
-      const messageData = {
-        message_id: tempId,
+    const messageData = {
+      message_id: tempId,
         room_id: roomId,
-        sender_id: userId,
+      sender_id: userId,
         content: content,
         message_type: 'text',
-        created_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
         status: 'sending'
       };
       
@@ -1254,7 +1254,7 @@ const ChatPage = {
       }
       
       this.state.messages.push(messageData);
-      
+    
       // Render the message optimistically with our own user ID as sender
       this.renderMessage(messageData, false); // false = not an incoming message (we sent it)
       
@@ -1297,7 +1297,7 @@ const ChatPage = {
         });
         
         // Update the message status to sent since we don't have proper delivery confirmation
-        setTimeout(() => {
+      setTimeout(() => {
           this.updateMessageStatus(tempId, 'sent');
         }, 500);
       } else {
@@ -1326,9 +1326,9 @@ const ChatPage = {
     try {
       // Update in state
       const messages = this.state.messages || [];
-      const messageIndex = messages.findIndex(m => m.message_id === messageId);
-      
-      if (messageIndex >= 0) {
+    const messageIndex = messages.findIndex(m => m.message_id === messageId);
+    
+    if (messageIndex >= 0) {
         messages[messageIndex].status = status;
         this.state.messages = messages;
         
@@ -1340,7 +1340,7 @@ const ChatPage = {
           
           // Add new status class
           messageElement.classList.add(`status-${status}`);
-          
+      
           // Update status icon if it exists
           const statusIcon = messageElement.querySelector('.message-status');
           if (statusIcon) {

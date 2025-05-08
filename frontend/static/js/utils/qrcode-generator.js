@@ -24,6 +24,13 @@ window.QRCodeGenerator = {
      * @returns {string} - The full invitation URL
      */
     createInvitationURL(token) {
+        // Validate token
+        if (!token) {
+            console.error('Cannot create invitation URL: Invalid or missing token');
+            // Return a placeholder URL that shows an error
+            return window.location.origin + '/error/invalid-invitation';
+        }
+        
         // Use current hostname for the invitation URL
         const baseUrl = window.location.origin;
         const url = `${baseUrl}/join/${token}`;

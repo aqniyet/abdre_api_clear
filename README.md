@@ -1,155 +1,109 @@
-# Abdre API - Microservices Architecture
+# ABDRE Chat Application
 
-A modern microservices-based API system built with Flask and Docker.
+A modern real-time chat application built with server-side rendering for improved performance and reliability.
 
 ## Architecture
 
-The system consists of the following microservices:
+### Backend
 
-1. **API Gateway** (Port 5000) - Entry point for all client requests with routing and load balancing
-2. **Auth Service** (Port 5001) - Handles authentication, user registration, and token management
-3. **User Service** (Port 5002) - Manages user profiles and user-related operations
-4. **OAuth Service** (Port 5003) - Provides OAuth integration with third-party identity providers
-5. **Chat Service** (Port 5004) - Implements chat functionality between users
-6. **Realtime Service** (Port 5006) - Provides real-time updates and notifications
+The backend is organized into the following components:
 
-## Technology Stack
+- **Controllers**: Handle HTTP requests and render responses
+  - `render_controller.py`: Handles rendering of HTML templates
+  - `chat_controller.py`: Handles chat-specific API requests
 
-- **Backend**: Python with Flask framework
-- **Containerization**: Docker and Docker Compose
-- **Database**: PostgreSQL
-- **Caching**: Redis
-- **Service Discovery**: Custom implementation in shared/service_discovery
+- **Services**: Business logic layer
+  - `template_service.py`: Manages template rendering functionality
+  - `chat_service.py`: Core chat functionality
+  - `chat_preview_service.py`: Generates preview data for chat listings
+
+- **Repositories**: Data access layer
+  - `chat_repository.py`: Handles chat data persistence and retrieval
+
+- **Utils**: Helper utilities
+  - `template_context.py`: Prepares context data for templates
+  - `message_formatter.py`: Formats chat messages for display
+  - `chat_list_formatter.py`: Formats chat lists for display
+  - `asset_versioner.py`: Manages asset versioning for cache busting
+
+- **Routes**: URL routing
+  - `web_routes.py`: Defines the web application routes
+
+### Frontend
+
+The frontend is organized as follows:
+
+- **Templates**: Server-rendered HTML templates
+  - Page templates: `chat.html`, `my_chats.html`
+  - Components: `message_list.html`, `chat_list.html`
+
+- **Static**: Static assets
+  - JavaScript
+    - Enhancers: `chat_enhancer.js`, `chat_list_enhancer.js`
+  - CSS
+    - `style.css`: Main stylesheet
+
+## Server-Side Rendering
+
+The application utilizes server-side rendering (SSR) to improve:
+
+1. **Initial Load Performance**: Pages load faster because HTML is pre-rendered on the server
+2. **SEO**: Search engines can better index the content
+3. **Progressive Enhancement**: Core functionality works even without JavaScript
+
+JavaScript enhancers are used to add real-time functionality after the initial page load, following a "progressive enhancement" approach.
 
 ## Getting Started
 
 ### Prerequisites
 
-- Docker and Docker Compose
-- Git
+- Python 3.8+
+- Virtual environment (recommended)
 
 ### Installation
 
-1. Clone the repository:
+1. Clone the repository
    ```
-   git clone https://github.com/aqniyet/abdre_api.git
+   git clone https://github.com/yourusername/abdre_api.git
    cd abdre_api
    ```
 
-2. Start the system using the management script:
+2. Create and activate a virtual environment
    ```
-   ./abdre-manage.sh start
-   ```
-
-3. Verify health status:
-   ```
-   ./abdre-manage.sh status
+   python -m venv venv
+   source venv/bin/activate  # On Windows, use: venv\Scripts\activate
    ```
 
-### Management Script
+3. Install dependencies
+   ```
+   pip install -r requirements.txt
+   ```
 
-The `abdre-manage.sh` script provides a convenient way to manage the application:
+### Running the Application
 
-```
-Usage: ./abdre-manage.sh COMMAND
+1. Start the backend server
+   ```
+   python backend/app.py
+   ```
 
-Commands:
-  start           Start all services
-  stop            Stop all services
-  restart         Restart all services
-  status          Check status of all services
-  logs [service]  View logs (optional: specify service name)
-  test            Run connection tests
-  backup          Backup the database
-  install         Install as systemd service (requires sudo)
-  help            Show this help message
-```
-
-### Testing
-
-Use the test-connections script to verify all services are working properly:
-
-```
-./test-connections.sh
-```
-
-For detailed information about testing, see [TEST-README.md](TEST-README.md).
+2. Open a web browser and navigate to http://localhost:5000
 
 ## Development
 
-### Project Structure
+### Adding a New Feature
 
+1. Create necessary services/repositories in the backend
+2. Add appropriate controllers for API endpoints
+3. Update templates for server-side rendering
+4. Enhance with client-side JavaScript as needed
+
+### Testing
+
+Run the tests using:
 ```
-.
-├── api_gateway/             # API Gateway service
-├── auth_service/            # Authentication service
-├── chat_service/            # Chat functionality service
-├── docker-compose.yml       # Docker Compose configuration
-├── frontend/                # Frontend templates and static files
-│   ├── static/
-│   └── templates/
-├── oauth_service/           # OAuth integration service
-├── realtime_service/        # Real-time updates service
-├── shared/                  # Shared code and utilities
-│   ├── requirements-base.txt
-│   └── service_discovery/
-└── user_service/            # User management service
+pytest
 ```
-
-### Adding New Features
-
-1. Identify the appropriate service for your feature
-2. Implement the feature in the service's app.py
-3. Update tests and documentation
-4. Test the feature with the entire system running
-
-## API Endpoints
-
-Check each service's health endpoint for basic verification:
-
-- API Gateway: `GET http://localhost:5000/health`
-- Auth Service: `GET http://localhost:5001/health`
-- User Service: `GET http://localhost:5002/health`
-- OAuth Service: `GET http://localhost:5003/health`
-- Chat Service: `GET http://localhost:5004/health`
-- Realtime Service: `GET http://localhost:5006/health`
-
-## Troubleshooting
-
-If you encounter issues, try the following:
-
-1. Check service status: `./abdre-manage.sh status`
-2. View logs: `./abdre-manage.sh logs`
-3. Restart services: `./abdre-manage.sh restart`
-4. Run tests: `./abdre-manage.sh test`
-
-For more troubleshooting information, see [TEST-README.md](TEST-README.md).
-
-## Installing as a Service
-
-To install ABDRE as a systemd service (auto-start on boot):
-
-```
-sudo ./install-service.sh
-```
-
-After installation, you can manage the service with standard systemd commands:
-
-```
-sudo systemctl start abdre
-sudo systemctl stop abdre
-sudo systemctl status abdre
-sudo systemctl enable abdre  # Enable auto-start on boot
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Commit your changes: `git commit -m 'Add some feature'`
-4. Push to the branch: `git push origin feature-name`
-5. Open a pull request
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License - see the LICENSE file for details.

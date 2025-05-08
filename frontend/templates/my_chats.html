@@ -12,208 +12,115 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     
+    <!-- Critical CSS -->
+    <link rel="stylesheet" href="/static/css/critical/my_chats.css{% if asset_versions %}?v={{ asset_versions.css }}{% endif %}">
+    
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css{% if asset_versions %}?v={{ asset_versions.css }}{% endif %}">
     
     <!-- Security headers -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http: https: ws: wss: data:; connect-src 'self' http: https: ws: wss:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data:; font-src 'self' data: https://cdnjs.cloudflare.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http: https: ws: wss: data:; connect-src 'self' http: https: ws: wss:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://cdn.socket.io; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data:; font-src 'self' data: https://cdnjs.cloudflare.com;">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    
+    <!-- Server-rendered data for client-side hydration -->
+    {% if server_rendered and chats_json %}
+    <script id="chats-json" type="application/json">{{ chats_json | safe }}</script>
+    {% endif %}
+    {% if user %}
+    <input type="hidden" id="current-user-id" value="{{ user.user_id }}">
+    {% endif %}
 </head>
 <body>
-    <!-- Standardized Menu Bar -->
+    <!-- Navigation Bar -->
     <header class="bg-primary text-white py-2 menu-bar">
         <div class="container-fluid">
             <div class="row align-items-center">
-                <div class="col-6">
-                    <h1 class="fs-3 mb-0">
-                        <a href="/my-chats" class="text-white text-decoration-none d-flex align-items-center">
-                            <span class="brand-logo me-2">ABDRE Chat</span>
-                        </a>
-                    </h1>
+                <div class="col">
+                    <div class="d-flex align-items-center">
+                        <h1 class="fs-3 mb-0">
+                            <a href="/my-chats" class="text-white text-decoration-none">
+                                <span class="brand-logo">ABDRE Chat</span>
+                            </a>
+                        </h1>
+                    </div>
                 </div>
-                <div class="col-6 text-end">
-                    <div id="auth-status">
-                        <!-- Will be populated by JavaScript -->
+                <div class="col-auto">
+                    <div class="d-flex align-items-center">
+                        <!-- Notification Icon -->
+                        <div id="notification-container" class="position-relative me-3">
+                            <button id="notification-button" class="notification-button">
+                                <i class="fas fa-bell fs-5"></i>
+                                <span id="notification-badge" class="notification-badge d-none">0</span>
+                            </button>
+                        </div>
+                        
+                        <!-- Auth Status -->
+                        <div id="auth-status">
+                            <!-- This will be populated by MenuBar.js -->
+                        </div>
+                        
+                        <!-- Mobile Menu Toggle -->
+                        <button id="mobile-menu-toggle" class="mobile-menu-toggle ms-3 d-md-none">
+                            <i class="fas fa-bars fs-5"></i>
+                        </button>
+                        
+                        <!-- Connection Status Badge -->
+                        <span class="badge ms-3" id="connection-status">
+                            {% if initial_connection_status == 'online' %}
+                            <span class="badge bg-success">Connected</span>
+                            {% elif initial_connection_status == 'connecting' %}
+                            <span class="badge bg-warning">Connecting...</span>
+                            {% else %}
+                            <span class="badge bg-danger">Offline</span>
+                            {% endif %}
+                        </span>
                     </div>
                 </div>
             </div>
+        </div>
+        
+        <!-- Mobile Menu (hidden by default) -->
+        <div id="mobile-menu" class="mobile-menu d-none">
+            <!-- This will be populated by MenuBar.js -->
         </div>
     </header>
 
-    <main class="container-fluid py-4">
-        <div class="row">
-            <div class="col-lg-10 mx-auto">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h2 class="h3 mb-0">My Conversations</h2>
-                    <div>
-                        <button type="button" id="qr-invite-btn" class="btn btn-primary">
-                            <i class="fas fa-qrcode me-2"></i> QR Invite
+    <div class="container-fluid py-3">
+        <div class="row mb-3">
+            <div class="col">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h2 class="h4 mb-0">My Chats</h2>
+                    <div class="d-flex">
+                        <button class="btn btn-outline-secondary me-2" id="refresh-btn" title="Refresh chats">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                        <button class="btn btn-primary" id="create-chat-btn">
+                            <i class="fas fa-plus me-2"></i> New Chat
                         </button>
                     </div>
                 </div>
-                
-                <!-- Search Box -->
-                <div class="card mb-4 chat-search-card">
-                    <div class="card-body">
-                        <div class="input-group">
-                            <span class="input-group-text bg-light border-end-0">
-                                <i class="fas fa-search text-muted"></i>
-                            </span>
-                            <input type="text" id="chat-search" class="form-control border-start-0" placeholder="Search conversations..." aria-label="Search conversations">
-                        </div>
-                    </div>
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" class="form-control" id="chat-search" placeholder="Search chats...">
                 </div>
-                
-                <!-- Chat List -->
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col">
                 <div class="card">
-                    <div class="list-group list-group-flush" id="chats-container">
-                        <!-- Loader (shown initially) -->
-                        <div id="chats-loader" class="p-5 text-center">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="mt-3 text-muted">Loading your conversations...</p>
-                        </div>
+                    <div class="card-body p-0">
+                        <div id="error-container" class="alert alert-danger mx-3 mt-3 d-none"></div>
                         
-                        <!-- Empty state (hidden initially) -->
-                        <div id="empty-chats" class="p-5 text-center d-none">
-                            <div class="mb-4">
-                                <i class="fas fa-comments text-muted" style="font-size: 3.5rem;"></i>
-                            </div>
-                            <h3 class="h4 mb-3">No conversations yet</h3>
-                            <p class="text-muted mb-4">Start chatting with someone to create your first conversation</p>
-                            <button id="empty-new-chat-btn" class="btn btn-primary">
-                                <i class="fas fa-plus me-2"></i> New Chat
-                            </button>
-                        </div>
-                        
-                        <!-- Error state (hidden initially) -->
-                        <div id="error-state" class="p-5 text-center d-none">
-                            <div class="mb-4">
-                                <i class="fas fa-exclamation-triangle text-warning" style="font-size: 3.5rem;"></i>
-                            </div>
-                            <h3 class="h4 mb-3">Couldn't load conversations</h3>
-                            <p class="text-muted mb-4" id="error-message">There was a problem connecting to the server.</p>
-                            <button id="retry-btn" class="btn btn-primary">
-                                <i class="fas fa-sync-alt me-2"></i> Retry
-                            </button>
-                        </div>
-                        
-                        <!-- Chat entries will be added here dynamically -->
+                        <!-- Chat list rendered server-side -->
+                        {% from "components/chat_list.html" import chat_list %}
+                        {{ chat_list(chats, is_empty) }}
                     </div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- New Chat Modal -->
-    <div class="modal fade" id="new-chat-modal" tabindex="-1" aria-labelledby="new-chat-modal-label" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="new-chat-modal-label">Start New Conversation</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="new-chat-form">
-                        <div class="mb-3">
-                            <label for="recipient-username" class="form-label">Username or Email</label>
-                            <input type="text" class="form-control" id="recipient-username" placeholder="Enter username or email" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="chat-title" class="form-label">Chat Title (Optional)</label>
-                            <input type="text" class="form-control" id="chat-title" placeholder="Enter a title for this conversation">
-                        </div>
-                        <div class="mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="encrypted-chat">
-                                <label class="form-check-label" for="encrypted-chat">
-                                    Enable end-to-end encryption
-                                </label>
-                            </div>
-                        </div>
-                        <div class="alert alert-danger d-none" id="new-chat-error"></div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="create-chat-btn">Create Chat</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- QR Code Invitation Modal -->
-    <div class="modal fade" id="qr-invitation-modal" tabindex="-1" aria-labelledby="qr-invitation-modal-label" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="qr-invitation-modal-label">Invite via QR Code</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="text-center mb-3">
-                        <p class="lead">Scan this QR code to start a chat</p>
-                        <div class="alert alert-info" id="scan-status">
-                            Waiting for someone to scan the QR code...
-                        </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="qr-code-container mx-auto" style="width: 256px; height: 256px; position: relative;">
-                                <div id="qr-code" style="width: 100%; height: 100%;">
-                                    <div class="d-flex justify-content-center align-items-center h-100">
-                                        <div class="spinner-border text-primary" role="status">
-                                            <span class="visually-hidden">Loading...</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="text-center mt-3">
-                                <p class="mb-1">This invitation expires in:</p>
-                                <div id="invitation-countdown" class="fw-bold fs-4">30:00</div>
-                                <div class="mt-2">
-                                    <span class="me-2">Status:</span>
-                                    <span class="badge bg-secondary" id="invitation-status">Generating...</span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-md-6">
-                            <div class="card mt-3 mt-md-0">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0">Instructions</h6>
-                                </div>
-                                <div class="card-body">
-                                    <ol class="ps-3">
-                                        <li>Show this QR code to the person you want to chat with</li>
-                                        <li>They need to scan it with their phone camera</li>
-                                        <li>Once scanned, a new chat will be created automatically</li>
-                                        <li>This QR code will expire in 30 minutes if not used</li>
-                                    </ol>
-                                    
-                                    <div class="mt-3">
-                                        <p class="fw-bold mb-1">Or share this link:</p>
-                                        <div class="input-group">
-                                            <input type="text" class="form-control" id="invitation-link" readonly>
-                                            <button class="btn btn-outline-primary" type="button" id="copy-link-btn">
-                                                <i class="fas fa-copy"></i>
-                                            </button>
-                                        </div>
-                                        <div id="copy-status" class="form-text"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-primary" id="regenerate-qr-btn">
-                        <i class="fas fa-sync-alt me-2"></i> Generate New Code
-                    </button>
                 </div>
             </div>
         </div>
@@ -222,28 +129,27 @@
     <!-- Bootstrap Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
     
-    <!-- QRCode.js from CDN -->
-    <script src="/static/js/libs/qrcode.min.js"></script>
+    <!-- Core dependencies -->
+    <script src="/static/js/utils/auth-helper.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
+    <script src="/static/js/services/api-client.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
+    <script src="/static/js/components/menu-bar.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
+    <script src="/static/js/main.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
     
-    <!-- Socket.IO from CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.6.1/dist/socket.io.min.js"></script>
+    {% if server_rendered %}
+    <!-- Socket.IO client library -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js" integrity="sha384-c79GN5VsunZvi+Q/WObgk2in0CbZsHnjEqvFxC5DxHn9lTfNce2WW6h2pH6u/kF+" crossorigin="anonymous"></script>
     
-    <!-- Auth Helper -->
-    <script src="/static/js/utils/auth-helper.js"></script>
+    <!-- Progressive enhancement for server-rendered pages -->
+    <script src="/static/js/services/socket-client.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
+    <script src="/static/js/utils/notification-handler.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
+    <script src="/static/js/enhancers/chat_list_enhancer.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
+    {% else %}
+    <!-- Socket.IO client library -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js" integrity="sha384-c79GN5VsunZvi+Q/WObgk2in0CbZsHnjEqvFxC5DxHn9lTfNce2WW6h2pH6u/kF+" crossorigin="anonymous"></script>
     
-    <!-- QR Code Generator -->
-    <script src="/static/js/utils/qrcode-generator.js"></script>
-    
-    <!-- Invitation Manager -->
-    <script src="/static/js/utils/invitation-manager.js"></script>
-    
-    <!-- API Client -->
-    <script src="/static/js/services/api-client.js"></script>
-    
-    <!-- Menu Bar Component -->
-    <script src="/static/js/components/menu-bar.js"></script>
-    
-    <!-- My Chats Script -->
-    <script src="/static/js/modules/my-chats-page.js"></script>
+    <!-- Legacy client-side rendering (fallback) -->
+    <script src="/static/js/services/socket-client.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
+    <script src="/static/js/modules/chat-list-page.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
+    {% endif %}
 </body>
 </html> 

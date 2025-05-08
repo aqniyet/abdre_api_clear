@@ -15,13 +15,20 @@ const ApiClient = {
                 register: '/auth/register',
                 logout: '/auth/logout',
                 refresh: '/auth/refresh',
-                status: '/auth/status'
+                status: '/auth/status',
+                guest: '/auth/visitor',
+                oauth: {
+                    google: '/auth/oauth/google',
+                    apple: '/auth/oauth/apple'
+                }
             },
             // User Service
             users: {
                 profile: '/users/profile',
                 update: '/users/update',
-                search: '/users/search'
+                search: '/users/search',
+                notifications: '/users/notifications',
+                unreadCount: '/users/unread-count'
             },
             // Chat Service
             chats: {
@@ -30,9 +37,9 @@ const ApiClient = {
                 create: '/chats',
                 messages: '/chats/{id}/messages',
                 invitation: {
-                    generate: '/api/chats/generate-invitation',
-                    status: '/api/chats/invitation-status/{token}',
-                    accept: '/api/chats/accept-invitation/{token}'
+                    generate: '/chats/generate-invitation',
+                    status: '/chats/invitation-status/{token}',
+                    accept: '/chats/accept-invitation/{token}'
                 }
             },
             // Realtime Service
@@ -305,6 +312,32 @@ const ApiClient = {
     /**
      * Logout current user
      */
+    /**
+     * User registration
+     * 
+     * @param {Object} userData - User registration data
+     * @returns {Promise<Object>} Registration result
+     */
+    async register(userData) {
+        try {
+            const response = await this._request(
+                this.config.endpoints.auth.register,
+                {
+                    method: "POST",
+                    skipAuth: true,
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(userData)
+                }
+            );
+            
+            // Do not auto-login after registration
+            return response.data;
+        } catch (error) {
+            console.error("Registration error:", error);
+            throw error;
+        }
+    },
+
     async logout() {
         try {
             await this._request(
@@ -366,7 +399,19 @@ const ApiClient = {
                 }
             );
             
-            return response.data;
+            // Check if we have a valid token in the response
+            const data = response.data;
+            if (!data || !data.token) {
+                console.error('Invalid invitation data received:', data);
+                throw new Error('No invitation token received from server');
+            }
+            
+            // Ensure we always have an invitation_token field for consistent usage across the app
+            if (!data.invitation_token && data.token) {
+                data.invitation_token = data.token;
+            }
+            
+            return data;
         } catch (error) {
             console.error('Error creating chat invitation:', error);
             throw error;
@@ -580,8 +625,93 @@ const ApiClient = {
             
             return response.data;
         } catch (error) {
-            console.error('Error updating user profile:', error);
+            console.error('Failed to update profile:', error);
             throw error;
+        }
+    },
+    
+    /**
+     * Get unread message count for current user
+     * 
+     * @returns {Promise<Object>} - Count data with total and per-chat counts
+     */
+    async getUnreadMessageCount() {
+        try {
+            const response = await this._request(
+                this.config.endpoints.users.unreadCount,
+                {
+                    method: 'GET'
+                }
+            );
+            
+            return response.data;
+        } catch (error) {
+            console.error('Failed to get unread count:', error);
+            // Return zero count on error to prevent UI issues
+            return { count: 0, chats: {} };
+        }
+    },
+    
+    /**
+     * Login as a guest/visitor
+     * 
+     * @returns {Promise<Object>} Guest user data
+     */
+    async loginAsGuest() {
+        try {
+            const response = await this._request(
+                this.config.endpoints.auth.guest,
+                {
+                    method: 'POST',
+                    skipAuth: true,
+                    headers: { 'Content-Type': 'application/json' }
+                }
+            );
+            
+            // Save authentication data
+            if (response.data) {
+                AuthHelper.saveAuth(response.data);
+            }
+            
+            return response.data;
+        } catch (error) {
+            console.error('Guest login error:', error);
+            throw error;
+        }
+    },
+    
+    /**
+     * OAuth authentication methods
+     */
+    oauth: {
+        /**
+         * Redirect to Google OAuth
+         */
+        google() {
+            return new Promise((resolve, reject) => {
+                try {
+                    window.location.href = ApiClient.config.endpoints.auth.oauth.google;
+                    // This won't actually resolve since we're redirecting
+                    resolve();
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        },
+        
+        /**
+         * Redirect to Apple OAuth
+         */
+        apple() {
+            return new Promise((resolve, reject) => {
+                try {
+                    window.location.href = ApiClient.config.endpoints.auth.oauth.apple;
+                    // This won't actually resolve since we're redirecting
+                    resolve();
+                } catch (error) {
+                    reject(error);
+                }
+            });
         }
     },
     

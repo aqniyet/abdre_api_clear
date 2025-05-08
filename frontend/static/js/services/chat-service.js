@@ -132,8 +132,17 @@ const ChatService = {
         // Generate invitation via API
         const invitation = await ApiClient.createChatInvitation();
         
+        // Ensure we have a valid token
+        if (!invitation || (!invitation.invitation_token && !invitation.token)) {
+            console.error('Invalid invitation data:', invitation);
+            throw new Error('No invitation token received from server');
+        }
+        
+        // Use either invitation_token or token field
+        const token = invitation.invitation_token || invitation.token;
+        
         // Notify realtime service about new invitation
-        SocketClient.notifyInvitationCreated(invitation.invitation_token);
+        SocketClient.notifyInvitationCreated(token);
         
         return invitation;
     },
@@ -145,6 +154,11 @@ const ChatService = {
      * @returns {Promise<Object>} Invitation status
      */
     async checkInvitationStatus(token) {
+        if (!token) {
+            console.error('Cannot check invitation status: Invalid or missing token');
+            throw new Error('Invalid invitation token');
+        }
+        
         // Check via API for current status
         const status = await ApiClient.getInvitationStatus(token);
         

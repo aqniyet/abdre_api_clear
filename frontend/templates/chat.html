@@ -34,35 +34,61 @@
             <div class="row align-items-center">
                 <div class="col">
                     <div class="d-flex align-items-center">
-                        <a href="/my-chats" class="text-white text-decoration-none me-3">
+                        <a href="/my-chats" class="text-white text-decoration-none me-3" aria-label="Back to chats">
                             <i class="fas fa-chevron-left"></i>
                         </a>
                         <h1 class="fs-3 mb-0">
-                            <span class="brand-logo">ABDRE Chat</span>
+                            <a href="/my-chats" class="text-white text-decoration-none">
+                                <span class="brand-logo">ABDRE Chat</span>
+                            </a>
                         </h1>
+                        
+                        <!-- Chat Title -->
+                        <span class="ms-3 px-2 py-1 bg-white bg-opacity-10 rounded-pill">
+                            <span id="current-chat-name" class="small text-white">{{ chat_name }}</span>
+                        </span>
                     </div>
                 </div>
                 <div class="col-auto">
                     <div class="d-flex align-items-center">
-                        <div class="dropdown me-3">
+                        <!-- Notification Icon -->
+                        <div id="notification-container" class="position-relative me-3">
+                            <button id="notification-button" class="notification-button">
+                                <i class="fas fa-bell fs-5"></i>
+                                <span id="notification-badge" class="notification-badge d-none">0</span>
+                            </button>
+                        </div>
+                        
+                        <!-- Auth Status -->
+                        <div id="auth-status">
+                            <!-- This will be populated by MenuBar.js -->
+                        </div>
+                        
+                        <!-- Chat Options -->
+                        <div class="dropdown ms-3">
                             <button class="btn btn-sm btn-outline-light dropdown-toggle" type="button" id="chatActionsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="fas fa-ellipsis-v"></i>
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="chatActionsDropdown">
-                                <li><a class="dropdown-item" href="/my-chats"><i class="fas fa-list me-2"></i> All Chats</a></li>
-                                <li><a class="dropdown-item" href="/create"><i class="fas fa-plus me-2"></i> New Chat</a></li>
+                                <li><a class="dropdown-item" href="/my-chats"><i class="fas fa-list"></i> All Chats</a></li>
+                                <li><a class="dropdown-item" href="/create"><i class="fas fa-plus"></i> New Chat</a></li>
                                 <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="#" id="clear-chat-btn"><i class="fas fa-trash me-2"></i> Clear Chat</a></li>
+                                <li><a class="dropdown-item" href="#" id="clear-chat-btn"><i class="fas fa-trash"></i> Clear Chat</a></li>
                             </ul>
                         </div>
-                        <div id="auth-status">
-                            {% if user and user.is_authenticated %}
-                            <span class="text-white">{{ user.display_name or user.username }}</span>
-                            {% endif %}
-                        </div>
+                        
+                        <!-- Mobile Menu Toggle -->
+                        <button id="mobile-menu-toggle" class="mobile-menu-toggle ms-3 d-md-none">
+                            <i class="fas fa-bars fs-5"></i>
+                        </button>
                     </div>
                 </div>
             </div>
+        </div>
+        
+        <!-- Mobile Menu (hidden by default) -->
+        <div id="mobile-menu" class="mobile-menu d-none">
+            <!-- This will be populated by MenuBar.js -->
         </div>
     </header>
 
@@ -141,12 +167,21 @@
     <!-- Core dependencies -->
     <script src="/static/js/utils/auth-helper.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
     <script src="/static/js/services/api-client.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
+    <script src="/static/js/components/menu-bar.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
+    <script src="/static/js/main.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
     
     {% if server_rendered %}
+    <!-- Socket.IO client library -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js" integrity="sha384-c79GN5VsunZvi+Q/WObgk2in0CbZsHnjEqvFxC5DxHn9lTfNce2WW6h2pH6u/kF+" crossorigin="anonymous"></script>
+    
     <!-- Progressive enhancement for server-rendered pages -->
     <script src="/static/js/services/socket-client.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
+    <script src="/static/js/utils/notification-handler.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
     <script src="/static/js/enhancers/chat_enhancer.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
     {% else %}
+    <!-- Socket.IO client library -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js" integrity="sha384-c79GN5VsunZvi+Q/WObgk2in0CbZsHnjEqvFxC5DxHn9lTfNce2WW6h2pH6u/kF+" crossorigin="anonymous"></script>
+    
     <!-- Legacy client-side rendering (fallback) -->
     <script src="/static/js/services/socket-client.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>
     <script src="/static/js/modules/chat-page.js{% if asset_versions %}?v={{ asset_versions.js }}{% endif %}"></script>

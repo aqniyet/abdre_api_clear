@@ -72,10 +72,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Generate the invitation using the ChatService
                 const invitation = await ChatService.createInvitation();
-                activeInvitationToken = invitation.invitation_token;
+                
+                // Support both token field names for backward compatibility
+                activeInvitationToken = invitation.invitation_token || invitation.token;
+                
+                if (!activeInvitationToken) {
+                    throw new Error('No invitation token received from server');
+                }
                 
                 // Create the invitation URL
-                const invitationUrl = QRCodeGenerator.createInvitationURL(invitation.invitation_token);
+                const invitationUrl = QRCodeGenerator.createInvitationURL(activeInvitationToken);
                 
                 // Display the URL in the input field
                 invitationLinkInput.value = invitationUrl;
@@ -102,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('Generated invitation:', invitation);
                 
                 // Set up listeners for invitation updates
-                setupInvitationListeners(invitation.invitation_token);
+                setupInvitationListeners(activeInvitationToken);
                 
                 // Start countdown timer
                 startCountdown(invitation.expiry_seconds || 1800);
@@ -134,6 +140,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 invitationListener.unsubscribe();
             }
             
+            if (!token) {
+                console.error('Cannot set up listeners: Invalid or missing invitation token');
+                return;
+            }
+            
             // Set up new listeners
             invitationListener = ChatService.listenForInvitationUpdates(
                 token,
@@ -151,6 +162,11 @@ document.addEventListener('DOMContentLoaded', () => {
          */
         async function checkInvitationStatus(token) {
             try {
+                if (!token) {
+                    console.error('Cannot check invitation status: Invalid or missing token');
+                    return;
+                }
+                
                 const status = await ChatService.checkInvitationStatus(token);
                 updateStatusUI(status);
             } catch (error) {
