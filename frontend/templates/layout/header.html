@@ -1,0 +1,50 @@
+<header class="site-header">
+    <div class="container">
+        <div class="header-content">
+            <!-- Logo and branding -->
+            <div class="brand">
+                <a href="{{ url_for('index') }}" class="logo">
+                    ABDRE Chat
+                </a>
+            </div>
+            
+            <!-- Main navigation -->
+            <nav class="main-nav">
+                <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-expanded="false" aria-controls="main-menu">
+                    <span class="sr-only">Toggle menu</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                
+                <ul id="main-menu" class="nav-menu">
+                    <li><a href="{{ url_for('index') }}">Home</a></li>
+                    {% if current_user.is_authenticated %}
+                        <li><a href="{{ url_for('chats') }}">My Chats</a></li>
+                        <li><a href="{{ url_for('create_chat') }}">New Chat</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+            
+            <!-- User actions -->
+            <div class="user-actions">
+                {% if current_user.is_authenticated %}
+                    <div class="user-dropdown">
+                        <button class="user-dropdown-toggle">
+                            <span class="user-name">{{ current_user.display_name }}</span>
+                            <span class="dropdown-icon">▼</span>
+                        </button>
+                        <div class="dropdown-menu">
+                            <a href="{{ url_for('profile') }}">Profile</a>
+                            <a href="{{ url_for('settings') }}">Settings</a>
+                            <a href="{{ url_for('logout') }}">Logout</a>
+                        </div>
+                    </div>
+                {% else %}
+                    <a href="{{ url_for('login') }}" class="btn btn-primary">Login</a>
+                    <a href="{{ url_for('register') }}" class="btn btn-outline">Register</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</header> 

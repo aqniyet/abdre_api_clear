@@ -1,0 +1,330 @@
+/**
+ * ABDRE Chat - Base CSS
+ * Contains CSS reset, typography, and base styles
+ */
+
+/* 
+ * CSS Custom Properties for theming 
+ * These variables can be overridden for different themes
+ */
+:root {
+  /* Color Palette */
+  --color-primary: #4285f4;
+  --color-primary-light: #7baaf7;
+  --color-primary-dark: #3367d6;
+  --color-secondary: #34a853;
+  --color-secondary-light: #5cb767;
+  --color-secondary-dark: #2d8e49;
+  --color-accent: #ea4335;
+  --color-accent-light: #f07c72;
+  --color-accent-dark: #c6382b;
+  
+  /* Neutral Colors */
+  --color-black: #212121;
+  --color-gray-dark: #424242;
+  --color-gray: #757575;
+  --color-gray-light: #bdbdbd;
+  --color-gray-lighter: #e0e0e0;
+  --color-gray-lightest: #f5f5f5;
+  --color-white: #ffffff;
+  
+  /* Functional Colors */
+  --color-text: var(--color-black);
+  --color-text-secondary: var(--color-gray-dark);
+  --color-text-tertiary: var(--color-gray);
+  --color-link: var(--color-primary);
+  --color-link-hover: var(--color-primary-dark);
+  --color-border: var(--color-gray-lighter);
+  --color-background: var(--color-white);
+  --color-background-alt: var(--color-gray-lightest);
+  --color-success: #34a853;
+  --color-warning: #fbbc05;
+  --color-error: #ea4335;
+  --color-info: #4285f4;
+  
+  /* Typography */
+  --font-family-base: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-family-headings: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-family-monospace: 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  
+  --font-size-xs: 0.75rem;     /* 12px */
+  --font-size-sm: 0.875rem;    /* 14px */
+  --font-size-md: 1rem;        /* 16px (base) */
+  --font-size-lg: 1.125rem;    /* 18px */
+  --font-size-xl: 1.25rem;     /* 20px */
+  --font-size-2xl: 1.5rem;     /* 24px */
+  --font-size-3xl: 1.875rem;   /* 30px */
+  --font-size-4xl: 2.25rem;    /* 36px */
+  
+  /* Font weights */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
+  
+  /* Line heights */
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-loose: 1.75;
+  
+  /* Spacing */
+  --spacing-base: 1rem;        /* 16px */
+  --spacing-xs: 0.25rem;       /* 4px */
+  --spacing-sm: 0.5rem;        /* 8px */
+  --spacing-md: 1rem;          /* 16px */
+  --spacing-lg: 1.5rem;        /* 24px */
+  --spacing-xl: 2rem;          /* 32px */
+  --spacing-2xl: 3rem;         /* 48px */
+  --spacing-3xl: 4rem;         /* 64px */
+  
+  /* Borders */
+  --border-radius-sm: 0.125rem;  /* 2px */
+  --border-radius-md: 0.25rem;   /* 4px */
+  --border-radius-lg: 0.5rem;    /* 8px */
+  --border-radius-xl: 1rem;      /* 16px */
+  --border-radius-full: 9999px;
+  
+  --border-width-thin: 1px;
+  --border-width-normal: 2px;
+  --border-width-thick: 4px;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  
+  /* Transitions */
+  --transition-quick: 150ms;
+  --transition-normal: 300ms;
+  --transition-slow: 500ms;
+  
+  /* Z-index layers */
+  --z-index-below: -1;
+  --z-index-base: 0;
+  --z-index-above: 1;
+  --z-index-header: 10;
+  --z-index-dropdown: 20;
+  --z-index-sticky: 30;
+  --z-index-fixed: 40;
+  --z-index-modal: 50;
+  --z-index-popover: 60;
+  --z-index-toast: 70;
+  --z-index-tooltip: 80;
+}
+
+/* Dark mode theme variables */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark mode colors - only override what changes */
+    --color-text: #f5f5f5;
+    --color-text-secondary: #e0e0e0;
+    --color-text-tertiary: #bdbdbd;
+    --color-border: #424242;
+    --color-background: #212121;
+    --color-background-alt: #303030;
+    
+    /* Adjust component colors for dark mode */
+    --color-primary-light: #3367d6;
+    --color-primary-dark: #7baaf7;
+  }
+}
+
+/* 
+ * CSS Reset & Base Styles
+ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+  background-color: var(--color-background);
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-family-headings);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  margin-bottom: var(--spacing-md);
+}
+
+h1 {
+  font-size: var(--font-size-4xl);
+}
+
+h2 {
+  font-size: var(--font-size-3xl);
+}
+
+h3 {
+  font-size: var(--font-size-2xl);
+}
+
+h4 {
+  font-size: var(--font-size-xl);
+}
+
+h5 {
+  font-size: var(--font-size-lg);
+}
+
+h6 {
+  font-size: var(--font-size-md);
+}
+
+p {
+  margin-bottom: var(--spacing-md);
+}
+
+a {
+  color: var(--color-link);
+  text-decoration: none;
+  transition: color var(--transition-quick) ease-in-out;
+}
+
+a:hover {
+  color: var(--color-link-hover);
+  text-decoration: underline;
+}
+
+small {
+  font-size: var(--font-size-sm);
+}
+
+strong, b {
+  font-weight: var(--font-weight-bold);
+}
+
+/* Lists */
+ul, ol {
+  padding-left: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+}
+
+li {
+  margin-bottom: var(--spacing-xs);
+}
+
+/* Form elements */
+input, select, textarea, button {
+  font-family: inherit;
+  font-size: var(--font-size-md);
+}
+
+/* Images and media */
+img, video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Helper classes */
+.visually-hidden {
+  border: 0;
+  clip: rect(0 0 0 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Text alignment */
+.text-left { text-align: left; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+
+/* Text colors */
+.text-primary { color: var(--color-primary); }
+.text-secondary { color: var(--color-secondary); }
+.text-accent { color: var(--color-accent); }
+.text-success { color: var(--color-success); }
+.text-warning { color: var(--color-warning); }
+.text-error { color: var(--color-error); }
+.text-info { color: var(--color-info); }
+
+/* Font weights */
+.font-normal { font-weight: var(--font-weight-normal); }
+.font-medium { font-weight: var(--font-weight-medium); }
+.font-bold { font-weight: var(--font-weight-bold); }
+
+/* Responsive font sizes for mobile */
+@media (max-width: 640px) {
+  h1 {
+    font-size: var(--font-size-3xl);
+  }
+  
+  h2 {
+    font-size: var(--font-size-2xl);
+  }
+  
+  h3 {
+    font-size: var(--font-size-xl);
+  }
+}
+
+/* Print styles */
+@media print {
+  body {
+    background-color: #fff;
+    color: #000;
+  }
+  
+  a, a:visited {
+    text-decoration: underline;
+    color: #000;
+  }
+  
+  a[href]:after {
+    content: " (" attr(href) ")";
+  }
+  
+  abbr[title]:after {
+    content: " (" attr(title) ")";
+  }
+  
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+  
+  p, h2, h3 {
+    orphans: 3;
+    widows: 3;
+  }
+  
+  h2, h3 {
+    page-break-after: avoid;
+  }
+} 

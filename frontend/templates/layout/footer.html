@@ -1,0 +1,40 @@
+<footer class="site-footer">
+    <div class="container">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h3 class="footer-heading">ABDRE Chat</h3>
+                <p class="footer-description">
+                    A secure and private communication platform built with microservice architecture.
+                </p>
+            </div>
+            
+            <div class="footer-section">
+                <h3 class="footer-heading">Navigation</h3>
+                <ul class="footer-links">
+                    <li><a href="{{ url_for('index') }}">Home</a></li>
+                    <li><a href="{{ url_for('about') }}">About</a></li>
+                    <li><a href="{{ url_for('privacy') }}">Privacy Policy</a></li>
+                    <li><a href="{{ url_for('terms') }}">Terms of Service</a></li>
+                </ul>
+            </div>
+            
+            <div class="footer-section">
+                <h3 class="footer-heading">Connect</h3>
+                <ul class="footer-links">
+                    <li><a href="mailto:contact@abdrechat.com">Contact</a></li>
+                    <li><a href="https://github.com/aqniyet/abdre_api">GitHub</a></li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="footer-bottom">
+            <p class="copyright">
+                &copy; {% now 'Y' %} ABDRE Chat. All rights reserved.
+            </p>
+            <div class="footer-bottom-links">
+                <a href="{{ url_for('privacy') }}">Privacy</a>
+                <a href="{{ url_for('terms') }}">Terms</a>
+            </div>
+        </div>
+    </div>
+</footer> 

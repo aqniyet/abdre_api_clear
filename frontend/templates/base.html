@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>{% block title %}ABDRE Chat{% endblock %}</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+    
+    <!-- Critical CSS Injection -->
+    <style id="critical-css">
+        {% block critical_css %}{% endblock %}
+    </style>
+    
+    <!-- Base Stylesheets -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    
+    <!-- Page Specific CSS -->
+    {% block extra_css %}{% endblock %}
+    
+    <!-- Preload Key Assets -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="{% block og_title %}ABDRE Chat{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}A secure and private chat application{% endblock %}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ request.url }}">
+    
+    <!-- Theme Color for Browser -->
+    <meta name="theme-color" content="#4285f4">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    <div id="app-container">
+        <!-- Header -->
+        {% include 'layout/header.html' %}
+        
+        <!-- Main Content -->
+        <main id="main-content">
+            {% block content %}{% endblock %}
+        </main>
+        
+        <!-- Footer -->
+        {% include 'layout/footer.html' %}
+    </div>
+    
+    <!-- Core JavaScript -->
+    <script src="{{ url_for('static', filename='js/core/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core/event_bus.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core/api_client.js') }}"></script>
+    
+    <!-- Page Specific JavaScript -->
+    {% block extra_js %}{% endblock %}
+    
+    <!-- Initialize App -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            ABDRE.App.init();
+        });
+    </script>
+</body>
+</html> 
