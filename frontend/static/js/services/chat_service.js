@@ -14,7 +14,7 @@ ABDRE.Services.Chat = (function() {
     'use strict';
 
     const API_ENDPOINTS = {
-        MY_CHATS: '/api/my-chats',
+        MY_CHATS: '/api/chats',
         CHAT: (chatId) => `/api/chats/${chatId}`,
         MESSAGES: (chatId) => `/api/chats/${chatId}/messages`,
         MESSAGE: (chatId, messageId) => `/api/chats/${chatId}/messages/${messageId}`,

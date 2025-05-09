@@ -82,7 +82,7 @@ class RenderController:
             
             response = self._make_api_request(
                 'GET',
-                '/api/my-chats',
+                '/api/chats',
                 headers={'Authorization': f'Bearer {token}'}
             )
             
@@ -271,6 +271,10 @@ class RenderController:
         headers['X-Request-ID'] = g.get('request_id', 'unknown')
         kwargs['headers'] = headers
         
+        # Convert /api/my-chats to /api/chats for compatibility
+        if url == '/api/my-chats':
+            url = '/api/chats'
+        
         # First, try using the direct API route instead of microservices
         # This simplifies development and handles the case where microservices aren't running
         if self.app and not url.startswith('http'):
@@ -300,17 +304,13 @@ class RenderController:
             # Replace /api with appropriate service URL based on the endpoint
             if url.startswith('/api/chats'):
                 service_url = os.environ.get('CHAT_SERVICE_URL', 'http://localhost:5504')
-                full_url = service_url + url.replace('/api/chats', '')
+                full_url = service_url + url.replace('/api/chats', '/chats')
             elif url.startswith('/api/users'):
                 service_url = os.environ.get('USER_SERVICE_URL', 'http://localhost:5502')
-                full_url = service_url + url.replace('/api/users', '')
+                full_url = service_url + url.replace('/api/users', '/users')
             elif url.startswith('/api/auth'):
                 service_url = os.environ.get('AUTH_SERVICE_URL', 'http://localhost:5501')
-                full_url = service_url + url.replace('/api/auth', '')
-            elif url.startswith('/api/my-chats'):
-                # Add specific handling for my-chats API endpoint
-                service_url = os.environ.get('CHAT_SERVICE_URL', 'http://localhost:5504')
-                full_url = service_url + '/my-chats'
+                full_url = service_url + url.replace('/api/auth', '/auth')
             else:
                 # Default case - use API base URL with the provided path
                 api_base_url = os.environ.get('API_BASE_URL', 'http://localhost:5000')
