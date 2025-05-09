@@ -41,10 +41,15 @@ class RenderController:
         self.app.add_url_rule('/my-chats', 'render_my_chats', self.render_my_chats)
         self.app.add_url_rule('/chat/<chat_id>', 'render_chat', self.render_chat)
         self.app.add_url_rule('/create', 'render_create_chat', self.render_create_chat)
+        self.app.add_url_rule('/settings', 'render_settings', self.render_settings)
+        self.app.add_url_rule('/profile', 'render_profile', self.render_profile)
         
     def render_index(self):
         """Render the index page"""
-        return template_service.render('index.html')
+        return template_service.render('index.html', 
+            user=g.user if hasattr(g, 'user') else None,
+            server_rendered=True
+        )
     
     def render_login(self):
         """Render the login page"""
@@ -214,6 +219,36 @@ class RenderController:
             invitation_code=invitation_code,
             server_rendered=True,
             user=g.user if hasattr(g, 'user') else None
+        )
+    
+    def render_settings(self):
+        """Render the settings page"""
+        # Check if user is authenticated, redirect to login if not
+        if not hasattr(g, 'user') or not g.user:
+            return redirect('/login?redirect=/settings')
+        
+        return template_service.render('settings.html',
+            user=g.user,
+            server_rendered=True
+        )
+    
+    def render_profile(self):
+        """Render the user profile page"""
+        # Check if user is authenticated, redirect to login if not
+        if not hasattr(g, 'user') or not g.user:
+            return redirect('/login?redirect=/profile')
+        
+        # Convert user object to JSON for client-side use
+        try:
+            user_json = json.dumps(g.user) if g.user else '{}'
+        except Exception as e:
+            logger.exception(f"Error converting user to JSON: {str(e)}")
+            user_json = '{}'
+        
+        return template_service.render('profile.html',
+            user=g.user,
+            user_json=user_json,
+            server_rendered=True
         )
     
     def _make_api_request(self, method, url, **kwargs):

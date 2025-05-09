@@ -18,9 +18,9 @@
             <div class="profile-avatar-section">
                 <div class="profile-avatar">
                     {% if user.avatar_url %}
-                    <img src="{{ user.avatar_url }}" alt="{{ user.display_name or user.username }}">
+                    <img src="{{ user.avatar_url }}" alt="{{ user.display_name or user.username or 'User' }}">
                     {% else %}
-                    <div class="avatar-placeholder">{{ user.display_name[0:1] or user.username[0:1] }}</div>
+                    <div class="avatar-placeholder">{{ user.display_name[0:1] if user.display_name else (user.username[0:1] if user.username else 'U') }}</div>
                     {% endif %}
                     <button type="button" class="avatar-upload-btn" id="avatar-upload-btn">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -33,20 +33,20 @@
                 </form>
             </div>
             <div class="profile-name">
-                <h2>{{ user.display_name or user.username }}</h2>
-                <p class="profile-username">@{{ user.username }}</p>
+                <h2>{{ user.display_name or user.username or 'Anonymous User' }}</h2>
+                <p class="profile-username">@{{ user.username or 'unknown' }}</p>
             </div>
             <div class="profile-stats">
                 <div class="stat">
-                    <span class="stat-value">{{ user.chats_count }}</span>
+                    <span class="stat-value">{{ user.chats_count if user and user.chats_count is defined else 0 }}</span>
                     <span class="stat-label">Chats</span>
                 </div>
                 <div class="stat">
-                    <span class="stat-value">{{ user.friends_count }}</span>
+                    <span class="stat-value">{{ user.friends_count if user and user.friends_count is defined else 0 }}</span>
                     <span class="stat-label">Friends</span>
                 </div>
                 <div class="stat">
-                    <span class="stat-value">{{ user.blocked_count }}</span>
+                    <span class="stat-value">{{ user.blocked_count if user and user.blocked_count is defined else 0 }}</span>
                     <span class="stat-label">Blocked</span>
                 </div>
             </div>
@@ -59,19 +59,19 @@
                     
                     <div class="form-group">
                         <label for="display-name">Display Name</label>
-                        <input type="text" id="display-name" name="display_name" value="{{ user.display_name }}">
+                        <input type="text" id="display-name" name="display_name" value="{{ user.display_name or '' }}">
                     </div>
                     
                     <div class="form-group">
                         <label for="username">Username</label>
-                        <input type="text" id="username" name="username" value="{{ user.username }}" readonly>
+                        <input type="text" id="username" name="username" value="{{ user.username or '' }}" readonly>
                         <div class="form-hint">Username cannot be changed</div>
                     </div>
                     
                     <div class="form-group">
                         <label for="email">Email</label>
-                        <input type="email" id="email" name="email" value="{{ user.email }}">
-                        {% if not user.email_verified %}
+                        <input type="email" id="email" name="email" value="{{ user.email or '' }}">
+                        {% if user and user.email_verified is defined and not user.email_verified %}
                         <div class="verification-warning">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M1 21H23L12 2L1 21ZM13 18H11V16H13V18ZM13 14H11V10H13V14Z" fill="currentColor"/>
@@ -83,7 +83,7 @@
                     
                     <div class="form-group">
                         <label for="bio">Bio</label>
-                        <textarea id="bio" name="bio" rows="3">{{ user.bio }}</textarea>
+                        <textarea id="bio" name="bio" rows="3">{{ user.bio or '' }}</textarea>
                     </div>
                 </div>
                 
@@ -92,8 +92,8 @@
                     
                     <div class="form-group">
                         <label for="phone">Phone Number</label>
-                        <input type="tel" id="phone" name="phone" value="{{ user.phone }}">
-                        {% if user.phone and not user.phone_verified %}
+                        <input type="tel" id="phone" name="phone" value="{{ user.phone or '' }}">
+                        {% if user and user.phone and user.phone_verified is defined and not user.phone_verified %}
                         <div class="verification-warning">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M1 21H23L12 2L1 21ZM13 18H11V16H13V18ZM13 14H11V10H13V14Z" fill="currentColor"/>
@@ -124,15 +124,12 @@
 {% block app_js %}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Initialize modules
-            ABDRE.EventBus.init();
-            ABDRE.RealtimeService.init().connect();
-            ABDRE.Enhancers.ConnectionStatus.init();
-            ABDRE.Enhancers.Dropdown.init();
-            
-            // Initialize profile enhancer with user data
-            var userData = JSON.parse('{{ user_json|safe }}');
-            ABDRE.Enhancers.Profile.init(userData);
+            // Initialize enhancers - core modules should already be initialized by main.js
+            if (ABDRE.Enhancers && ABDRE.Enhancers.Profile) {
+                // Initialize profile enhancer with user data
+                var userData = {% if user_json is defined and user_json %}{{ user_json|safe }}{% else %}{} {% endif %};
+                ABDRE.Enhancers.Profile.init(userData);
+            }
         });
     </script>
 {% endblock %}

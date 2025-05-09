@@ -117,6 +117,9 @@
         <!-- Skip to main content link for accessibility -->
         <a href="#main-content" class="skip-link visually-hidden">Skip to main content</a>
         
+        <!-- Error container for application errors -->
+        <div id="error-container" class="error-container" style="display: none;"></div>
+        
         <!-- Header -->
         {% block header %}
             {% include 'components/header.html' %}
@@ -134,19 +137,13 @@
     </div>
     
     <!-- Core JavaScript -->
-    <script src="{{ url_for('static', filename='js/core/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core/error_handler.js') }}"></script>
     <script src="{{ url_for('static', filename='js/core/event_bus.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core/api_client.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core/main.js') }}"></script>
     
     <!-- Page Specific JavaScript -->
     {% block extra_js %}{% endblock %}
-    
-    <!-- Initialize App -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            if (typeof ABDRE !== 'undefined' && ABDRE.App) {
-                ABDRE.App.init();
-            }
-        });
-    </script>
 </body>
 </html> 

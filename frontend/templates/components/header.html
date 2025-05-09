@@ -16,7 +16,7 @@
           <a href="{{ url_for('render_my_chats') }}" class="nav-link {% if request.path == url_for('render_my_chats') %}active{% endif %}">My Chats</a>
         </li>
         <li class="nav-item">
-          <a href="{{ url_for('render_new_chat') }}" class="nav-link {% if request.path == url_for('render_new_chat') %}active{% endif %}">New Chat</a>
+          <a href="{{ url_for('render_create_chat') }}" class="nav-link {% if request.path == url_for('render_create_chat') %}active{% endif %}">New Chat</a>
         </li>
         <li class="nav-item">
           <a href="{{ url_for('render_settings') }}" class="nav-link {% if request.path == url_for('render_settings') %}active{% endif %}">Settings</a>
@@ -44,13 +44,13 @@
         <button type="button" class="user-menu-trigger" id="userMenuTrigger" aria-expanded="false" aria-haspopup="true">
           <div class="user-avatar">
             {% if user.profile_image %}
-              <img src="{{ user.profile_image }}" alt="{{ user.display_name }}">
+              <img src="{{ user.profile_image }}" alt="{{ user.display_name or user.username or 'User' }}">
             {% else %}
-              <div class="avatar-placeholder">{{ user.display_name[0:1] or (user.username[0:1] if user.username else 'U') }}</div>
+              <div class="avatar-placeholder">{{ user.display_name[0:1] if user.display_name else (user.username[0:1] if user.username else 'U') }}</div>
             {% endif %}
           </div>
           <div class="user-info">
-            <span class="user-name-display">{{ user.display_name or user.username }}</span>
+            <span class="user-name-display">{{ user.display_name or user.username or 'User' }}</span>
             <span class="user-status">Online</span>
           </div>
         </button>
@@ -58,8 +58,8 @@
         <!-- Dropdown Menu -->
         <div class="user-dropdown" id="userDropdown">
           <div class="user-dropdown-header">
-            <div class="user-name">{{ user.display_name or user.username }}</div>
-            <div class="user-email">{{ user.email }}</div>
+            <div class="user-name">{{ user.display_name or user.username or 'User' }}</div>
+            <div class="user-email">{{ user.email or '' }}</div>
           </div>
           <ul class="user-dropdown-menu">
             <li class="user-dropdown-item">
@@ -81,7 +81,7 @@
             </li>
             <div class="user-dropdown-divider"></div>
             <li class="user-dropdown-item">
-              <a href="{{ url_for('auth_logout') }}" class="user-dropdown-link logout-link">
+              <a href="{{ url_for('auth.logout') }}" class="user-dropdown-link logout-link">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
                 </svg>
@@ -106,7 +106,7 @@
         </a>
       </li>
       <li class="mobile-nav-item">
-        <a href="{{ url_for('render_new_chat') }}" class="mobile-nav-link {% if request.path == url_for('render_new_chat') %}active{% endif %}">
+        <a href="{{ url_for('render_create_chat') }}" class="mobile-nav-link {% if request.path == url_for('render_create_chat') %}active{% endif %}">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path>
           </svg>
@@ -131,7 +131,7 @@
         </a>
       </li>
       <li class="mobile-nav-item">
-        <a href="{{ url_for('auth_logout') }}" class="mobile-nav-link logout-link">
+        <a href="{{ url_for('auth.logout') }}" class="mobile-nav-link logout-link">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
           </svg>
@@ -229,8 +229,8 @@
     </div>
     
     <div class="header-actions">
-      <a href="{{ url_for('auth_login') }}" class="btn btn-outline-primary">Log In</a>
-      <a href="{{ url_for('auth_register') }}" class="btn btn-primary">Sign Up</a>
+      <a href="{{ url_for('web_routes.login') }}" class="btn btn-outline-primary">Log In</a>
+      <a href="{{ url_for('web_routes.login', mode='register') }}" class="btn btn-primary">Sign Up</a>
     </div>
   </div>
 </header>

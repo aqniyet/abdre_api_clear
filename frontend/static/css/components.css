@@ -715,4 +715,90 @@
   .footer-bottom-links a {
     margin: 0 0.5rem;
   }
+}
+
+/**
+ * Error Container Component
+ * Used to display application errors to users
+ */
+.error-container {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    width: 90%;
+    max-width: 500px;
+    display: none;
+}
+
+.error-message {
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 16px;
+    margin-bottom: 16px;
+    border-left: 4px solid #ea4335;
+    animation: slide-down 0.3s ease-out;
+}
+
+.error-message.auth-error {
+    border-left-color: #fbbc05;
+}
+
+.error-message.connection-error {
+    border-left-color: #ea4335;
+}
+
+.error-message.server-error {
+    border-left-color: #4285f4;
+}
+
+.error-message.rate-limit-error {
+    border-left-color: #fbbc05;
+}
+
+.error-message.component-error {
+    border-left-color: #34a853;
+}
+
+.error-message p {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+}
+
+.error-message button {
+    background-color: #f8f9fa;
+    border: 1px solid #dadce0;
+    color: #202124;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.error-message button.btn-primary {
+    background-color: #4285f4;
+    color: white;
+    border: none;
+}
+
+.error-message button:hover {
+    background-color: #e8eaed;
+}
+
+.error-message button.btn-primary:hover {
+    background-color: #3b78e7;
+}
+
+@keyframes slide-down {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 } 

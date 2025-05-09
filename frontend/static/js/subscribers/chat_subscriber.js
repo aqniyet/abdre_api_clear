@@ -252,57 +252,50 @@ ABDRE.Subscribers.Chat = (function() {
     
     // Public API
     return {
-        init: function(options = {}) {
+        init: function() {
+            // Check if already initialized
             if (_initialized) {
                 console.warn('Chat subscriber already initialized');
-                return this;
+                return;
             }
             
-            // Set initial active chats
-            if (options.activeChats) {
-                _activeChats = new Set(options.activeChats);
-            }
-            
-            // Set current chat ID if we're on a chat page
-            _currentChatId = options.currentChatId || null;
-            
-            // Setup event subscriptions
-            _setupSubscriptions();
-            
-            // Join active chat if we're on a chat page
-            if (_currentChatId && ABDRE.RealtimeService) {
-                ABDRE.RealtimeService.sendMessage({
-                    type: 'join_chat',
-                    chat_id: _currentChatId
-                });
-            }
-            
-            _initialized = true;
-            console.log('Chat subscriber initialized');
-            
-            return this;
+            // Defer setup to ensure required dependencies are available
+            setTimeout(() => {
+                // Check for required dependencies
+                if (!ABDRE.EventBus) {
+                    console.error('Chat subscriber initialization failed: EventBus not available');
+                    return;
+                }
+                
+                if (!ABDRE.RealtimeService) {
+                    console.error('Chat subscriber initialization failed: RealtimeService not available');
+                    return;
+                }
+                
+                // Set up event subscriptions
+                _setupSubscriptions();
+                
+                _initialized = true;
+                console.log('Chat subscriber initialized');
+                
+                // Publish initialization event
+                ABDRE.EventBus.publish('chat:subscriber_ready');
+            }, 0);
         },
         
         setCurrentChat: function(chatId) {
-            // Leave current chat if needed
-            if (_currentChatId && ABDRE.RealtimeService) {
-                ABDRE.RealtimeService.sendMessage({
-                    type: 'leave_chat',
-                    chat_id: _currentChatId
-                });
+            if (chatId && typeof chatId === 'string') {
+                _currentChatId = chatId;
+                _activeChats.add(chatId);
+                
+                // Notify about chat being active
+                if (ABDRE.RealtimeService && ABDRE.RealtimeService.getState() === ABDRE.RealtimeService.STATES.CONNECTED) {
+                    ABDRE.RealtimeService.sendMessage({
+                        type: 'join_chat',
+                        chat_id: chatId
+                    });
+                }
             }
-            
-            _currentChatId = chatId;
-            
-            // Join new chat
-            if (_currentChatId && ABDRE.RealtimeService) {
-                ABDRE.RealtimeService.sendMessage({
-                    type: 'join_chat',
-                    chat_id: _currentChatId
-                });
-            }
-            
-            return this;
         },
         
         getCurrentChat: function() {

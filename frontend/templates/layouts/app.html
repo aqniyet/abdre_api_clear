@@ -118,7 +118,7 @@
 {% endblock %}
 
 {% block extra_js %}
-    <script src="{{ url_for('static', filename='js/core/event_bus.js') }}"></script>
+    {{ super() }}
     <script src="{{ url_for('static', filename='js/services/realtime_service.js') }}"></script>
     <script src="{{ url_for('static', filename='js/enhancers/connection_status_enhancer.js') }}"></script>
     <script src="{{ url_for('static', filename='js/enhancers/dropdown_enhancer.js') }}"></script>
@@ -126,11 +126,16 @@
     {% block app_js %}
         <script>
             document.addEventListener('DOMContentLoaded', function() {
-                // Initialize modules
-                ABDRE.EventBus.init();
-                ABDRE.RealtimeService.init().connect();
-                ABDRE.Enhancers.ConnectionStatus.init();
-                ABDRE.Enhancers.Dropdown.init();
+                // Initialize enhancers - core modules should be initialized by main.js
+                if (ABDRE.Enhancers) {
+                    if (ABDRE.Enhancers.ConnectionStatus) ABDRE.Enhancers.ConnectionStatus.init();
+                    if (ABDRE.Enhancers.Dropdown) ABDRE.Enhancers.Dropdown.init();
+                }
+
+                // Connect to realtime service if it exists and isn't already connected
+                if (ABDRE.RealtimeService && ABDRE.RealtimeService.getState() === 'disconnected') {
+                    ABDRE.RealtimeService.connect();
+                }
             });
         </script>
     {% endblock %}
