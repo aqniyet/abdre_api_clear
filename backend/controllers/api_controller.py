@@ -22,7 +22,7 @@ def realtime_socket_info():
     """
     # Get realtime service details
     realtime_host = os.environ.get('REALTIME_HOST', request.host.split(':')[0])
-    realtime_port = os.environ.get('REALTIME_PORT', '5506')
+    realtime_port = os.environ.get('REALTIME_PORT', '5001')
     realtime_secure = request.scheme == 'https'
     
     # Build connection details
