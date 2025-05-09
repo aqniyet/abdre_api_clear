@@ -122,8 +122,8 @@
             // Initialize modules
             ABDRE.EventBus.init();
             ABDRE.RealtimeService.init({
-                host: window.location.hostname + ':5000',
-                path: '/socket.io',
+                host: window.location.host,
+                path: '/api/realtime/socket.io/',
                 authToken: 'guest'
             }).connect();
             ABDRE.Enhancers.ConnectionStatus.init();

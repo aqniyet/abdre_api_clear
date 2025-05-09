@@ -450,61 +450,46 @@ ABDRE.RealtimeService = (function() {
     
     function _connect() {
         // Don't attempt to connect if already connecting/connected
-        if (_socket && (_socket.readyState === WebSocket.CONNECTING || _socket.readyState === WebSocket.OPEN)) {
+        if (_state !== STATES.DISCONNECTED) {
+            _log('Already connecting or connected');
             return;
         }
         
-        // Reset existing connection if any
-        if (_socket) {
-            _socket.close();
+        // Clear any existing reconnect timer
+        if (_reconnectTimer) {
+            clearTimeout(_reconnectTimer);
+            _reconnectTimer = null;
         }
         
         _setConnectionState(STATES.CONNECTING);
         
         try {
-            // Validate the WebSocket URL
             let wsUrl = _socketUrl;
-            let httpUrl;
+            let httpUrl = '';
             
-            // Check if URL is properly formatted
-            if (!wsUrl.startsWith('ws://') && !wsUrl.startsWith('wss://')) {
-                // Determine protocol based on page protocol
+            _log('Starting connection to:', wsUrl);
+            
+            // Handle various URL formats for flexibility
+            if (!wsUrl.startsWith('ws')) {
                 const isSecure = window.location.protocol === 'https:';
                 const wsProtocol = isSecure ? 'wss://' : 'ws://';
                 const httpProtocol = isSecure ? 'https://' : 'http://';
                 
                 // If URL starts with a slash, it's a relative path
                 if (wsUrl.startsWith('/')) {
-                    // Force the hostname+port to use port 5000 for socket.io
-                    const hostname = window.location.hostname + ':5000';
+                    // Use the host from the current window location
+                    const hostname = window.location.host;
                     wsUrl = `${wsProtocol}${hostname}${wsUrl}`;
                     httpUrl = `${httpProtocol}${hostname}${wsUrl.substring(wsUrl.indexOf('/'))}`;
                 } 
                 // If URL doesn't have a protocol but doesn't start with a slash,
                 // assume it's a hostname or hostname+path
                 else if (!wsUrl.includes('://')) {
-                    // Ensure we're using port 5000 for Socket.IO
-                    if (!wsUrl.includes(':5000')) {
-                        // Replace port if it exists, or add port 5000
-                        wsUrl = wsUrl.replace(/:\d+/, ':5000');
-                        if (!wsUrl.includes(':5000')) {
-                            wsUrl = wsUrl + ':5000';
-                        }
-                    }
                     wsUrl = `${wsProtocol}${wsUrl}`;
                     httpUrl = `${httpProtocol}${wsUrl.substring(wsProtocol.length)}`;
                 }
             } else {
                 // URL already has protocol (ws:// or wss://)
-                // Ensure we're using port 5000 if it's a WebSocket URL
-                if (!wsUrl.includes(':5000')) {
-                    wsUrl = wsUrl.replace(/:\d+\//, ':5000/');
-                    if (!wsUrl.match(/:\d+\//)) {
-                        wsUrl = wsUrl.replace(/(ws[s]?:\/\/[^\/]+)/, '$1:5000');
-                    }
-                }
-                
-                // Convert to HTTP URL for handshake
                 httpUrl = wsUrl.replace(/^ws/, 'http');
             }
             
@@ -609,22 +594,12 @@ ABDRE.RealtimeService = (function() {
             if (options.url) {
                 _socketUrl = options.url;
             } else {
-                // Always force port 5000 for socket.io
-                const host = options.host || window.location.hostname + ':5000';
+                const host = options.host || window.location.host;
                 const path = options.path || '/socket.io';
                 const isSecure = window.location.protocol === 'https:';
                 const wsProtocol = isSecure ? 'wss://' : 'ws://';
                 
-                // Ensure host has port 5000
-                let hostWithPort = host;
-                if (!hostWithPort.includes(':5000')) {
-                    hostWithPort = hostWithPort.replace(/:\d+/, ':5000');
-                    if (!hostWithPort.includes(':')) {
-                        hostWithPort += ':5000';
-                    }
-                }
-                
-                _socketUrl = `${wsProtocol}${hostWithPort}${path}`;
+                _socketUrl = `${wsProtocol}${host}${path}`;
             }
             
             // Set configuration options

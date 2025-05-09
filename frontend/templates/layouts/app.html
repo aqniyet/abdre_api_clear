@@ -135,10 +135,10 @@
                 // Connect to realtime service if it exists and isn't already connected
                 if (ABDRE.RealtimeService && ABDRE.RealtimeService.getState() === 'disconnected') {
                     // Ensure we're using the correct host for the realtime service
-                    if (!ABDRE.RealtimeService.getDebugInfo().socketUrl.includes(':5000')) {
+                    if (!ABDRE.RealtimeService.getDebugInfo().socketUrl.includes('/api/realtime/socket.io/')) {
                         ABDRE.RealtimeService.init({
-                            host: window.location.hostname + ':5000',
-                            path: '/socket.io',
+                            host: window.location.host,
+                            path: '/api/realtime/socket.io/',
                             authToken: 'guest'
                         });
                     }

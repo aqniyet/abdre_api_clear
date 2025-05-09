@@ -57,8 +57,8 @@ document.addEventListener('DOMContentLoaded', function() {
         ABDRE.RealtimeService.init({
             debug: true,
             reconnectInterval: 2000,
-            host: window.location.hostname + ':5000',
-            path: '/socket.io/',
+            host: window.location.host,
+            path: '/api/realtime/socket.io/',
             // Add a guest token for testing
             authToken: 'guest'
         });
