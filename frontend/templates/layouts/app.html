@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}{% block page_title %}ABDRE Chat{% endblock %}{% endblock %}
+
+{% block body_class %}layout-app page-app{% endblock %}
+
+{% block header %}
+    <header class="app-header">
+        <div class="container">
+            <div class="header-content">
+                {% block header_back %}
+                    <a href="/my-chats" class="header-back">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 11H7.83L13.42 5.41L12 4L4 12L12 20L13.41 18.59L7.83 13H20V11Z" fill="currentColor"/>
+                        </svg>
+                    </a>
+                {% endblock %}
+                
+                {% block header_title %}
+                    <h1 class="header-title">{{ page_title|default('ABDRE Chat') }}</h1>
+                {% endblock %}
+                
+                <div class="header-actions">
+                    <div id="connection-status" class="connection-status connection-status--{{ initial_connection_status|default('connecting') }}">
+                        <div class="connection-status__indicator"></div>
+                        <div class="connection-status__details">
+                            <span class="connection-status__text">
+                                {% if initial_connection_status == 'connected' %}
+                                Connected
+                                {% elif initial_connection_status == 'connecting' %}
+                                Connecting...
+                                {% else %}
+                                Disconnected
+                                {% endif %}
+                            </span>
+                            <span class="connection-status__latency"></span>
+                        </div>
+                        <button id="connection-reconnect" class="connection-status__reconnect-btn" title="Reconnect">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4C7.58 4 4.01 7.58 4.01 12C4.01 16.42 7.58 20 12 20C15.73 20 18.84 17.45 19.73 14H17.65C16.83 16.33 14.61 18 12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C13.66 6 15.14 6.69 16.22 7.78L13 11H20V4L17.65 6.35Z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    {% block header_user_menu %}
+                        <div class="user-menu dropdown">
+                            <button class="user-menu__toggle dropdown-toggle" aria-label="User menu" aria-expanded="false" aria-controls="user-dropdown">
+                                <div class="user-avatar">
+                                    {% if user and user.avatar_url %}
+                                    <img src="{{ user.avatar_url }}" alt="{{ user.display_name or user.username }}">
+                                    {% else %}
+                                    <div class="avatar-placeholder">
+                                        {% if user and (user.display_name or user.username) %}
+                                            {{ (user.display_name or user.username)[0:1] }}
+                                        {% else %}
+                                            ?
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </button>
+                            <div id="user-dropdown" class="dropdown-menu">
+                                <div class="dropdown-header">
+                                    <div class="user-info">
+                                        <div class="user-name">{{ user.display_name or user.username if user else 'Guest' }}</div>
+                                        <div class="user-email">{{ user.email if user else '' }}</div>
+                                    </div>
+                                </div>
+                                <ul class="dropdown-list">
+                                    <li><a href="/profile"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z" fill="currentColor"/>
+                                    </svg> Profile</a></li>
+                                    <li><a href="/settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M19.14 12.94C19.18 12.64 19.2 12.33 19.2 12C19.2 11.68 19.18 11.36 19.13 11.06L21.16 9.48C21.34 9.34 21.39 9.07 21.28 8.87L19.36 5.55C19.24 5.33 18.99 5.26 18.77 5.33L16.38 6.29C15.88 5.91 15.35 5.59 14.76 5.35L14.4 2.81C14.36 2.57 14.16 2.4 13.92 2.4H10.08C9.84 2.4 9.65 2.57 9.61 2.81L9.25 5.35C8.66 5.59 8.12 5.92 7.63 6.29L5.24 5.33C5.02 5.25 4.77 5.33 4.65 5.55L2.74 8.87C2.62 9.08 2.66 9.34 2.86 9.48L4.89 11.06C4.84 11.36 4.8 11.69 4.8 12C4.8 12.31 4.82 12.64 4.87 12.94L2.84 14.52C2.66 14.66 2.61 14.93 2.72 15.13L4.64 18.45C4.76 18.67 5.01 18.74 5.23 18.67L7.62 17.71C8.12 18.09 8.65 18.41 9.24 18.65L9.6 21.19C9.65 21.43 9.84 21.6 10.08 21.6H13.92C14.16 21.6 14.36 21.43 14.39 21.19L14.75 18.65C15.34 18.41 15.88 18.09 16.37 17.71L18.76 18.67C18.98 18.75 19.23 18.67 19.35 18.45L21.27 15.13C21.39 14.91 21.34 14.66 21.15 14.52L19.14 12.94ZM12 15.6C10.02 15.6 8.4 13.98 8.4 12C8.4 10.02 10.02 8.4 12 8.4C13.98 8.4 15.6 10.02 15.6 12C15.6 13.98 13.98 15.6 12 15.6Z" fill="currentColor"/>
+                                    </svg> Settings</a></li>
+                                    <li class="dropdown-divider"></li>
+                                    <li>
+                                        <form action="/api/auth/logout" method="post">
+                                            <button type="submit" class="dropdown-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M17 7L15.59 8.41L18.17 11H8V13H18.17L15.59 15.58L17 17L22 12L17 7ZM4 5H12V3H4C2.9 3 2 3.9 2 5V19C2 20.1 2.9 21 4 21H12V19H4V5Z" fill="currentColor"/>
+                                            </svg> Logout</button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    {% endblock %}
+                </div>
+            </div>
+        </div>
+    </header>
+{% endblock %}
+
+{% block content %}
+    <main>
+        <div class="container">
+            {% if error %}
+            <div class="alert alert-error">
+                {{ error }}
+            </div>
+            {% endif %}
+            
+            {% if success %}
+            <div class="alert alert-success">
+                {{ success }}
+            </div>
+            {% endif %}
+            
+            {% block app_content %}
+                <!-- App content goes here -->
+            {% endblock %}
+        </div>
+    </main>
+{% endblock %}
+
+{% block footer %}
+    <!-- App footer is minimal/empty by default -->
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{{ url_for('static', filename='js/core/event_bus.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/services/realtime_service.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/enhancers/connection_status_enhancer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/enhancers/dropdown_enhancer.js') }}"></script>
+    
+    {% block app_js %}
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                // Initialize modules
+                ABDRE.EventBus.init();
+                ABDRE.RealtimeService.init().connect();
+                ABDRE.Enhancers.ConnectionStatus.init();
+                ABDRE.Enhancers.Dropdown.init();
+            });
+        </script>
+    {% endblock %}
+{% endblock %} 

@@ -258,6 +258,10 @@ class ChatController:
         
         return jsonify(invitation)
 
+    def get_invitation_info(self, token):
+        """Alias for get_invitation_status to maintain API compatibility"""
+        return self.get_invitation_status(token)
+
     def accept_invitation(self, token):
         """Accept a chat invitation"""
         if not g.user:

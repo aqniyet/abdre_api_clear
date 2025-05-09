@@ -1,0 +1,114 @@
+<div id="invitation-generator" class="invitation-generator">
+    <div class="invitation-generator__header">
+        <h3>Invite People to Chat</h3>
+        <button type="button" class="btn btn-icon" id="close-invitation-generator">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill="currentColor"/>
+            </svg>
+        </button>
+    </div>
+    
+    <div class="invitation-generator__content">
+        <div class="invitation-settings">
+            <div class="form-group">
+                <label for="invitation-expiry">Expires After</label>
+                <select id="invitation-expiry" class="form-control">
+                    <option value="1d">1 Day</option>
+                    <option value="3d">3 Days</option>
+                    <option value="7d" selected>7 Days</option>
+                    <option value="30d">30 Days</option>
+                    <option value="never">Never</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="invitation-max-uses">Maximum Uses</label>
+                <select id="invitation-max-uses" class="form-control">
+                    <option value="1">1 Use Only</option>
+                    <option value="5">5 Uses</option>
+                    <option value="10">10 Uses</option>
+                    <option value="0" selected>Unlimited</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="invitation-note">Note (Optional)</label>
+                <input type="text" id="invitation-note" class="form-control" placeholder="Add a note to this invitation">
+            </div>
+        </div>
+        
+        <div class="invitation-result" style="display: none;">
+            <div class="invitation-link-container">
+                <label>Invitation Link</label>
+                <div class="invitation-link">
+                    <input type="text" id="invitation-link" class="form-control" readonly>
+                    <button type="button" class="btn btn-icon" id="copy-invitation-link" title="Copy to clipboard">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M16 1H4C2.9 1 2 1.9 2 3V17H4V3H16V1ZM19 5H8C6.9 5 6 5.9 6 7V21C6 22.1 6.9 23 8 23H19C20.1 23 21 22.1 21 21V7C21 5.9 20.1 5 19 5ZM19 21H8V7H19V21Z" fill="currentColor"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="invitation-qr-container">
+                <label>QR Code</label>
+                <div id="invitation-qr-code" class="invitation-qr-code"></div>
+                <button type="button" class="btn btn-sm btn-outline" id="download-qr-code">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor"/>
+                    </svg>
+                    Download QR Code
+                </button>
+            </div>
+            
+            <div class="invitation-share-container">
+                <label>Share</label>
+                <div class="invitation-share-buttons">
+                    <button type="button" class="btn btn-outline share-button" data-platform="email">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 4H4C2.9 4 2.01 4.9 2.01 6L2 18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4ZM20 8L12 13L4 8V6L12 11L20 6V8Z" fill="currentColor"/>
+                        </svg>
+                        Email
+                    </button>
+                    <button type="button" class="btn btn-outline share-button" data-platform="whatsapp">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M16.75 13.96c.25.13.41.2.46.3.06.11.04.61-.21 1.18-.2.56-1.24 1.1-1.7 1.12-.46.02-.47.36-2.96-.73-2.49-1.09-3.99-3.75-4.11-3.92-.12-.17-.96-1.38-.92-2.61.05-1.22.69-1.8.95-2.04.24-.26.51-.29.68-.26h.6c.22.02.54.19.78.74.3.66.78 1.82.85 1.96.07.14.12.34.01.53-.1.21-.15.29-.29.45-.13.16-.29.36-.41.49-.13.14-.28.3-.12.59.16.29.72 1.23 1.54 1.98.94.83 1.79 1.1 2.02 1.21.24.13.39.1.53-.07.15-.16.64-.75.81-1.01.16-.26.33-.22.57-.13l1.1.57" fill="currentColor"/>
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.8 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0012.04 2m0 1.82c2.19 0 4.25.86 5.8 2.41 1.56 1.56 2.41 3.61 2.41 5.8 0 4.54-3.68 8.23-8.21 8.23-1.4 0-2.79-.36-4.02-1.04l-.28-.16-3.03.8.81-2.98-.17-.29a8.259 8.259 0 01-1.11-4.11c0-4.54 3.7-8.23 8.23-8.23" fill="currentColor"/>
+                        </svg>
+                        WhatsApp
+                    </button>
+                    <button type="button" class="btn btn-outline share-button" data-platform="telegram">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z" fill="currentColor"/>
+                        </svg>
+                        Telegram
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="invitation-empty-state">
+            <div class="status-message">
+                <p>Generate an invitation link to invite people to this chat.</p>
+            </div>
+        </div>
+        
+        <div class="invitation-loading-state" style="display: none;">
+            <div class="loading-spinner"></div>
+            <div class="status-message">Generating invitation...</div>
+        </div>
+        
+        <div class="invitation-error-state" style="display: none;">
+            <div class="error-message">
+                <p>Failed to generate invitation.</p>
+                <p id="error-details"></p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="invitation-generator__footer">
+        <button type="button" class="btn btn-secondary" id="cancel-invitation">Cancel</button>
+        <button type="button" class="btn btn-primary" id="generate-invitation">Generate Invitation</button>
+        <button type="button" class="btn btn-primary" id="new-invitation" style="display: none;">Create New Invitation</button>
+    </div>
+</div> 

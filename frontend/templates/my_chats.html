@@ -1,0 +1,164 @@
+{% extends "layouts/app.html" %}
+
+{% block page_title %}My Chats{% endblock %}
+
+{% block body_class %}layout-app page-app page-my-chats{% endblock %}
+
+{% block header_back %}
+    <!-- No back button on main chats page -->
+{% endblock %}
+
+{% block header_title %}
+    <div class="logo">
+        <a href="/">
+            <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="ABDRE Chat Logo">
+        </a>
+    </div>
+{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/chats.css') }}">
+{% endblock %}
+
+{% block app_content %}
+    <div class="page-header">
+        <h1>My Chats</h1>
+        <div class="page-actions">
+            <a href="/create" class="btn btn-primary">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19 13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor"/>
+                </svg>
+                New Chat
+            </a>
+        </div>
+    </div>
+    
+    <div class="chat-container">
+        <div class="chat-sidebar">
+            <div class="chat-sidebar-header">
+                <div class="search-bar">
+                    <form id="search-form" action="/search" method="get">
+                        <input type="text" id="search-input" name="q" placeholder="Search chats...">
+                        <button type="submit" class="search-btn" aria-label="Search">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M15.5 14H14.71L14.43 13.73C15.41 12.59 16 11.11 16 9.5C16 5.91 13.09 3 9.5 3C5.91 3 3 5.91 3 9.5C3 13.09 5.91 16 9.5 16C11.11 16 12.59 15.41 13.73 14.43L14 14.71V15.5L19 20.49L20.49 19L15.5 14ZM9.5 14C7.01 14 5 11.99 5 9.5C5 7.01 7.01 5 9.5 5C11.99 5 14 7.01 14 9.5C14 11.99 11.99 14 9.5 14Z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+                <div class="chat-filter">
+                    <button class="filter-btn {% if filter == 'all' or not filter %}active{% endif %}" data-filter="all">All</button>
+                    <button class="filter-btn {% if filter == 'unread' %}active{% endif %}" data-filter="unread">Unread <span class="badge unread-count">{{ unread_count }}</span></button>
+                </div>
+            </div>
+            <div class="chat-list" id="chat-list">
+                {% if chats|length > 0 %}
+                    {% for chat in chats %}
+                    <a href="/chat/{{ chat.chat_id }}" class="chat-item {% if chat.unread %}unread{% endif %}" data-chat-id="{{ chat.chat_id }}">
+                        <div class="chat-avatar">
+                            {% if chat.is_group %}
+                                <div class="group-avatar">
+                                    {% if chat.avatar_url %}
+                                    <img src="{{ chat.avatar_url }}" alt="{{ chat.name }}">
+                                    {% else %}
+                                    <div class="avatar-placeholder">{{ chat.name[0:1] }}</div>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                {% if chat.participant.avatar_url %}
+                                <img src="{{ chat.participant.avatar_url }}" alt="{{ chat.participant.display_name or chat.participant.username }}">
+                                {% else %}
+                                <div class="avatar-placeholder">{{ (chat.participant.display_name or chat.participant.username)[0:1] }}</div>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                        <div class="chat-info">
+                            <div class="chat-name">
+                                {% if chat.is_group %}
+                                    {{ chat.name }}
+                                {% else %}
+                                    {{ chat.participant.display_name or chat.participant.username }}
+                                {% endif %}
+                            </div>
+                            <div class="chat-last-message">{{ chat.last_message.content or "No messages yet" }}</div>
+                        </div>
+                        <div class="chat-meta">
+                            <div class="chat-time">{{ chat.last_message.created_at_formatted or "" }}</div>
+                            {% if chat.unread %}
+                            <div class="chat-unread-badge">{{ chat.unread_count }}</div>
+                            {% endif %}
+                        </div>
+                    </a>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <div class="empty-state-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2ZM20 16H5.17L4 17.17V4H20V16Z" fill="currentColor"/>
+                            </svg>
+                        </div>
+                        <h2>No chats yet</h2>
+                        <p>Start a new conversation by clicking the "New Chat" button.</p>
+                        <a href="/create" class="btn btn-primary">Create New Chat</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="chat-welcome">
+            <div class="welcome-content">
+                <div class="welcome-icon">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2ZM20 16H5.17L4 17.17V4H20V16Z" fill="currentColor"/>
+                    </svg>
+                </div>
+                <h2>Welcome to ABDRE Chat</h2>
+                <p>Select a chat from the list or start a new conversation.</p>
+                <div class="welcome-actions">
+                    <a href="/create" class="btn btn-primary">New Chat</a>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block app_js %}
+    <!-- Pass JSON data as data attribute to avoid Jinja/JS mix issues -->
+    {% if chats_json %}
+    <div id="chats-data" data-chats="{{ chats_json|e }}" style="display:none;"></div>
+    {% endif %}
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize modules
+            ABDRE.EventBus.init();
+            ABDRE.RealtimeService.init().connect();
+            ABDRE.Enhancers.ConnectionStatus.init();
+            ABDRE.Enhancers.Dropdown.init();
+            
+            // Initialize chat list data
+            var chatsData = [];
+            
+            // Get chats data from data attribute if available
+            var dataElement = document.getElementById('chats-data');
+            if (dataElement) {
+                try {
+                    chatsData = JSON.parse(dataElement.getAttribute('data-chats'));
+                } catch (e) {
+                    console.error('Error parsing chats JSON:', e);
+                }
+            }
+            
+            // Only initialize chat list if the enhancer exists
+            if (ABDRE.Enhancers.ChatList) {
+                ABDRE.Enhancers.ChatList.init(chatsData);
+            }
+        });
+    </script>
+{% endblock %}
+
+{% block extra_js %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='js/services/chat_service.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/enhancers/chat_list_enhancer.js') }}"></script>
+{% endblock %} 

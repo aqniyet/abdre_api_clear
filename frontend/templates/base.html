@@ -6,13 +6,100 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>{% block title %}ABDRE Chat{% endblock %}</title>
     
-    <!-- Favicon -->
-    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+    <!-- Meta Tags -->
+    <meta name="description" content="{% block meta_description %}ABDRE Chat - A secure and modern messaging platform{% endblock %}">
+    <meta name="keywords" content="{% block meta_keywords %}chat, messaging, secure, abdre{% endblock %}">
+    <meta name="author" content="ABDRE Chat Team">
     
+    <!-- Favicon -->
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="{% block og_title %}ABDRE Chat{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}A secure and private chat application{% endblock %}">
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+    <meta property="og:url" content="{{ request.url }}">
+    <meta property="og:image" content="{% block og_image %}{{ url_for('static', filename='images/logo-og.png', _external=True) }}{% endblock %}">
+    
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{% block twitter_title %}ABDRE Chat{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}A secure and private chat application{% endblock %}">
+    <meta name="twitter:image" content="{% block twitter_image %}{{ url_for('static', filename='images/logo-twitter.png', _external=True) }}{% endblock %}">
+    
+    <!-- Theme Color for Browser -->
+    <meta name="theme-color" content="#4285f4">
+    
+    <!-- Preconnect to Critical Origins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    {% block critical_css %}
     <!-- Critical CSS Injection -->
     <style id="critical-css">
-        {% block critical_css %}{% endblock %}
+        /* Base critical CSS for all pages */
+        :root {
+            --color-primary: #4285f4;
+            --color-primary-dark: #3367d6;
+            --color-primary-light: #8ab4f8;
+            --color-secondary: #34a853;
+            --color-error: #ea4335;
+            --color-warning: #fbbc05;
+            --color-success: #34a853;
+            --color-text: #202124;
+            --color-text-secondary: #5f6368;
+            --color-background: #ffffff;
+            --color-background-light: #f8f9fa;
+            --color-border: #dadce0;
+            --font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            --border-radius: 8px;
+            --spacing-xs: 4px;
+            --spacing-sm: 8px;
+            --spacing-md: 16px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-xxl: 48px;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+            --transition-speed: 0.2s;
+        }
+        
+        html, body {
+            margin: 0;
+            padding: 0;
+            font-family: var(--font-family);
+            font-size: 16px;
+            line-height: 1.5;
+            color: var(--color-text);
+            background-color: var(--color-background);
+        }
+        
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 var(--spacing-md);
+        }
+        
+        /* Utility classes */
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
     </style>
+    {% endblock %}
     
     <!-- Base Stylesheets -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
@@ -23,22 +110,17 @@
     {% block extra_css %}{% endblock %}
     
     <!-- Preload Key Assets -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    
-    <!-- Open Graph Meta Tags -->
-    <meta property="og:title" content="{% block og_title %}ABDRE Chat{% endblock %}">
-    <meta property="og:description" content="{% block og_description %}A secure and private chat application{% endblock %}">
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="{{ request.url }}">
-    
-    <!-- Theme Color for Browser -->
-    <meta name="theme-color" content="#4285f4">
+    {% block preload %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
     <div id="app-container">
+        <!-- Skip to main content link for accessibility -->
+        <a href="#main-content" class="skip-link visually-hidden">Skip to main content</a>
+        
         <!-- Header -->
-        {% include 'layout/header.html' %}
+        {% block header %}
+            {% include 'components/header.html' %}
+        {% endblock %}
         
         <!-- Main Content -->
         <main id="main-content">
@@ -46,13 +128,14 @@
         </main>
         
         <!-- Footer -->
-        {% include 'layout/footer.html' %}
+        {% block footer %}
+            {% include 'components/footer.html' %}
+        {% endblock %}
     </div>
     
     <!-- Core JavaScript -->
     <script src="{{ url_for('static', filename='js/core/app.js') }}"></script>
     <script src="{{ url_for('static', filename='js/core/event_bus.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/core/api_client.js') }}"></script>
     
     <!-- Page Specific JavaScript -->
     {% block extra_js %}{% endblock %}
@@ -60,7 +143,9 @@
     <!-- Initialize App -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            ABDRE.App.init();
+            if (typeof ABDRE !== 'undefined' && ABDRE.App) {
+                ABDRE.App.init();
+            }
         });
     </script>
 </body>

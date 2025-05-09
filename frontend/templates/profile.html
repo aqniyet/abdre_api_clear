@@ -1,0 +1,145 @@
+{% extends "layouts/app.html" %}
+
+{% block page_title %}Profile{% endblock %}
+
+{% block body_class %}layout-app page-app page-profile{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/profile.css') }}">
+{% endblock %}
+
+{% block header_title %}
+    <h1 class="header-title">Profile</h1>
+{% endblock %}
+
+{% block app_content %}
+    <div class="profile-container">
+        <div class="profile-header">
+            <div class="profile-avatar-section">
+                <div class="profile-avatar">
+                    {% if user.avatar_url %}
+                    <img src="{{ user.avatar_url }}" alt="{{ user.display_name or user.username }}">
+                    {% else %}
+                    <div class="avatar-placeholder">{{ user.display_name[0:1] or user.username[0:1] }}</div>
+                    {% endif %}
+                    <button type="button" class="avatar-upload-btn" id="avatar-upload-btn">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 4V1h2v3h3v2H5v3H3V6H0V4h3zm3 6V7h3V4h7l1.83 2H21c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2V10h3zm7 9c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-3.2-5c0 1.77 1.43 3.2 3.2 3.2s3.2-1.43 3.2-3.2-1.43-3.2-3.2-3.2-3.2 1.43-3.2 3.2z" fill="currentColor"/>
+                        </svg>
+                    </button>
+                </div>
+                <form id="avatar-upload-form" style="display: none;">
+                    <input type="file" id="avatar-upload" name="avatar" accept="image/*">
+                </form>
+            </div>
+            <div class="profile-name">
+                <h2>{{ user.display_name or user.username }}</h2>
+                <p class="profile-username">@{{ user.username }}</p>
+            </div>
+            <div class="profile-stats">
+                <div class="stat">
+                    <span class="stat-value">{{ user.chats_count }}</span>
+                    <span class="stat-label">Chats</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">{{ user.friends_count }}</span>
+                    <span class="stat-label">Friends</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">{{ user.blocked_count }}</span>
+                    <span class="stat-label">Blocked</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="profile-content">
+            <form id="profile-form" class="profile-form">
+                <div class="form-section">
+                    <h3 class="section-title">Personal Information</h3>
+                    
+                    <div class="form-group">
+                        <label for="display-name">Display Name</label>
+                        <input type="text" id="display-name" name="display_name" value="{{ user.display_name }}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username" value="{{ user.username }}" readonly>
+                        <div class="form-hint">Username cannot be changed</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" value="{{ user.email }}">
+                        {% if not user.email_verified %}
+                        <div class="verification-warning">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M1 21H23L12 2L1 21ZM13 18H11V16H13V18ZM13 14H11V10H13V14Z" fill="currentColor"/>
+                            </svg>
+                            <span>Email not verified. <a href="#" id="resend-verification">Resend verification</a></span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="bio">Bio</label>
+                        <textarea id="bio" name="bio" rows="3">{{ user.bio }}</textarea>
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <h3 class="section-title">Account</h3>
+                    
+                    <div class="form-group">
+                        <label for="phone">Phone Number</label>
+                        <input type="tel" id="phone" name="phone" value="{{ user.phone }}">
+                        {% if user.phone and not user.phone_verified %}
+                        <div class="verification-warning">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M1 21H23L12 2L1 21ZM13 18H11V16H13V18ZM13 14H11V10H13V14Z" fill="currentColor"/>
+                            </svg>
+                            <span>Phone not verified. <a href="#" id="verify-phone">Verify now</a></span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="form-group password-section">
+                        <a href="/change-password" class="btn btn-outline">Change Password</a>
+                    </div>
+                    
+                    <div class="form-group">
+                        <a href="/account-data" class="btn btn-outline">Request Account Data</a>
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <button type="button" id="cancel-btn" class="btn btn-outline">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}
+
+{% block app_js %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize modules
+            ABDRE.EventBus.init();
+            ABDRE.RealtimeService.init().connect();
+            ABDRE.Enhancers.ConnectionStatus.init();
+            ABDRE.Enhancers.Dropdown.init();
+            
+            // Initialize profile enhancer with user data
+            var userData = JSON.parse('{{ user_json|safe }}');
+            ABDRE.Enhancers.Profile.init(userData);
+        });
+    </script>
+{% endblock %}
+
+{% block extra_js %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='js/services/api_service.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/services/user_service.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/enhancers/profile_enhancer.js') }}"></script>
+{% endblock %} 

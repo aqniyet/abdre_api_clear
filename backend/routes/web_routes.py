@@ -84,6 +84,19 @@ def welcome():
     """
     return render_controller.render_welcome()
 
+@web_routes.route('/invite/<invitation_code>')
+def invitation(invitation_code):
+    """
+    Invitation accept page route
+    
+    Args:
+        invitation_code (str): Invitation code to process
+        
+    Returns:
+        Response: Invitation accept page template
+    """
+    return render_controller.render_invitation(invitation_code)
+
 # Error routes
 @web_routes.errorhandler(404)
 def page_not_found(e):

@@ -1,0 +1,230 @@
+/**
+ * ABDRE Chat - Main Stylesheet
+ * This file imports all component styles and defines global settings
+ */
+
+/* Reset and Base Styles */
+@import url('reset.css');
+
+/* Design System */
+@import url('design-system.css');
+
+/* Layout System */
+@import url('layout.css');
+
+/* Components */
+@import url('components/buttons.css');
+@import url('components/forms.css');
+@import url('components/header.css');
+@import url('components/chat-list.css');
+@import url('components/empty-states.css');
+@import url('components/cards.css');
+@import url('components/icons.css');
+@import url('components/message-bubbles.css');
+@import url('components/avatar.css');
+@import url('components/dropdown.css');
+@import url('components/modals.css');
+@import url('components/toasts.css');
+@import url('components/tabs.css');
+@import url('components/loaders.css');
+@import url('components/badges.css');
+
+/* Pages */
+@import url('pages/auth.css');
+@import url('pages/chats.css');
+@import url('pages/settings.css');
+@import url('pages/profile.css');
+
+/* Utilities */
+@import url('utilities.css');
+
+/**
+ * Custom Font Loading
+ */
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('/static/fonts/Roboto-Light.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/Roboto-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/static/fonts/Roboto-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/static/fonts/Roboto-Bold.woff2') format('woff2');
+}
+
+/**
+ * Global Styles
+ */
+html {
+  font-size: 16px;
+  box-sizing: border-box;
+  scroll-behavior: smooth;
+}
+
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+
+body {
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+  background-color: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+img, svg {
+  vertical-align: middle;
+  max-width: 100%;
+  height: auto;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--transition-quick);
+}
+
+a:hover {
+  color: var(--color-primary-dark);
+}
+
+/**
+ * Scrollbar Styling
+ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-background-alt);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-gray-400);
+  border-radius: var(--border-radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-gray-500);
+}
+
+/**
+ * Focus Styling
+ */
+:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/**
+ * Selection Styling
+ */
+::selection {
+  background-color: var(--color-primary-light);
+  color: var(--color-white);
+}
+
+/**
+ * Print Styles
+ */
+@media print {
+  body {
+    background-color: #fff;
+    color: #000;
+  }
+  
+  a, a:visited {
+    text-decoration: underline;
+    color: #000;
+  }
+  
+  @page {
+    margin: 1.5cm;
+  }
+}
+
+/**
+ * High Contrast Mode Adjustments
+ */
+@media (forced-colors: active) {
+  .btn {
+    border: 1px solid CanvasText;
+  }
+  
+  .form-control {
+    border: 1px solid CanvasText;
+  }
+}
+
+/**
+ * Reduced Motion
+ */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/**
+ * Browser Compatibility Fixes
+ */
+/* IE11 fixes */
+@media all and (-ms-high-contrast: none), (-ms-high-contrast: active) {
+  .flex {
+    display: -ms-flexbox;
+  }
+  
+  .items-center {
+    -ms-flex-align: center;
+  }
+  
+  .justify-between {
+    -ms-flex-pack: justify;
+  }
+}
+
+/* Edge fixes */
+@supports (-ms-ime-align: auto) {
+  .grid {
+    display: -ms-grid;
+  }
+} 

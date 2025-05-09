@@ -208,6 +208,14 @@ class RenderController:
             server_rendered=True
         )
     
+    def render_invitation(self, invitation_code):
+        """Render the invitation accept page"""
+        return template_service.render('invitation_accept.html',
+            invitation_code=invitation_code,
+            server_rendered=True,
+            user=g.user if hasattr(g, 'user') else None
+        )
+    
     def _make_api_request(self, method, url, **kwargs):
         """
         Make a request to internal API endpoint
@@ -220,6 +228,36 @@ class RenderController:
         Returns:
             Response object
         """
+        # Get request timeout value with a default of 2 seconds
+        timeout = kwargs.pop('timeout', 2)
+        
+        # Add request ID for tracing
+        headers = kwargs.get('headers', {})
+        headers['X-Request-ID'] = g.get('request_id', 'unknown')
+        kwargs['headers'] = headers
+        
+        # First, try using the direct API route instead of microservices
+        # This simplifies development and handles the case where microservices aren't running
+        if self.app and not url.startswith('http'):
+            try:
+                with self.app.test_client() as client:
+                    # Convert headers to WSGI format
+                    environ_headers = {f'HTTP_{k.upper().replace("-", "_")}': v for k, v in headers.items()}
+                    if method == 'GET':
+                        response = client.get(url, headers=headers, environ_base=environ_headers)
+                        return MockResponse(response.status_code, response.data)
+                    elif method == 'POST':
+                        json_data = kwargs.get('json')
+                        data = kwargs.get('data')
+                        response = client.post(url, json=json_data, data=data, headers=headers, environ_base=environ_headers)
+                        return MockResponse(response.status_code, response.data)
+                    else:
+                        # For other methods like PUT, DELETE, etc.
+                        raise NotImplementedError(f"Method {method} not implemented for direct API calls")
+            except Exception as e:
+                logger.warning(f"Error making direct API call to {url}: {str(e)}")
+                # Fall through to microservice call
+        
         # Determine full URL based on whether it's an absolute or relative URL
         if url.startswith('http'):
             full_url = url
@@ -243,13 +281,32 @@ class RenderController:
                 api_base_url = os.environ.get('API_BASE_URL', 'http://localhost:5000')
                 full_url = api_base_url + url
         
-        # Add request ID for tracing
-        headers = kwargs.get('headers', {})
-        headers['X-Request-ID'] = g.get('request_id', 'unknown')
-        kwargs['headers'] = headers
+        try:
+            # Make the request with a timeout to avoid long delays
+            return requests.request(method, full_url, timeout=timeout, **kwargs)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            logger.error(f"Connection error to {full_url}: {str(e)}")
+            # Create a mock response with error status
+            return MockResponse(503, json.dumps({"error": "Service unavailable"}))
+        except Exception as e:
+            logger.error(f"Error making request to {full_url}: {str(e)}")
+            return MockResponse(500, json.dumps({"error": str(e)}))
+
+
+class MockResponse:
+    """Mock response object for when microservices are unavailable"""
+    
+    def __init__(self, status_code, content):
+        self.status_code = status_code
+        self._content = content
         
-        # Make the request
-        return requests.request(method, full_url, **kwargs) 
+    def json(self):
+        """Parse response content as JSON"""
+        if isinstance(self._content, dict):
+            return self._content
+        if isinstance(self._content, bytes):
+            return json.loads(self._content.decode('utf-8'))
+        return json.loads(self._content)
 
 # Initialize controller
 render_controller = RenderController() 

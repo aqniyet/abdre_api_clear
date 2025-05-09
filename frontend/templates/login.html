@@ -1,0 +1,53 @@
+{% extends "layouts/auth.html" %}
+
+{% block page_title %}Login{% endblock %}
+
+{% block body_class %}layout-auth page-auth page-login{% endblock %}
+
+{% block auth_title %}Welcome back{% endblock %}
+{% block auth_subtitle %}Enter your credentials to access your account{% endblock %}
+
+{% block auth_content %}
+    <form id="login-form" class="auth-form" method="post" action="/api/auth/login">
+        <div class="form-group">
+            <label for="username">Username or Email</label>
+            <input type="text" id="username" name="username" required autocomplete="username">
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password</label>
+            <div class="password-input-wrapper">
+                <input type="password" id="password" name="password" required autocomplete="current-password">
+                <button type="button" class="password-toggle-btn" aria-label="Toggle password visibility">
+                    <svg class="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 4.5C7 4.5 2.73 7.61 1 12C2.73 16.39 7 19.5 12 19.5C17 19.5 21.27 16.39 23 12C21.27 7.61 17 4.5 12 4.5ZM12 17C9.24 17 7 14.76 7 12C7 9.24 9.24 7 12 7C14.76 7 17 9.24 17 12C17 14.76 14.76 17 12 17ZM12 9C10.34 9 9 10.34 9 12C9 13.66 10.34 15 12 15C13.66 15 15 13.66 15 12C15 10.34 13.66 9 12 9Z" fill="currentColor"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="form-help">
+                <a href="/forgot-password" class="help-link">Forgot password?</a>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <div class="checkbox-wrapper">
+                <input type="checkbox" id="remember" name="remember">
+                <label for="remember">Remember me for 30 days</label>
+            </div>
+        </div>
+        
+        <input type="hidden" name="redirect_to" value="{{ redirect_to or '/my-chats' }}">
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-block">Log In</button>
+        </div>
+    </form>
+    
+    <div class="auth-alt-options">
+        <p>Don't have an account? <a href="/register{% if redirect_to %}?redirect={{ redirect_to }}{% endif %}">Sign up</a></p>
+    </div>
+{% endblock %}
+
+{% block page_js %}
+    <script src="{{ url_for('static', filename='js/enhancers/auth_enhancer.js') }}"></script>
+{% endblock %} 

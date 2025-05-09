@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}{% block page_title %}Authentication{% endblock %} | ABDRE Chat{% endblock %}
+
+{% block body_class %}layout-auth page-auth{% endblock %}
+
+{% block header %}
+    <header class="site-header auth-header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <a href="/">
+                        <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="ABDRE Chat Logo">
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+{% endblock %}
+
+{% block content %}
+    <div class="auth-container">
+        <div class="container">
+            <div class="auth-wrapper">
+                <div class="auth-form-container">
+                    <div class="auth-form-header">
+                        <h1 class="auth-title">{% block auth_title %}Authentication{% endblock %}</h1>
+                        <p class="auth-subtitle">{% block auth_subtitle %}Please authenticate to continue{% endblock %}</p>
+                    </div>
+                    
+                    {% if error %}
+                    <div class="alert alert-error">
+                        {{ error }}
+                    </div>
+                    {% endif %}
+                    
+                    {% if success %}
+                    <div class="alert alert-success">
+                        {{ success }}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="auth-form-content">
+                        {% block auth_content %}
+                            <!-- Auth form goes here -->
+                        {% endblock %}
+                    </div>
+                </div>
+                
+                <div class="auth-info">
+                    <div class="auth-info-content">
+                        <h2>{% block auth_info_title %}ABDRE Chat{% endblock %}</h2>
+                        <p>{% block auth_info_description %}The modern messaging platform designed for speed, security, and simplicity.{% endblock %}</p>
+                        <ul class="auth-features">
+                            {% block auth_features %}
+                            <li>
+                                <div class="feature-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM16.59 7.58L10 14.17L7.41 11.59L6 13L10 17L18 9L16.59 7.58Z" fill="currentColor"/>
+                                    </svg>
+                                </div>
+                                <span>Instant messaging with real-time delivery</span>
+                            </li>
+                            <li>
+                                <div class="feature-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM16.59 7.58L10 14.17L7.41 11.59L6 13L10 17L18 9L16.59 7.58Z" fill="currentColor"/>
+                                    </svg>
+                                </div>
+                                <span>End-to-end encryption for privacy</span>
+                            </li>
+                            <li>
+                                <div class="feature-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM16.59 7.58L10 14.17L7.41 11.59L6 13L10 17L18 9L16.59 7.58Z" fill="currentColor"/>
+                                    </svg>
+                                </div>
+                                <span>Access your conversations from any device</span>
+                            </li>
+                            {% endblock %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block footer %}
+    <!-- Minimal footer for auth pages -->
+    <footer class="site-footer auth-footer">
+        <div class="container">
+            <div class="footer-content">
+                <p>&copy; {{ current_year }} ABDRE Chat. All rights reserved.</p>
+                <ul class="footer-links">
+                    <li><a href="/terms">Terms</a></li>
+                    <li><a href="/privacy">Privacy</a></li>
+                    <li><a href="/contact">Contact</a></li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/auth.css') }}">
+    {% block page_css %}{% endblock %}
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{{ url_for('static', filename='js/enhancers/auth_enhancer.js') }}"></script>
+    {% block page_js %}{% endblock %}
+{% endblock %} 

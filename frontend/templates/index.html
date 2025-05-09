@@ -1,0 +1,70 @@
+{% extends "layouts/default.html" %}
+
+{% block page_title %}Modern Messaging Platform{% endblock %}
+
+{% block body_class %}layout-default page-landing{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/index.css') }}">
+{% endblock %}
+
+{% block content %}
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h1>Connect with anyone, anywhere</h1>
+                <p class="hero-subtitle">ABDRE Chat provides a secure, fast, and intuitive messaging experience.</p>
+                <div class="hero-cta">
+                    <a href="/register" class="btn btn-primary btn-large">Get Started</a>
+                    <a href="/features" class="btn btn-outline btn-large">Learn More</a>
+                </div>
+            </div>
+            <div class="hero-image">
+                <img src="{{ url_for('static', filename='images/hero-image.png') }}" alt="ABDRE Chat Interface Preview">
+            </div>
+        </div>
+    </section>
+
+    <section class="features">
+        <div class="container">
+            <h2 class="section-title">Why Choose ABDRE Chat?</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <img src="{{ url_for('static', filename='images/icons/security.svg') }}" alt="Security">
+                    </div>
+                    <h3>Secure Messaging</h3>
+                    <p>End-to-end encryption ensures your conversations stay private.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <img src="{{ url_for('static', filename='images/icons/speed.svg') }}" alt="Speed">
+                    </div>
+                    <h3>Blazing Fast</h3>
+                    <p>Real-time messaging with instant delivery and notifications.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <img src="{{ url_for('static', filename='images/icons/devices.svg') }}" alt="Devices">
+                    </div>
+                    <h3>Cross-Platform</h3>
+                    <p>Access your chats from any device, anytime, anywhere.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-section">
+        <div class="container">
+            <div class="cta-content">
+                <h2>Ready to get started?</h2>
+                <p>Join thousands of users already enjoying ABDRE Chat.</p>
+                <a href="/register" class="btn btn-primary btn-large">Create Account</a>
+            </div>
+        </div>
+    </section>
+{% endblock %}
+
+{% block page_js %}
+    <script src="{{ url_for('static', filename='js/core/main.js') }}"></script>
+{% endblock %} 

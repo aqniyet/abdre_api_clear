@@ -71,4 +71,8 @@ def create_app(config=None):
         from backend.routes.web_routes import init_app as init_web_routes
         init_web_routes(app)
         
+        # Register API routes
+        from backend.routes.api_routes import init_app as init_api_routes
+        init_api_routes(app)
+        
     return app 

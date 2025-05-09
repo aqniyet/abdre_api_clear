@@ -1,0 +1,434 @@
+{% extends "layouts/app.html" %}
+
+{% block page_title %}Settings{% endblock %}
+
+{% block body_class %}layout-app page-app page-settings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/settings.css') }}">
+{% endblock %}
+
+{% block header_title %}
+    <h1 class="header-title">Settings</h1>
+{% endblock %}
+
+{% block app_content %}
+    <div class="settings-container">
+        <div class="settings-sidebar">
+            <div class="settings-nav">
+                <button class="settings-nav-item active" data-tab="account">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z" fill="currentColor"/>
+                    </svg>
+                    Account
+                </button>
+                <button class="settings-nav-item" data-tab="privacy">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 1L3 5V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V5L12 1ZM12 11.99H19C18.47 16.11 15.72 19.78 12 20.93V12H5V6.3L12 3.19V11.99Z" fill="currentColor"/>
+                    </svg>
+                    Privacy
+                </button>
+                <button class="settings-nav-item" data-tab="notifications">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 22C13.1 22 14 21.1 14 20H10C10 21.1 10.9 22 12 22ZM18 16V11C18 7.93 16.37 5.36 13.5 4.68V4C13.5 3.17 12.83 2.5 12 2.5C11.17 2.5 10.5 3.17 10.5 4V4.68C7.64 5.36 6 7.92 6 11V16L4 18V19H20V18L18 16ZM16 17H8V11C8 8.52 9.51 6.5 12 6.5C14.49 6.5 16 8.52 16 11V17Z" fill="currentColor"/>
+                    </svg>
+                    Notifications
+                </button>
+                <button class="settings-nav-item" data-tab="appearance">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 3C7.03 3 3 7.03 3 12C3 16.97 7.03 21 12 21C16.97 21 21 16.97 21 12C21 7.03 16.97 3 12 3ZM12 19C8.13 19 5 15.87 5 12C5 8.13 8.13 5 12 5C15.87 5 19 8.13 19 12C19 15.87 15.87 19 12 19Z" fill="currentColor"/>
+                        <path d="M12 17C14.7614 17 17 14.7614 17 12C17 9.23858 14.7614 7 12 7C9.23858 7 7 9.23858 7 12C7 14.7614 9.23858 17 12 17Z" fill="currentColor"/>
+                    </svg>
+                    Appearance
+                </button>
+                <button class="settings-nav-item" data-tab="security">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 12C9.79 12 8 10.21 8 8C8 5.79 9.79 4 12 4C14.21 4 16 5.79 16 8C16 10.21 14.21 12 12 12ZM12 14C16.42 14 20 15.79 20 18V20H4V18C4 15.79 7.58 14 12 14Z" fill="currentColor"/>
+                        <path d="M12 12C9.79 12 8 10.21 8 8C8 5.79 9.79 4 12 4C14.21 4 16 5.79 16 8C16 10.21 14.21 12 12 12ZM12 14C16.42 14 20 15.79 20 18V20H4V18C4 15.79 7.58 14 12 14Z" fill="currentColor"/>
+                    </svg>
+                    Security
+                </button>
+                <button class="settings-nav-item" data-tab="advanced">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M19.14 12.94C19.18 12.64 19.2 12.33 19.2 12C19.2 11.68 19.18 11.36 19.13 11.06L21.16 9.48C21.34 9.34 21.39 9.07 21.28 8.87L19.36 5.55C19.24 5.33 18.99 5.26 18.77 5.33L16.38 6.29C15.88 5.91 15.35 5.59 14.76 5.35L14.4 2.81C14.36 2.57 14.16 2.4 13.92 2.4H10.08C9.84 2.4 9.65 2.57 9.61 2.81L9.25 5.35C8.66 5.59 8.12 5.92 7.63 6.29L5.24 5.33C5.02 5.25 4.77 5.33 4.65 5.55L2.74 8.87C2.62 9.08 2.66 9.34 2.86 9.48L4.89 11.06C4.84 11.36 4.8 11.69 4.8 12C4.8 12.31 4.82 12.64 4.87 12.94L2.84 14.52C2.66 14.66 2.61 14.93 2.72 15.13L4.64 18.45C4.76 18.67 5.01 18.74 5.23 18.67L7.62 17.71C8.12 18.09 8.65 18.41 9.24 18.65L9.6 21.19C9.65 21.43 9.84 21.6 10.08 21.6H13.92C14.16 21.6 14.36 21.43 14.39 21.19L14.75 18.65C15.34 18.41 15.88 18.09 16.37 17.71L18.76 18.67C18.98 18.75 19.23 18.67 19.35 18.45L21.27 15.13C21.39 14.91 21.34 14.66 21.15 14.52L19.14 12.94ZM12 15.6C10.02 15.6 8.4 13.98 8.4 12C8.4 10.02 10.02 8.4 12 8.4C13.98 8.4 15.6 10.02 15.6 12C15.6 13.98 13.98 15.6 12 15.6Z" fill="currentColor"/>
+                    </svg>
+                    Advanced
+                </button>
+                <button class="settings-nav-item" data-tab="about">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M11 7H13V9H11V7ZM11 11H13V17H11V11ZM12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z" fill="currentColor"/>
+                    </svg>
+                    About
+                </button>
+            </div>
+        </div>
+        
+        <div class="settings-content">
+            <!-- Account Settings Tab -->
+            <div class="settings-tab active" id="account-tab">
+                <h2 class="settings-title">Account Settings</h2>
+                
+                <div class="settings-section">
+                    <h3 class="section-title">Profile Information</h3>
+                    <p class="section-description">Manage your personal information and account details.</p>
+                    
+                    <div class="form-group">
+                        <a href="/profile" class="btn btn-outline">
+                            Edit Profile
+                        </a>
+                        <div class="form-hint">Update your name, bio, and profile picture</div>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3 class="section-title">Account Management</h3>
+                    <p class="section-description">Update your account credentials and manage access.</p>
+                    
+                    <div class="form-group">
+                        <a href="/change-email" class="btn btn-outline">
+                            Change Email
+                        </a>
+                    </div>
+                    
+                    <div class="form-group">
+                        <a href="/change-password" class="btn btn-outline">
+                            Change Password
+                        </a>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="button" id="deactivate-btn" class="btn btn-warning">
+                            Deactivate Account
+                        </button>
+                        <div class="form-hint">Temporarily disable your account and hide your profile</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="button" id="delete-btn" class="btn btn-danger">
+                            Delete Account
+                        </button>
+                        <div class="form-hint">Permanently delete your account and all data</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Privacy Settings Tab -->
+            <div class="settings-tab" id="privacy-tab">
+                <h2 class="settings-title">Privacy Settings</h2>
+                
+                <div class="settings-section">
+                    <h3 class="section-title">Chat Privacy</h3>
+                    <p class="section-description">Control who can contact you and what information is shared.</p>
+                    
+                    <div class="form-group">
+                        <label class="setting-label">Who can message me</label>
+                        <div class="setting-options">
+                            <label class="radio-option">
+                                <input type="radio" name="message_privacy" value="everyone" {% if user.settings.privacy.message_privacy == 'everyone' %}checked{% endif %}>
+                                <span class="radio-label">Everyone</span>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="message_privacy" value="friends" {% if user.settings.privacy.message_privacy == 'friends' %}checked{% endif %}>
+                                <span class="radio-label">Friends only</span>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="message_privacy" value="nobody" {% if user.settings.privacy.message_privacy == 'nobody' %}checked{% endif %}>
+                                <span class="radio-label">Nobody</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" name="show_online_status" {% if user.settings.privacy.show_online_status %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Show when I'm online</span>
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" name="show_read_receipts" {% if user.settings.privacy.show_read_receipts %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Send read receipts</span>
+                        </label>
+                        <div class="form-hint">Let others know when you've read their messages</div>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3 class="section-title">Blocked Users</h3>
+                    <p class="section-description">Manage your blocked users list.</p>
+                    
+                    <div class="form-group">
+                        <a href="/blocked-users" class="btn btn-outline">
+                            Manage Blocked Users
+                        </a>
+                        <div class="form-hint">View and unblock users</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Notifications Settings Tab -->
+            <div class="settings-tab" id="notifications-tab">
+                <h2 class="settings-title">Notification Settings</h2>
+                
+                <div class="settings-section">
+                    <h3 class="section-title">In-App Notifications</h3>
+                    <p class="section-description">Control which notifications you receive within the app.</p>
+                    
+                    <div class="form-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" name="notify_new_messages" {% if user.settings.notifications.notify_new_messages %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">New messages</span>
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" name="notify_friend_requests" {% if user.settings.notifications.notify_friend_requests %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Friend requests</span>
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" name="notify_mentions" {% if user.settings.notifications.notify_mentions %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Mentions and replies</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3 class="section-title">Email Notifications</h3>
+                    <p class="section-description">Receive email notifications when you're not using the app.</p>
+                    
+                    <div class="form-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" name="email_new_messages" {% if user.settings.notifications.email_new_messages %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">New messages</span>
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" name="email_friend_requests" {% if user.settings.notifications.email_friend_requests %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Friend requests</span>
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" name="email_security_alerts" {% if user.settings.notifications.email_security_alerts %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Security alerts</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Appearance Settings Tab -->
+            <div class="settings-tab" id="appearance-tab">
+                <h2 class="settings-title">Appearance Settings</h2>
+                
+                <div class="settings-section">
+                    <h3 class="section-title">Theme</h3>
+                    <p class="section-description">Customize the look and feel of your chat interface.</p>
+                    
+                    <div class="form-group">
+                        <label class="setting-label">Theme Mode</label>
+                        <div class="theme-selector">
+                            <label class="theme-option">
+                                <input type="radio" name="theme" value="light" {% if user.settings.appearance.theme == 'light' %}checked{% endif %}>
+                                <div class="theme-preview light-theme">
+                                    <span class="theme-name">Light</span>
+                                </div>
+                            </label>
+                            <label class="theme-option">
+                                <input type="radio" name="theme" value="dark" {% if user.settings.appearance.theme == 'dark' %}checked{% endif %}>
+                                <div class="theme-preview dark-theme">
+                                    <span class="theme-name">Dark</span>
+                                </div>
+                            </label>
+                            <label class="theme-option">
+                                <input type="radio" name="theme" value="system" {% if user.settings.appearance.theme == 'system' %}checked{% endif %}>
+                                <div class="theme-preview system-theme">
+                                    <span class="theme-name">System</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="setting-label">Color Accent</label>
+                        <div class="color-selector">
+                            <label class="color-option">
+                                <input type="radio" name="color_accent" value="blue" {% if user.settings.appearance.color_accent == 'blue' %}checked{% endif %}>
+                                <span class="color-preview blue"></span>
+                            </label>
+                            <label class="color-option">
+                                <input type="radio" name="color_accent" value="green" {% if user.settings.appearance.color_accent == 'green' %}checked{% endif %}>
+                                <span class="color-preview green"></span>
+                            </label>
+                            <label class="color-option">
+                                <input type="radio" name="color_accent" value="purple" {% if user.settings.appearance.color_accent == 'purple' %}checked{% endif %}>
+                                <span class="color-preview purple"></span>
+                            </label>
+                            <label class="color-option">
+                                <input type="radio" name="color_accent" value="orange" {% if user.settings.appearance.color_accent == 'orange' %}checked{% endif %}>
+                                <span class="color-preview orange"></span>
+                            </label>
+                            <label class="color-option">
+                                <input type="radio" name="color_accent" value="red" {% if user.settings.appearance.color_accent == 'red' %}checked{% endif %}>
+                                <span class="color-preview red"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3 class="section-title">Chat Display</h3>
+                    <p class="section-description">Customize how your chat conversations appear.</p>
+                    
+                    <div class="form-group">
+                        <label class="setting-label">Font Size</label>
+                        <div class="select-wrapper">
+                            <select name="font_size">
+                                <option value="small" {% if user.settings.appearance.font_size == 'small' %}selected{% endif %}>Small</option>
+                                <option value="medium" {% if user.settings.appearance.font_size == 'medium' %}selected{% endif %}>Medium</option>
+                                <option value="large" {% if user.settings.appearance.font_size == 'large' %}selected{% endif %}>Large</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Security Settings Tab -->
+            <div class="settings-tab" id="security-tab">
+                <h2 class="settings-title">Security Settings</h2>
+                
+                <div class="settings-section">
+                    <h3 class="section-title">Account Security</h3>
+                    <p class="section-description">Enhance the security of your account with additional verification steps.</p>
+                    
+                    <div class="form-group">
+                        <a href="/two-factor" class="btn btn-outline">
+                            Set Up Two-Factor Authentication
+                        </a>
+                        <div class="form-hint">Add an extra layer of security to your account</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <a href="/sessions" class="btn btn-outline">
+                            Manage Active Sessions
+                        </a>
+                        <div class="form-hint">View and logout from devices where you're logged in</div>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3 class="section-title">Data Security</h3>
+                    <p class="section-description">Control how your data is handled and stored.</p>
+                    
+                    <div class="form-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" name="end_to_end_encryption" {% if user.settings.security.end_to_end_encryption %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Enable end-to-end encryption</span>
+                        </label>
+                        <div class="form-hint">Encrypts messages so only you and the recipient can read them</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Advanced Settings Tab -->
+            <div class="settings-tab" id="advanced-tab">
+                <h2 class="settings-title">Advanced Settings</h2>
+                
+                <div class="settings-section">
+                    <h3 class="section-title">Data Management</h3>
+                    <p class="section-description">Manage your data and application storage.</p>
+                    
+                    <div class="form-group">
+                        <button type="button" id="clear-cache-btn" class="btn btn-outline">
+                            Clear Cache
+                        </button>
+                        <div class="form-hint">Clear temporary data to free up space</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <a href="/account-data" class="btn btn-outline">
+                            Export My Data
+                        </a>
+                        <div class="form-hint">Download a copy of your personal information</div>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3 class="section-title">Application Settings</h3>
+                    <p class="section-description">Adjust advanced application behavior.</p>
+                    
+                    <div class="form-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" name="auto_update" {% if user.settings.advanced.auto_update %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Automatic updates</span>
+                        </label>
+                        <div class="form-hint">Automatically update the application when new versions are available</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- About Tab -->
+            <div class="settings-tab" id="about-tab">
+                <h2 class="settings-title">About ABDRE Chat</h2>
+                
+                <div class="about-content">
+                    <div class="app-logo">
+                        <img src="{{ url_for('static', filename='images/logo-large.svg') }}" alt="ABDRE Chat Logo">
+                    </div>
+                    
+                    <div class="app-info">
+                        <p class="app-version">Version 1.0.0</p>
+                        <p class="app-description">ABDRE Chat is a secure messaging platform designed to provide private, reliable communication with end-to-end encryption.</p>
+                    </div>
+                    
+                    <div class="about-links">
+                        <a href="/terms" class="about-link">Terms of Service</a>
+                        <a href="/privacy" class="about-link">Privacy Policy</a>
+                        <a href="/contact" class="about-link">Contact Us</a>
+                        <a href="https://github.com/abdre-chat" target="_blank" class="about-link">GitHub</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block app_js %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize modules
+            ABDRE.EventBus.init();
+            ABDRE.RealtimeService.init().connect();
+            ABDRE.Enhancers.ConnectionStatus.init();
+            ABDRE.Enhancers.Dropdown.init();
+            
+            // Initialize settings enhancer with user data
+            var settingsData = JSON.parse('{{ settings_json|safe }}');
+            ABDRE.Enhancers.Settings.init(settingsData);
+        });
+    </script>
+{% endblock %}
+
+{% block extra_js %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='js/services/api_service.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/services/user_service.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/enhancers/settings_enhancer.js') }}"></script>
+{% endblock %} 
