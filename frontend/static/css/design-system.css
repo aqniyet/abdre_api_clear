@@ -1,98 +1,183 @@
 /**
- * ABDRE Chat - Design System
- * Comprehensive design system for consistent UI across the application
+ * ABDRE Chat Design System
+ * Contains all design tokens, variables and design-related constants
  */
 
-/* ========== COLORS ========== */
 :root {
-  /* Primary Colors */
-  --color-primary: #4285F4;
-  --color-primary-light: #85B2FF;
-  --color-primary-dark: #2A75E8;
+  /* Color System - Primary */
+  --color-primary-50: #e8f0fe;
+  --color-primary-100: #c6dafc;
+  --color-primary-200: #a1c2fa;
+  --color-primary-300: #7baaf7;
+  --color-primary-400: #5e95f5;
+  --color-primary-500: #4285f4;  /* Primary color */
+  --color-primary-600: #3b78e7;
+  --color-primary-700: #3367d6;
+  --color-primary-800: #2a56c6;
+  --color-primary-900: #1c3aa9;
   
-  /* Secondary Colors */
-  --color-secondary: #34A853;
-  --color-secondary-light: #5DC876;
-  --color-secondary-dark: #268841;
-  
-  /* Accent Colors */
-  --color-accent: #FBBC05;
-  --color-accent-light: #FCD05F;
-  --color-accent-dark: #F5A700;
-  
-  /* Gray Scale */
-  --color-white: #FFFFFF;
-  --color-gray-50: #F8F9FA;
-  --color-gray-100: #F1F3F4;
-  --color-gray-200: #E8EAED;
-  --color-gray-300: #DADCE0;
-  --color-gray-400: #BDC1C6;
-  --color-gray-500: #9AA0A6;
-  --color-gray-600: #80868B;
-  --color-gray-700: #5F6368;
-  --color-gray-800: #3C4043;
+  /* Color System - Neutral */
+  --color-gray-50: #f8f9fa;
+  --color-gray-100: #f1f3f4;
+  --color-gray-200: #e8eaed;
+  --color-gray-300: #dadce0;
+  --color-gray-400: #bdc1c6;
+  --color-gray-500: #9aa0a6;
+  --color-gray-600: #80868b;
+  --color-gray-700: #5f6368;
+  --color-gray-800: #3c4043;
   --color-gray-900: #202124;
-  --color-black: #000000;
   
-  /* Semantic Colors */
-  --color-success: #34A853;
-  --color-warning: #FBBC05;
-  --color-error: #EA4335;
-  --color-info: #4285F4;
+  /* Color System - Semantic Colors */
+  --color-error-light: #fce8e6;
+  --color-error: #ea4335;
+  --color-error-dark: #c5221f;
   
-  /* Background Colors */
-  --color-background: #FFFFFF;
-  --color-background-alt: #F8F9FA;
-  --color-background-hover: #F1F3F4;
-  --color-background-active: #E8EAED;
+  --color-warning-light: #fef7e0;
+  --color-warning: #fbbc05;
+  --color-warning-dark: #f29900;
   
-  /* Text Colors */
-  --color-text: #202124;
-  --color-text-secondary: #5F6368;
-  --color-text-tertiary: #9AA0A6;
-  --color-text-disabled: #BDC1C6;
-  --color-text-inverse: #FFFFFF;
+  --color-success-light: #e6f4ea;
+  --color-success: #34a853;
+  --color-success-dark: #188038;
   
-  /* Border Colors */
-  --color-border: #DADCE0;
-  --color-border-light: #E8EAED;
-  --color-border-focus: #4285F4;
-}
-
-/* ========== TYPOGRAPHY ========== */
-:root {
-  /* Font Family */
-  --font-family-base: 'Roboto', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-  --font-family-heading: 'Roboto', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-  --font-family-mono: 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  --color-info-light: #e8f0fe;
+  --color-info: #4285f4;
+  --color-info-dark: #3367d6;
   
-  /* Font Sizes */
+  /* UI Color Aliases */
+  --color-background: var(--color-gray-50);
+  --color-background-alt: var(--color-gray-100);
+  --color-surface: white;
+  --color-border: var(--color-gray-300);
+  --color-text: var(--color-gray-900);
+  --color-text-secondary: var(--color-gray-700);
+  --color-text-tertiary: var(--color-gray-600);
+  --color-text-disabled: var(--color-gray-500);
+  --color-link: var(--color-primary-700);
+  --color-link-hover: var(--color-primary-800);
+  
+  /* Functional color aliases */
+  --color-primary: var(--color-primary-500);
+  --color-primary-light: var(--color-primary-300);
+  --color-primary-dark: var(--color-primary-700);
+  --color-primary-bg: var(--color-primary-50);
+  
+  /* State colors */
+  --color-focus-ring: var(--color-primary-500);
+  --color-hover-overlay: rgba(32, 33, 36, 0.04);
+  --color-pressed-overlay: rgba(32, 33, 36, 0.08);
+  
+  /* Transparent colors */
+  --color-overlay-light: rgba(255, 255, 255, 0.8);
+  --color-overlay-dark: rgba(0, 0, 0, 0.5);
+  
+  /* Typography - Font Family */
+  --font-family-base: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  --font-family-monospace: 'Roboto Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  
+  /* Typography - Font Size */
   --font-size-xs: 0.75rem;   /* 12px */
   --font-size-sm: 0.875rem;  /* 14px */
-  --font-size-md: 1rem;      /* 16px - Base size */
+  --font-size-md: 1rem;      /* 16px */
   --font-size-lg: 1.125rem;  /* 18px */
   --font-size-xl: 1.25rem;   /* 20px */
   --font-size-2xl: 1.5rem;   /* 24px */
   --font-size-3xl: 1.875rem; /* 30px */
   --font-size-4xl: 2.25rem;  /* 36px */
-  --font-size-5xl: 3rem;     /* 48px */
   
-  /* Font Weights */
+  /* Typography - Font Weight */
   --font-weight-light: 300;
   --font-weight-normal: 400;
   --font-weight-medium: 500;
-  --font-weight-semibold: 600;
   --font-weight-bold: 700;
   
-  /* Line Heights */
-  --line-height-tight: 1.2;
+  /* Typography - Line Height */
+  --line-height-tight: 1.25;
   --line-height-normal: 1.5;
   --line-height-relaxed: 1.75;
   
-  /* Letter Spacing */
-  --letter-spacing-tight: -0.025em;
-  --letter-spacing-normal: 0;
-  --letter-spacing-wide: 0.025em;
+  /* Spacing - Base unit: 4px or 0.25rem */
+  --spacing-base: 0.25rem;
+  --spacing-xs: calc(var(--spacing-base) * 1);     /* 4px */
+  --spacing-sm: calc(var(--spacing-base) * 2);     /* 8px */
+  --spacing-md: calc(var(--spacing-base) * 4);     /* 16px */
+  --spacing-lg: calc(var(--spacing-base) * 6);     /* 24px */
+  --spacing-xl: calc(var(--spacing-base) * 8);     /* 32px */
+  --spacing-2xl: calc(var(--spacing-base) * 12);   /* 48px */
+  --spacing-3xl: calc(var(--spacing-base) * 16);   /* 64px */
+  --spacing-4xl: calc(var(--spacing-base) * 24);   /* 96px */
+  
+  /* Layout System */
+  --container-max-width: 1200px;
+  --container-padding: var(--spacing-md);
+  
+  /* Border Radius */
+  --border-radius-none: 0;
+  --border-radius-sm: 2px;
+  --border-radius-md: 4px;
+  --border-radius-lg: 8px;
+  --border-radius-xl: 12px;
+  --border-radius-full: 9999px;
+  
+  /* Box Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(60, 64, 67, 0.1), 0 1px 3px 1px rgba(60, 64, 67, 0.05);
+  --shadow-md: 0 2px 6px 2px rgba(60, 64, 67, 0.15);
+  --shadow-lg: 0 4px 8px 3px rgba(60, 64, 67, 0.15), 0 1px 3px rgba(60, 64, 67, 0.05);
+  --shadow-xl: 0 8px 12px 6px rgba(60, 64, 67, 0.15), 0 4px 4px rgba(60, 64, 67, 0.05);
+  
+  /* Z-index System */
+  --z-index-dropdown: 1000;
+  --z-index-sticky: 1020;
+  --z-index-fixed: 1030;
+  --z-index-modal-backdrop: 1040;
+  --z-index-modal: 1050;
+  --z-index-popover: 1060;
+  --z-index-tooltip: 1070;
+  
+  /* Transitions */
+  --transition-quick: 0.15s ease;
+  --transition-normal: 0.3s ease;
+  --transition-slow: 0.5s ease;
+  
+  /* Form Elements */
+  --form-control-height: 40px;
+  --form-control-padding-x: var(--spacing-md);
+  --form-control-padding-y: var(--spacing-sm);
+  --form-control-border-color: var(--color-border);
+  --form-control-border-radius: var(--border-radius-md);
+  --form-control-focus-border-color: var(--color-primary);
+  --form-control-focus-shadow: 0 0 0 2px var(--color-primary-100);
+  
+  /* Buttons */
+  --button-height: 40px;
+  --button-padding-x: var(--spacing-md);
+  --button-padding-y: var(--spacing-sm);
+  --button-border-radius: var(--border-radius-md);
+  --button-font-weight: var(--font-weight-medium);
+  
+  /* Cards */
+  --card-padding: var(--spacing-md);
+  --card-border-radius: var(--border-radius-lg);
+  --card-shadow: var(--shadow-md);
+  
+  /* Avatar */
+  --avatar-size-sm: 32px;
+  --avatar-size-md: 40px;
+  --avatar-size-lg: 64px;
+  
+  /* Header */
+  --header-height: 64px;
+  --header-shadow: var(--shadow-sm);
+  
+  /* Chat */
+  --chat-message-radius: var(--border-radius-lg);
+}
+
+/* ========== TYPOGRAPHY ========== */
+:root {
+  /* Font Family */
+  --font-family-heading: 'Roboto', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
 }
 
 /* Heading Styles */

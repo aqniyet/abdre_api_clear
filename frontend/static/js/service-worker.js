@@ -7,12 +7,20 @@ const CACHE_NAME = 'abdre-cache-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/static/css/main.css',
-  '/static/css/components.css',
+  '/static/css/base.css',
+  '/static/css/reset.css',
+  '/static/css/layout.css',
+  '/static/css/design-system.css',
+  '/static/css/components/buttons.css',
+  '/static/css/components/forms.css',
+  '/static/css/components/header.css',
+  '/static/css/components/chat-list.css',
+  '/static/css/components/empty-states.css',
   '/static/js/core/main.js',
   '/static/js/core/api_client.js',
   '/static/js/core/error_handler.js',
   '/static/js/core/event_bus.js',
-  '/static/js/services/realtime_service.js'
+  '/static/js/core/app.js'
 ];
 
 // Install event - cache assets

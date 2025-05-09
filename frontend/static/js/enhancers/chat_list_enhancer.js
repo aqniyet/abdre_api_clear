@@ -26,6 +26,9 @@ ABDRE.Enhancers.ChatList = (function() {
     let activeFilter = 'all';
     let searchQuery = '';
     
+    // Event subscriptions for cleanup
+    let eventSubscriptions = [];
+    
     /**
      * Initialize enhancer
      * @param {Array} initialChats - Array of chat objects
@@ -49,6 +52,12 @@ ABDRE.Enhancers.ChatList = (function() {
         
         // Subscribe to events
         subscribeToEvents();
+        
+        if (ABDRE.EventBus) {
+            ABDRE.EventBus.publish('chatList:initialized');
+        }
+        
+        return this;
     }
     
     /**
@@ -56,31 +65,49 @@ ABDRE.Enhancers.ChatList = (function() {
      */
     function setupEventListeners() {
         // Set up filter buttons
-        if (filterButtons) {
+        if (filterButtons && filterButtons.length) {
             filterButtons.forEach(button => {
-                button.addEventListener('click', function() {
+                // Create named handler for cleanup
+                const filterButtonHandler = function() {
                     const filter = this.dataset.filter;
                     setActiveFilter(filter);
-                });
+                };
+                
+                button.addEventListener('click', filterButtonHandler);
+                
+                // Store reference for cleanup
+                button._filterHandler = filterButtonHandler;
             });
         }
         
         // Set up search form
         if (searchForm) {
-            searchForm.addEventListener('submit', function(e) {
+            // Create named handler for cleanup
+            const searchFormHandler = function(e) {
                 e.preventDefault();
                 const input = this.querySelector('input');
                 searchQuery = input ? input.value.trim().toLowerCase() : '';
                 filterChats();
-            });
+            };
+            
+            searchForm.addEventListener('submit', searchFormHandler);
+            
+            // Store reference for cleanup
+            searchForm._submitHandler = searchFormHandler;
             
             // Add input handler for live search
             const searchInput = searchForm.querySelector('input');
             if (searchInput) {
-                searchInput.addEventListener('input', function() {
+                // Create named handler for cleanup
+                const searchInputHandler = function() {
                     searchQuery = this.value.trim().toLowerCase();
                     filterChats();
-                });
+                };
+                
+                searchInput.addEventListener('input', searchInputHandler);
+                
+                // Store reference for cleanup
+                searchInput._inputHandler = searchInputHandler;
             }
         }
     }
@@ -248,117 +275,203 @@ ABDRE.Enhancers.ChatList = (function() {
      */
     function subscribeToEvents() {
         if (ABDRE.EventBus) {
-            // Listen for new message events
-            ABDRE.EventBus.subscribe('message:received', function(data) {
-                updateChatWithNewMessage(data);
-            });
+            // Subscribe to chat message events
+            const newMessageSubscription = ABDRE.EventBus.subscribe('chat:new_message', updateChatWithNewMessage);
+            eventSubscriptions.push(newMessageSubscription);
             
-            // Listen for message read events
-            ABDRE.EventBus.subscribe('message:read', function(data) {
-                updateChatReadStatus(data);
-            });
+            // Subscribe to chat read status events
+            const readStatusSubscription = ABDRE.EventBus.subscribe('chat:read_status', updateChatReadStatus);
+            eventSubscriptions.push(readStatusSubscription);
+            
+            // Subscribe to chat add/remove events
+            const chatAddedSubscription = ABDRE.EventBus.subscribe('chat:added', addChat);
+            eventSubscriptions.push(chatAddedSubscription);
+            
+            const chatRemovedSubscription = ABDRE.EventBus.subscribe('chat:removed', removeChat);
+            eventSubscriptions.push(chatRemovedSubscription);
         }
     }
     
     /**
-     * Update chat list with new message
+     * Cleanup event listeners and subscriptions
+     */
+    function cleanup() {
+        // Clean up filter button event listeners
+        if (filterButtons && filterButtons.length) {
+            filterButtons.forEach(button => {
+                if (button._filterHandler) {
+                    button.removeEventListener('click', button._filterHandler);
+                    delete button._filterHandler;
+                }
+            });
+        }
+        
+        // Clean up search form event listeners
+        if (searchForm) {
+            if (searchForm._submitHandler) {
+                searchForm.removeEventListener('submit', searchForm._submitHandler);
+                delete searchForm._submitHandler;
+            }
+            
+            const searchInput = searchForm.querySelector('input');
+            if (searchInput && searchInput._inputHandler) {
+                searchInput.removeEventListener('input', searchInput._inputHandler);
+                delete searchInput._inputHandler;
+            }
+        }
+        
+        // Clean up event subscriptions
+        eventSubscriptions.forEach(subscription => {
+            if (subscription && typeof subscription.unsubscribe === 'function') {
+                subscription.unsubscribe();
+            }
+        });
+        
+        // Reset state
+        eventSubscriptions = [];
+        chats = [];
+        filteredChats = [];
+        activeFilter = 'all';
+        searchQuery = '';
+    }
+    
+    /**
+     * Update chat with new message
      * @param {Object} data - Message data
      */
     function updateChatWithNewMessage(data) {
-        const { chat_id, message } = data;
-        
-        // Find the chat
-        const chatIndex = chats.findIndex(chat => chat.chat_id === chat_id);
+        // Find the chat in the list
+        const chatIndex = chats.findIndex(chat => chat.chat_id === data.chat_id);
         
         if (chatIndex !== -1) {
-            // Update existing chat
-            const chat = chats[chatIndex];
-            
-            // Update last message and activity
-            chat.last_message = message;
-            chat.last_activity = message.timestamp;
-            
-            // Increment unread count if not from current user
-            if (message.sender_id !== ABDRE.currentUserId) {
-                chat.unread_count = (chat.unread_count || 0) + 1;
-            }
-            
-            // Move to the top of the list
-            chats.splice(chatIndex, 1);
-            chats.unshift(chat);
-        } else {
-            // This is a new chat - we should fetch it
-            // For now we'll create a placeholder
-            const newChat = {
-                chat_id: chat_id,
-                last_message: message,
-                last_activity: message.timestamp,
-                unread_count: message.sender_id !== ABDRE.currentUserId ? 1 : 0,
-                display_name: message.sender_name || 'New Chat',
-                type: 'direct'
+            // Update chat with new message
+            const updatedChat = {
+                ...chats[chatIndex],
+                last_message: {
+                    content: data.message.content,
+                    sender_id: data.message.sender_id,
+                    timestamp: data.message.timestamp
+                },
+                last_activity: data.message.timestamp
             };
             
-            chats.unshift(newChat);
-        }
-        
-        // Refilter and render
-        filterChats();
-    }
-    
-    /**
-     * Update read status for a chat
-     * @param {Object} data - Read status data
-     */
-    function updateChatReadStatus(data) {
-        const { chat_id } = data;
-        
-        // Find the chat
-        const chat = chats.find(c => c.chat_id === chat_id);
-        
-        if (chat) {
-            // Reset unread count
-            chat.unread_count = 0;
+            // Update unread count if not the sender
+            if (data.message.sender_id !== ABDRE.App.getConfig('user_id')) {
+                updatedChat.unread_count = (updatedChat.unread_count || 0) + 1;
+            }
             
-            // Refilter and render
+            // Update chat in list
+            chats[chatIndex] = updatedChat;
+            
+            // Re-sort chats by most recent activity
+            chats.sort((a, b) => {
+                const aTime = new Date(a.last_activity || 0).getTime();
+                const bTime = new Date(b.last_activity || 0).getTime();
+                return bTime - aTime;
+            });
+            
+            // Re-filter and render
             filterChats();
         }
     }
     
     /**
-     * Add a new chat to the list 
+     * Update chat read status
+     * @param {Object} data - Read status data
+     */
+    function updateChatReadStatus(data) {
+        // Find the chat in the list
+        const chatIndex = chats.findIndex(chat => chat.chat_id === data.chat_id);
+        
+        if (chatIndex !== -1) {
+            // Update chat read status
+            chats[chatIndex] = {
+                ...chats[chatIndex],
+                unread_count: 0
+            };
+            
+            // Re-filter and render
+            filterChats();
+        }
+    }
+    
+    /**
+     * Add a new chat to the list
      * @param {Object} chat - Chat data
      */
     function addChat(chat) {
         // Check if chat already exists
-        const existingIndex = chats.findIndex(c => c.chat_id === chat.chat_id);
+        const exists = chats.some(c => c.chat_id === chat.chat_id);
         
-        if (existingIndex !== -1) {
-            // Replace existing chat
-            chats[existingIndex] = chat;
-        } else {
-            // Add new chat at the beginning
-            chats.unshift(chat);
+        if (!exists) {
+            // Add chat to list
+            chats.push(chat);
+            
+            // Sort chats
+            chats.sort((a, b) => {
+                const aTime = new Date(a.last_activity || 0).getTime();
+                const bTime = new Date(b.last_activity || 0).getTime();
+                return bTime - aTime;
+            });
+            
+            // Re-filter and render
+            filterChats();
         }
-        
-        // Refilter and render
-        filterChats();
     }
     
     /**
      * Remove a chat from the list
-     * @param {string} chatId - Chat ID to remove
+     * @param {string} chatId - Chat ID
      */
     function removeChat(chatId) {
+        // Filter out the chat
         chats = chats.filter(chat => chat.chat_id !== chatId);
         
-        // Refilter and render
+        // Re-filter and render
         filterChats();
     }
     
     // Public API
     return {
         init: init,
+        
+        /**
+         * Add a chat to the list
+         * @param {Object} chat - Chat data
+         */
         addChat: addChat,
-        removeChat: removeChat
+        
+        /**
+         * Remove a chat from the list
+         * @param {string} chatId - Chat ID
+         */
+        removeChat: removeChat,
+        
+        /**
+         * Update chats with new data
+         * @param {Array} newChats - Array of chat objects
+         */
+        updateChats: function(newChats) {
+            if (Array.isArray(newChats)) {
+                chats = newChats;
+                filterChats();
+            }
+        },
+        
+        /**
+         * Destroy the enhancer and clean up
+         */
+        destroy: function() {
+            cleanup();
+            return null;
+        }
     };
-})(); 
+})();
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    // Only initialize if the chat list container exists on the page
+    if (document.querySelector('.chat-list')) {
+        ABDRE.Enhancers.ChatList.init();
+    }
+}); 

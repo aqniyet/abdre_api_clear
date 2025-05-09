@@ -5,6 +5,7 @@
 
 /* Reset and Base Styles */
 @import url('reset.css');
+@import url('base.css');
 
 /* Design System */
 @import url('design-system.css');
@@ -32,8 +33,7 @@
 /* Pages */
 @import url('pages/auth.css');
 @import url('pages/chats.css');
-@import url('pages/settings.css');
-@import url('pages/profile.css');
+@import url('pages/index.css');
 
 /* Utilities */
 @import url('utilities.css');
