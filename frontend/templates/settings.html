@@ -124,15 +124,15 @@
                         <label class="setting-label">Who can message me</label>
                         <div class="setting-options">
                             <label class="radio-option">
-                                <input type="radio" name="message_privacy" value="everyone" {% if user.settings.privacy.message_privacy == 'everyone' %}checked{% endif %}>
+                                <input type="radio" name="message_privacy" value="everyone" {% if user and user.settings and user.settings.privacy and user.settings.privacy.message_privacy == 'everyone' %}checked{% endif %}>
                                 <span class="radio-label">Everyone</span>
                             </label>
                             <label class="radio-option">
-                                <input type="radio" name="message_privacy" value="friends" {% if user.settings.privacy.message_privacy == 'friends' %}checked{% endif %}>
+                                <input type="radio" name="message_privacy" value="friends" {% if user and user.settings and user.settings.privacy and user.settings.privacy.message_privacy == 'friends' %}checked{% endif %}>
                                 <span class="radio-label">Friends only</span>
                             </label>
                             <label class="radio-option">
-                                <input type="radio" name="message_privacy" value="nobody" {% if user.settings.privacy.message_privacy == 'nobody' %}checked{% endif %}>
+                                <input type="radio" name="message_privacy" value="nobody" {% if user and user.settings and user.settings.privacy and user.settings.privacy.message_privacy == 'nobody' %}checked{% endif %}>
                                 <span class="radio-label">Nobody</span>
                             </label>
                         </div>
@@ -140,7 +140,7 @@
                     
                     <div class="form-group">
                         <label class="toggle-switch">
-                            <input type="checkbox" name="show_online_status" {% if user.settings.privacy.show_online_status %}checked{% endif %}>
+                            <input type="checkbox" name="show_online_status" {% if user and user.settings and user.settings.privacy and user.settings.privacy.show_online_status %}checked{% endif %}>
                             <span class="toggle-slider"></span>
                             <span class="toggle-label">Show when I'm online</span>
                         </label>
@@ -148,7 +148,7 @@
                     
                     <div class="form-group">
                         <label class="toggle-switch">
-                            <input type="checkbox" name="show_read_receipts" {% if user.settings.privacy.show_read_receipts %}checked{% endif %}>
+                            <input type="checkbox" name="show_read_receipts" {% if user and user.settings and user.settings.privacy and user.settings.privacy.show_read_receipts %}checked{% endif %}>
                             <span class="toggle-slider"></span>
                             <span class="toggle-label">Send read receipts</span>
                         </label>
@@ -415,7 +415,10 @@
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize modules
             ABDRE.EventBus.init();
-            ABDRE.RealtimeService.init().connect();
+            ABDRE.RealtimeService.init({
+                host: window.location.hostname + ':5000',
+                path: '/socket.io'
+            }).connect();
             ABDRE.Enhancers.ConnectionStatus.init();
             ABDRE.Enhancers.Dropdown.init();
             

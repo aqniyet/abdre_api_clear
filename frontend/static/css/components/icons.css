@@ -1,0 +1,77 @@
+/**
+ * ABDRE Chat - Icon Component Styles
+ */
+
+.icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+}
+
+.icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.icon--sm {
+    width: 16px;
+    height: 16px;
+}
+
+.icon--lg {
+    width: 32px;
+    height: 32px;
+}
+
+.icon--primary {
+    color: var(--color-primary);
+}
+
+.icon--secondary {
+    color: var(--color-secondary);
+}
+
+.icon--success {
+    color: var(--color-success);
+}
+
+.icon--danger {
+    color: var(--color-danger);
+}
+
+.icon--warning {
+    color: var(--color-warning);
+}
+
+.icon--info {
+    color: var(--color-info);
+}
+
+.icon--muted {
+    color: var(--color-text-muted);
+}
+
+/* Icon button styles */
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.icon-btn:hover {
+    background-color: var(--color-bg-hover);
+}
+
+.icon-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-primary-light);
+} 

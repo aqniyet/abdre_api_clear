@@ -95,14 +95,14 @@
                 <div class="group-members" id="group-members">
                     <div class="group-member current-user">
                         <div class="member-avatar">
-                            {% if user.avatar_url %}
+                            {% if user and user.avatar_url %}
                             <img src="{{ user.avatar_url }}" alt="{{ user.display_name or user.username }}">
                             {% else %}
-                            <div class="avatar-placeholder">{{ user.display_name[0:1] or user.username[0:1] }}</div>
+                            <div class="avatar-placeholder">{% if user %}{{ user.display_name[0:1] if user.display_name else user.username[0:1] if user.username else 'U' }}{% else %}U{% endif %}</div>
                             {% endif %}
                         </div>
                         <div class="member-info">
-                            <div class="member-name">{{ user.display_name or user.username }} (You)</div>
+                            <div class="member-name">{% if user %}{{ user.display_name or user.username }}{% else %}User{% endif %} (You)</div>
                             <div class="member-role">Group Admin</div>
                         </div>
                     </div>
@@ -121,7 +121,11 @@
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize modules
             ABDRE.EventBus.init();
-            ABDRE.RealtimeService.init().connect();
+            ABDRE.RealtimeService.init({
+                host: window.location.hostname + ':5000',
+                path: '/socket.io',
+                authToken: 'guest'
+            }).connect();
             ABDRE.Enhancers.ConnectionStatus.init();
             ABDRE.Enhancers.CreateChat.init();
         });

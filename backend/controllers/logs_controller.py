@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 # Create blueprint
 logs_bp = Blueprint('logs', __name__, url_prefix='/api/logs')
 
+# Create a second blueprint for root-level logs (for client compatibility)
+root_logs_bp = Blueprint('root_logs', __name__, url_prefix='/logs')
+
 # Constants
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs')
 
@@ -121,4 +124,17 @@ def file_log():
 
 @logs_bp.route('/latest', methods=['GET'])
 def latest_logs():
+    return logs_controller.get_latest_logs()
+
+# Register the same routes at root level for direct client access
+@root_logs_bp.route('/client-error', methods=['POST'])
+def root_client_error():
+    return logs_controller.log_client_error()
+
+@root_logs_bp.route('/file-log', methods=['POST'])
+def root_file_log():
+    return logs_controller.log_to_file()
+
+@root_logs_bp.route('/latest', methods=['GET'])
+def root_latest_logs():
     return logs_controller.get_latest_logs() 

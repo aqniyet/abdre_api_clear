@@ -44,6 +44,8 @@ ABDRE.RealtimeService = (function() {
     let _maxHeartbeatMisses = 2;
     let _heartbeatMissCount = 0;
     let _initialized = false;
+    let _socketIoSessionId = null;
+    let _transportType = 'websocket';
     
     // Private methods
     function _log(...args) {
@@ -69,27 +71,20 @@ ABDRE.RealtimeService = (function() {
     
     function _setupHeartbeat() {
         // Clear any existing heartbeat
-        if (_heartbeatInterval) {
-            clearInterval(_heartbeatInterval);
-        }
+        _clearHeartbeat();
         
-        // Clear any existing stalled connection detection
-        if (_stalledConnectionTimeout) {
-            clearTimeout(_stalledConnectionTimeout);
-            _stalledConnectionTimeout = null;
-        }
-        
-        // Reset heartbeat miss counter
-        _heartbeatMissCount = 0;
-        
-        // Set up ping/pong for connection health monitoring
+        // Setup new heartbeat
         _heartbeatInterval = setInterval(() => {
             if (_socket && _socket.readyState === WebSocket.OPEN) {
+                // Send ping message
                 _lastPingTime = Date.now();
-                _socket.send(JSON.stringify({ type: 'ping' }));
-                _log('Ping sent');
                 
-                // Set up stalled connection detection
+                _socket.send(JSON.stringify({
+                    type: 'ping',
+                    timestamp: new Date().toISOString()
+                }));
+                
+                // Setup timeout to detect missed pongs
                 _stalledConnectionTimeout = setTimeout(() => {
                     // If we haven't received a pong since our last ping
                     if (!_lastPongTime || _lastPongTime < _lastPingTime) {
@@ -107,36 +102,27 @@ ABDRE.RealtimeService = (function() {
                         
                         // If we've missed too many heartbeats, assume connection is stalled
                         if (_heartbeatMissCount >= _maxHeartbeatMisses) {
-                            _log('Connection appears stalled, attempting reconnect');
+                            _log('Connection stalled, attempting reconnect');
                             
-                            // Publish stalled connection event
-                            if (ABDRE.EventBus) {
-                                ABDRE.EventBus.publish(EVENTS.ERROR, {
-                                    code: 'stalled_connection',
-                                    message: 'Connection stalled (missing heartbeats)',
-                                    timestamp: new Date().toISOString(),
-                                    details: {
-                                        missedHeartbeats: _heartbeatMissCount,
-                                        lastPingTime: _lastPingTime ? new Date(_lastPingTime).toISOString() : null,
-                                        lastPongTime: _lastPongTime ? new Date(_lastPongTime).toISOString() : null
-                                    }
-                                });
-                            }
-                            
-                            // Force reconnection
+                            // Force close socket and reconnect
                             if (_socket) {
-                                try {
-                                    _socket.close(4000, 'Stalled connection detected');
-                                } catch (e) {
-                                    _log('Error closing stalled socket:', e);
-                                }
+                                _socket.close();
+                                _socket = null;
+                                
+                                // Reset heartbeat counters
+                                _heartbeatMissCount = 0;
+                                _lastPingTime = null;
+                                _lastPongTime = null;
+                                
+                                // Attempt reconnect
+                                _reconnect();
                             }
-                            
-                            _setConnectionState(STATES.DISCONNECTED);
-                            _reconnect();
                         }
+                    } else {
+                        // Reset heartbeat miss counter if we got a pong
+                        _heartbeatMissCount = 0;
                     }
-                }, 10000); // Wait 10 seconds for a pong response
+                }, 5000); // Wait 5 seconds for pong
             }
         }, 30000); // Send ping every 30 seconds
     }
@@ -190,71 +176,54 @@ ABDRE.RealtimeService = (function() {
         }
     }
     
-    function _reconnect() {
-        if (_reconnectAttempts >= _maxReconnectAttempts) {
-            _log('Max reconnect attempts reached, giving up');
-            
-            // Publish terminal failure event
-            if (ABDRE.EventBus) {
-                ABDRE.EventBus.publish(EVENTS.ERROR, {
-                    code: 'max_reconnect_attempts',
-                    message: 'Failed to reconnect after maximum number of attempts',
-                    timestamp: new Date().toISOString(),
-                    details: {
-                        attempts: _reconnectAttempts,
-                        maxAttempts: _maxReconnectAttempts
-                    }
-                });
-            }
+    function _authenticate() {
+        if (!_socket || _socket.readyState !== WebSocket.OPEN) {
+            _log('Cannot authenticate: socket not connected');
             return;
         }
         
-        // Clear any existing reconnect timer
-        if (_reconnectTimer) {
-            clearTimeout(_reconnectTimer);
+        if (!_authToken) {
+            _log('Cannot authenticate: no auth token');
+            return;
         }
         
-        _reconnectAttempts++;
+        _log('Authenticating with token');
         
-        // Calculate backoff time using exponential backoff
-        const backoffTime = Math.min(30000, _reconnectInterval * Math.pow(1.5, _reconnectAttempts - 1));
-        
-        _log(`Reconnecting (attempt ${_reconnectAttempts}/${_maxReconnectAttempts}) in ${backoffTime}ms`);
-        
-        // Publish reconnecting event
-        if (ABDRE.EventBus) {
-            ABDRE.EventBus.publish(EVENTS.RECONNECTING, {
-                attempt: _reconnectAttempts,
-                maxAttempts: _maxReconnectAttempts,
-                nextAttemptIn: backoffTime,
-                timestamp: new Date().toISOString()
-            });
-        }
-        
-        // Schedule reconnect
-        _reconnectTimer = setTimeout(() => {
-            _connect();
-        }, backoffTime);
+        // Send authentication message
+        _socket.send(JSON.stringify({
+            type: 'authenticate',
+            token: _authToken
+        }));
     }
     
     function _flushQueue() {
-        // Send any queued messages
-        if (_messageQueue.length > 0 && _socket && _socket.readyState === WebSocket.OPEN) {
-            _log(`Flushing message queue (${_messageQueue.length} messages)`);
-            
-            _messageQueue.forEach(message => {
-                _socket.send(JSON.stringify(message));
-            });
-            
-            // Clear the queue
-            _messageQueue = [];
-        }
+        // Check if we have messages in the queue
+        if (_messageQueue.length === 0) return;
+        
+        // Only flush if connected
+        if (_state !== STATES.CONNECTED) return;
+        
+        _log(`Flushing queue: ${_messageQueue.length} messages`);
+        
+        // Send all queued messages
+        _messageQueue.forEach(message => {
+            _socket.send(JSON.stringify(message));
+        });
+        
+        // Clear queue
+        _messageQueue = [];
+    }
+    
+    function _queueMessage(message) {
+        _log('Queuing message:', message);
+        _messageQueue.push(message);
     }
     
     function _handleMessage(event) {
         try {
             const message = JSON.parse(event.data);
-            _log('Message received:', message);
+            
+            _log('Received message:', message);
             
             // Handle special message types
             switch (message.type) {
@@ -263,26 +232,45 @@ ABDRE.RealtimeService = (function() {
                     return;
                     
                 case 'auth_success':
+                    _log('Authentication successful');
                     _setConnectionState(STATES.CONNECTED);
+                    
+                    // Flush message queue after successful authentication
+                    _flushQueue();
+                    
                     // Publish authenticated event
                     if (ABDRE.EventBus) {
                         ABDRE.EventBus.publish(EVENTS.AUTHENTICATED, {
-                            userId: message.user_id,
+                            user_id: message.user_id,
+                            is_guest: message.is_guest,
                             timestamp: new Date().toISOString()
                         });
                     }
-                    // Flush message queue after authentication
-                    _flushQueue();
                     return;
                     
                 case 'auth_error':
                     _log('Authentication error:', message.error);
+                    
                     // Publish error event
                     if (ABDRE.EventBus) {
                         ABDRE.EventBus.publish(EVENTS.ERROR, {
                             code: 'auth_error',
-                            message: message.error,
+                            message: message.error || 'Authentication failed',
                             timestamp: new Date().toISOString()
+                        });
+                    }
+                    return;
+                    
+                case 'error':
+                    _log('Error from server:', message.error);
+                    
+                    // Publish error event
+                    if (ABDRE.EventBus) {
+                        ABDRE.EventBus.publish(EVENTS.ERROR, {
+                            code: 'server_error',
+                            message: message.error || 'Server error',
+                            timestamp: new Date().toISOString(),
+                            details: message.details || {}
                         });
                     }
                     return;
@@ -328,69 +316,38 @@ ABDRE.RealtimeService = (function() {
     }
     
     function _handleClose(event) {
-        _log('Connection closed:', event.code, event.reason);
-        _setConnectionState(STATES.DISCONNECTED);
+        _log('Connection closed:', event);
+        
+        // Clean up
         _clearHeartbeat();
         
-        // Create detailed close event information
-        const closeInfo = {
-            code: event.code,
-            reason: event.reason || 'No reason provided',
-            timestamp: new Date().toISOString(),
-            wasClean: event.wasClean
-        };
+        // Set disconnect state
+        _setConnectionState(STATES.DISCONNECTED);
         
-        // Handle different closure scenarios
-        let shouldReconnect = true;
-        
-        switch (event.code) {
-            case 1000: // Normal closure
-                shouldReconnect = false;
-                break;
-                
-            case 1001: // Going away (page navigation, etc.)
-                shouldReconnect = false;
-                break;
-                
-            case 1006: // Abnormal closure (connection lost)
-                closeInfo.friendlyMessage = 'Connection lost unexpectedly';
-                break;
-                
-            case 1008: // Policy violation
-                closeInfo.friendlyMessage = 'Connection closed due to policy violation';
-                break;
-                
-            case 1011: // Server error
-                closeInfo.friendlyMessage = 'Server encountered an error';
-                break;
-                
-            default:
-                closeInfo.friendlyMessage = `Connection closed (code: ${event.code})`;
-        }
-        
-        // Publish detailed close event
+        // Publish close event with details
         if (ABDRE.EventBus) {
-            ABDRE.EventBus.publish('realtime:connection_closed', closeInfo);
-            
-            // Also publish as error for unexpected closures
-            if (event.code !== 1000 && event.code !== 1001) {
-                ABDRE.EventBus.publish(EVENTS.ERROR, {
-                    code: 'connection_closed',
-                    message: closeInfo.friendlyMessage,
-                    timestamp: closeInfo.timestamp,
-                    details: closeInfo
-                });
-            }
+            ABDRE.EventBus.publish(EVENTS.ERROR, {
+                code: 'connection_closed',
+                message: 'Connection lost unexpectedly',
+                timestamp: new Date().toISOString(),
+                details: {
+                    code: event.code,
+                    reason: event.reason || 'No reason provided',
+                    timestamp: new Date().toISOString(),
+                    wasClean: event.wasClean,
+                    friendlyMessage: event.wasClean ? 'Connection closed normally' : 'Connection lost unexpectedly'
+                }
+            });
         }
         
-        // Attempt to reconnect if needed
-        if (shouldReconnect) {
+        // Attempt reconnect if connection was lost unexpectedly
+        if (!event.wasClean) {
             _reconnect();
         }
     }
     
-    function _handleError(error) {
-        _log('Connection error:', error);
+    function _handleError(event) {
+        _log('Connection error:', event);
         
         // Publish error event
         if (ABDRE.EventBus) {
@@ -398,19 +355,97 @@ ABDRE.RealtimeService = (function() {
                 code: 'connection_error',
                 message: 'WebSocket connection error',
                 timestamp: new Date().toISOString(),
-                details: error
+                details: event
             });
         }
     }
     
-    function _authenticate() {
-        if (_socket && _socket.readyState === WebSocket.OPEN && _authToken) {
-            _log('Authenticating connection');
-            _socket.send(JSON.stringify({
-                type: 'authenticate',
-                token: _authToken
-            }));
+    function _reconnect() {
+        // Don't attempt to reconnect if we exceeded max attempts
+        if (_reconnectAttempts >= _maxReconnectAttempts) {
+            _log('Max reconnect attempts reached');
+            
+            // Publish error event
+            if (ABDRE.EventBus) {
+                ABDRE.EventBus.publish(EVENTS.ERROR, {
+                    code: 'max_reconnect_attempts',
+                    message: 'Failed to reconnect after maximum attempts',
+                    timestamp: new Date().toISOString(),
+                    details: {
+                        attempts: _reconnectAttempts,
+                        maxAttempts: _maxReconnectAttempts
+                    }
+                });
+            }
+            
+            return;
         }
+        
+        // Clear any existing reconnect timer
+        if (_reconnectTimer) {
+            clearTimeout(_reconnectTimer);
+            _reconnectTimer = null;
+        }
+        
+        // Calculate backoff delay with exponential increase (max 30s)
+        const delay = Math.min(30000, _reconnectInterval * Math.pow(1.5, _reconnectAttempts));
+        
+        _reconnectAttempts++;
+        
+        _log(`Reconnecting (attempt ${_reconnectAttempts}) in ${delay}ms`);
+        
+        // Publish reconnecting event
+        if (ABDRE.EventBus) {
+            ABDRE.EventBus.publish(EVENTS.RECONNECTING, {
+                attempt: _reconnectAttempts,
+                maxAttempts: _maxReconnectAttempts,
+                delay: delay,
+                timestamp: new Date().toISOString()
+            });
+        }
+        
+        // Schedule reconnect
+        _reconnectTimer = setTimeout(() => {
+            _connect();
+        }, delay);
+    }
+    
+    // Function to initiate Socket.IO handshake via HTTP
+    function _initiateSocketIOHandshake(url) {
+        return new Promise((resolve, reject) => {
+            // Extract base URL without path for Socket.IO handshake
+            const urlObj = new URL(url);
+            const baseUrl = `${urlObj.protocol}//${urlObj.host}`;
+            
+            // Perform Socket.IO handshake using fetch
+            const handshakeUrl = `${baseUrl}/socket.io/?EIO=4&transport=polling`;
+            
+            fetch(handshakeUrl)
+                .then(response => response.text())
+                .then(text => {
+                    // Socket.IO protocol prefixes responses with a number and JSON
+                    // Example: "0{\"sid\":\"...\",\"upgrades\":[\"websocket\"],\"pingInterval\":25000,\"pingTimeout\":20000}"
+                    const jsonStartIndex = text.indexOf('{');
+                    if (jsonStartIndex === -1) throw new Error('Invalid Socket.IO response');
+                    
+                    const jsonData = text.substring(jsonStartIndex);
+                    const data = JSON.parse(jsonData);
+                    
+                    if (!data.sid) throw new Error('No session ID in Socket.IO response');
+                    
+                    _log('Socket.IO handshake successful, sid:', data.sid);
+                    resolve({
+                        sid: data.sid,
+                        pingInterval: data.pingInterval,
+                        pingTimeout: data.pingTimeout,
+                        upgrades: data.upgrades
+                    });
+                })
+                .catch(error => {
+                    _log('Socket.IO handshake failed:', error);
+                    reject(error);
+                });
+        });
     }
     
     function _connect() {
@@ -429,78 +464,140 @@ ABDRE.RealtimeService = (function() {
         try {
             // Validate the WebSocket URL
             let wsUrl = _socketUrl;
+            let httpUrl;
             
             // Check if URL is properly formatted
             if (!wsUrl.startsWith('ws://') && !wsUrl.startsWith('wss://')) {
                 // Determine protocol based on page protocol
                 const isSecure = window.location.protocol === 'https:';
                 const wsProtocol = isSecure ? 'wss://' : 'ws://';
+                const httpProtocol = isSecure ? 'https://' : 'http://';
                 
                 // If URL starts with a slash, it's a relative path
                 if (wsUrl.startsWith('/')) {
-                    wsUrl = `${wsProtocol}${window.location.host}${wsUrl}`;
+                    // Force the hostname+port to use port 5000 for socket.io
+                    const hostname = window.location.hostname + ':5000';
+                    wsUrl = `${wsProtocol}${hostname}${wsUrl}`;
+                    httpUrl = `${httpProtocol}${hostname}${wsUrl.substring(wsUrl.indexOf('/'))}`;
                 } 
                 // If URL doesn't have a protocol but doesn't start with a slash,
                 // assume it's a hostname or hostname+path
                 else if (!wsUrl.includes('://')) {
+                    // Ensure we're using port 5000 for Socket.IO
+                    if (!wsUrl.includes(':5000')) {
+                        // Replace port if it exists, or add port 5000
+                        wsUrl = wsUrl.replace(/:\d+/, ':5000');
+                        if (!wsUrl.includes(':5000')) {
+                            wsUrl = wsUrl + ':5000';
+                        }
+                    }
                     wsUrl = `${wsProtocol}${wsUrl}`;
+                    httpUrl = `${httpProtocol}${wsUrl.substring(wsProtocol.length)}`;
                 }
+            } else {
+                // URL already has protocol (ws:// or wss://)
+                // Ensure we're using port 5000 if it's a WebSocket URL
+                if (!wsUrl.includes(':5000')) {
+                    wsUrl = wsUrl.replace(/:\d+\//, ':5000/');
+                    if (!wsUrl.match(/:\d+\//)) {
+                        wsUrl = wsUrl.replace(/(ws[s]?:\/\/[^\/]+)/, '$1:5000');
+                    }
+                }
+                
+                // Convert to HTTP URL for handshake
+                httpUrl = wsUrl.replace(/^ws/, 'http');
             }
             
-            _log('Connecting to', wsUrl);
-            _socket = new WebSocket(wsUrl);
+            console.log('Connecting to WebSocket URL:', wsUrl);
             
-            // Set up event handlers
-            _socket.onopen = _handleOpen;
-            _socket.onclose = _handleClose;
-            _socket.onerror = function(error) {
-                // Enhanced error handling with more details
-                const errorDetails = {
-                    timestamp: new Date().toISOString(),
-                    url: wsUrl,
-                    readyState: _socket ? _socket.readyState : 'null',
-                    reconnectAttempts: _reconnectAttempts
-                };
-                
-                _log('WebSocket connection error:', error, errorDetails);
-                
-                // Publish detailed error event
-                if (ABDRE.EventBus) {
-                    ABDRE.EventBus.publish(EVENTS.ERROR, {
-                        code: 'connection_error',
-                        message: 'Failed to establish WebSocket connection',
-                        timestamp: errorDetails.timestamp,
-                        details: errorDetails
-                    });
-                }
-                
-                _handleError(error);
-            };
-            _socket.onmessage = _handleMessage;
-            
+            // For Socket.IO specifically
+            // First perform HTTP handshake to get session ID
+            _initiateSocketIOHandshake(httpUrl)
+                .then(handshakeData => {
+                    _socketIoSessionId = handshakeData.sid;
+                    
+                    // Now create WebSocket connection with session ID
+                    let socketUrl = wsUrl;
+                    if (!socketUrl.includes('?')) {
+                        socketUrl += '?';
+                    } else {
+                        socketUrl += '&';
+                    }
+                    
+                    // Ensure the path ends with a slash before the query parameters
+                    if (!socketUrl.includes('/socket.io/')) {
+                        socketUrl = socketUrl.replace('/socket.io', '/socket.io/');
+                    }
+                    
+                    socketUrl += `EIO=4&transport=${_transportType}&sid=${_socketIoSessionId}`;
+                    
+                    // Add token for auth if available
+                    if (_authToken) {
+                        socketUrl += `&token=${encodeURIComponent(_authToken)}`;
+                    }
+                    
+                    _log('Opening WebSocket connection to:', socketUrl);
+                    _socket = new WebSocket(socketUrl);
+                    
+                    // Set up event handlers
+                    _socket.onopen = _handleOpen;
+                    _socket.onclose = _handleClose;
+                    _socket.onmessage = _handleMessage;
+                    _socket.onerror = _handleError;
+                })
+                .catch(error => {
+                    _log('Failed to perform Socket.IO handshake:', error);
+                    _setConnectionState(STATES.DISCONNECTED);
+                    _reconnect();
+                });
         } catch (error) {
-            _log('Failed to create WebSocket:', error);
+            _log('Connection error:', error);
             
-            // Publish detailed error about the failure
+            // Publish error event
             if (ABDRE.EventBus) {
                 ABDRE.EventBus.publish(EVENTS.ERROR, {
-                    code: 'websocket_creation_error',
-                    message: 'Failed to create WebSocket connection',
+                    code: 'connection_error',
+                    message: 'Failed to establish WebSocket connection',
                     timestamp: new Date().toISOString(),
                     details: {
-                        errorMessage: error.message,
-                        url: _socketUrl
+                        timestamp: new Date().toISOString(),
+                        url: wsUrl,
+                        readyState: _socket ? _socket.readyState : null,
+                        reconnectAttempts: _reconnectAttempts,
+                        error: error
                     }
                 });
             }
             
+            // Set disconnect state
             _setConnectionState(STATES.DISCONNECTED);
+            
+            // Attempt reconnect
             _reconnect();
         }
     }
     
+    function _testConnection() {
+        if (_state !== STATES.CONNECTED) {
+            return false;
+        }
+        
+        // Send a test ping with timestamp as ID
+        const testId = Date.now();
+        
+        _socket.send(JSON.stringify({
+            type: 'ping',
+            testId: testId
+        }));
+        
+        return true;
+    }
+    
     // Public API
     return {
+        STATES: STATES,
+        EVENTS: EVENTS,
+        
         init: function(options = {}) {
             // Don't re-initialize if already initialized
             if (_initialized) {
@@ -512,12 +609,22 @@ ABDRE.RealtimeService = (function() {
             if (options.url) {
                 _socketUrl = options.url;
             } else {
-                const host = options.host || window.location.host;
-                const path = options.path || '/ws';
+                // Always force port 5000 for socket.io
+                const host = options.host || window.location.hostname + ':5000';
+                const path = options.path || '/socket.io';
                 const isSecure = window.location.protocol === 'https:';
                 const wsProtocol = isSecure ? 'wss://' : 'ws://';
                 
-                _socketUrl = `${wsProtocol}${host}${path}`;
+                // Ensure host has port 5000
+                let hostWithPort = host;
+                if (!hostWithPort.includes(':5000')) {
+                    hostWithPort = hostWithPort.replace(/:\d+/, ':5000');
+                    if (!hostWithPort.includes(':')) {
+                        hostWithPort += ':5000';
+                    }
+                }
+                
+                _socketUrl = `${wsProtocol}${hostWithPort}${path}`;
             }
             
             // Set configuration options
@@ -550,20 +657,8 @@ ABDRE.RealtimeService = (function() {
         },
         
         disconnect: function() {
-            _log('Disconnecting');
-            
-            // Clear reconnect timer if active
-            if (_reconnectTimer) {
-                clearTimeout(_reconnectTimer);
-                _reconnectTimer = null;
-            }
-            
-            // Clear heartbeat
-            _clearHeartbeat();
-            
-            // Close socket if it exists
             if (_socket) {
-                _socket.close(1000, 'Normal closure');
+                _socket.close();
                 _socket = null;
             }
             
@@ -572,29 +667,22 @@ ABDRE.RealtimeService = (function() {
         },
         
         reconnect: function() {
-            _log('Manual reconnect triggered');
-            this.disconnect();
-            _reconnectAttempts = 0; // Reset counter for manual reconnect
-            _connect();
+            _reconnectAttempts = 0; // Reset reconnect attempts
+            _reconnect();
             return this;
         },
         
         sendMessage: function(message) {
-            if (!message.type) {
-                throw new Error('Message must have a type property');
-            }
-            
-            // If connected, send immediately
-            if (_socket && _socket.readyState === WebSocket.OPEN && _state === STATES.CONNECTED) {
-                _log('Sending message:', message);
+            if (_state === STATES.CONNECTED && _socket && _socket.readyState === WebSocket.OPEN) {
                 _socket.send(JSON.stringify(message));
-                return true;
+            } else {
+                _queueMessage(message);
             }
-            
-            // Otherwise queue the message
-            _log('Queuing message:', message);
-            _messageQueue.push(message);
-            return false;
+            return this;
+        },
+        
+        testConnection: function() {
+            return _testConnection();
         },
         
         getState: function() {
@@ -608,47 +696,26 @@ ABDRE.RealtimeService = (function() {
         setAuthToken: function(token) {
             _authToken = token;
             
-            // If connected, send authentication
-            if (_socket && _socket.readyState === WebSocket.OPEN) {
+            // If connected, send authentication with new token
+            if (_state === STATES.CONNECTED && _socket && _socket.readyState === WebSocket.OPEN) {
                 _authenticate();
             }
             
             return this;
         },
         
-        testConnection: function() {
-            _log('Testing connection');
-            
-            // If not connected, return connection state
-            if (!_socket || _socket.readyState !== WebSocket.OPEN) {
-                return {
-                    connected: false,
-                    state: _state,
-                    reason: 'Not connected'
-                };
-            }
-            
-            // Send a ping to test connection
-            const pingStart = Date.now();
-            _socket.send(JSON.stringify({ type: 'ping', testId: pingStart }));
-            
-            // Return current state
+        getDebugInfo: function() {
             return {
-                connected: true,
                 state: _state,
+                socketUrl: _socketUrl,
+                socketState: _socket ? _socket.readyState : null,
+                reconnectAttempts: _reconnectAttempts,
+                maxReconnectAttempts: _maxReconnectAttempts,
+                queueLength: _messageQueue.length,
                 latency: _socketLatency,
-                lastTestTime: new Date().toISOString()
+                heartbeatMissCount: _heartbeatMissCount,
+                socketIoSessionId: _socketIoSessionId
             };
-        },
-        
-        resetReconnectAttempts: function() {
-            _reconnectAttempts = 0;
-            _log('Reconnect attempts counter reset');
-            return this;
-        },
-        
-        // Constants that can be used by subscribers
-        STATES: STATES,
-        EVENTS: EVENTS
+        }
     };
 })(); 

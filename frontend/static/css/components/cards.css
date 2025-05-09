@@ -1,0 +1,70 @@
+/**
+ * ABDRE Chat - Card Component Styles
+ */
+
+.card {
+    background-color: var(--color-bg-card);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.card--interactive {
+    cursor: pointer;
+}
+
+.card--interactive:hover {
+    transform: translateY(-2px);
+}
+
+.card--flat {
+    box-shadow: none;
+    border: 1px solid var(--color-border);
+}
+
+.card__header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.card__body {
+    padding: 1rem;
+}
+
+.card__footer {
+    padding: 1rem;
+    border-top: 1px solid var(--color-border-light);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.card__title {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.card__subtitle {
+    margin: 0.25rem 0 0;
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+}
+
+.card--compact .card__header {
+    padding: 0.75rem 1rem;
+}
+
+.card--compact .card__body {
+    padding: 0.75rem 1rem;
+}
+
+.card--compact .card__footer {
+    padding: 0.75rem 1rem;
+} 

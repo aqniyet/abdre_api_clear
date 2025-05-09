@@ -11,7 +11,7 @@ window.ABDRE = window.ABDRE || {};
 // API Client Module
 ABDRE.ApiClient = (function() {
     // Private variables
-    let _baseUrl = '';
+    let _baseUrl = '/api';
     let _debug = false;
     let _defaultHeaders = {
         'Content-Type': 'application/json',
@@ -21,8 +21,14 @@ ABDRE.ApiClient = (function() {
     // Request queue for rate limiting
     const _requestQueue = [];
     let _processingQueue = false;
+    let _initialized = false;
     
     // Private methods
+    function _log(...args) {
+        if (!_debug) return;
+        console.log('[ApiClient]', ...args);
+    }
+    
     function _logRequest(method, url, data, headers) {
         if (!_debug) return;
         
@@ -175,16 +181,44 @@ ABDRE.ApiClient = (function() {
     
     // Public API
     return {
-        init: function(baseUrl = '', options = {}) {
-            _baseUrl = baseUrl;
-            _debug = options.debug || false;
-            
-            // Add custom default headers
-            if (options.headers) {
-                Object.assign(_defaultHeaders, options.headers);
+        init: function(options = {}) {
+            // Don't re-initialize if already initialized
+            if (_initialized) {
+                console.warn('ApiClient already initialized');
+                return this;
             }
             
-            console.info(`API Client initialized with base URL: ${_baseUrl}`);
+            // Log the input type and value for debugging
+            console.log('ApiClient init called with:', typeof options, options);
+            
+            // Set options
+            if (typeof options === 'string') {
+                // Legacy support for just passing baseUrl as string
+                _baseUrl = options;
+                _debug = false;
+                console.log('ApiClient using string baseUrl:', _baseUrl);
+            } else {
+                _baseUrl = options.baseUrl || '/api';
+                _debug = options.debug || false;
+                console.log('ApiClient using object options, baseUrl:', _baseUrl);
+            }
+            
+            // Set default headers
+            _defaultHeaders = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            };
+            
+            // Ensure _baseUrl doesn't end with a slash
+            if (_baseUrl.endsWith('/')) {
+                _baseUrl = _baseUrl.slice(0, -1);
+            }
+            
+            _log('Initialized with base URL:', _baseUrl);
+            console.log('API Client initialized with base URL:', _baseUrl);
+            
+            _initialized = true;
+            return this;
         },
         
         /**

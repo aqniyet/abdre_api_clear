@@ -258,14 +258,73 @@ def refresh_token():
             )
             
             return response
-        
-        # Token is still valid and not close to expiration
-        return jsonify({'success': True, 'message': 'Token still valid'})
-        
+        else:
+            # Token still valid, no need to refresh
+            return jsonify({
+                'success': True,
+                'message': 'Token still valid'
+            })
+            
     except jwt.ExpiredSignatureError:
         return jsonify({'error': 'Token expired'}), 401
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
+
+@auth_bp.route('/check-session', methods=['GET'])
+def check_session():
+    """Check if user is authenticated and return session information"""
+    # Get token from request
+    auth_token = request.cookies.get('auth_token')
+    
+    if not auth_token:
+        return jsonify({
+            'authenticated': False,
+            'message': 'No authentication token found'
+        })
+    
+    try:
+        # Decode token
+        payload = jwt.decode(auth_token, JWT_SECRET, algorithms=['HS256'])
+        
+        # Check if user or guest token
+        is_guest = payload.get('is_guest', False)
+        
+        if is_guest:
+            # Return guest user info
+            return jsonify({
+                'authenticated': True,
+                'is_guest': True,
+                'visitor_id': payload.get('visitor_id'),
+                'exp': payload.get('exp')
+            })
+        else:
+            # Return authenticated user info
+            return jsonify({
+                'authenticated': True,
+                'is_guest': False,
+                'user': {
+                    'user_id': payload.get('user_id'),
+                    'username': payload.get('username')
+                },
+                'exp': payload.get('exp')
+            })
+            
+    except jwt.ExpiredSignatureError:
+        return jsonify({
+            'authenticated': False,
+            'message': 'Token expired'
+        })
+    except jwt.InvalidTokenError:
+        return jsonify({
+            'authenticated': False,
+            'message': 'Invalid token'
+        })
+    except Exception as e:
+        logger.exception(f"Error checking session: {str(e)}")
+        return jsonify({
+            'authenticated': False,
+            'message': 'Error checking authentication status'
+        })
 
 # Initialize blueprint in app
 def init_app(app):

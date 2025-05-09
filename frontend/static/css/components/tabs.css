@@ -1,0 +1,51 @@
+/**
+ * ABDRE Chat - Tabs Component Styles
+ */
+
+.tabs {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.tabs-header {
+    display: flex;
+    border-bottom: 1px solid var(--color-border-light);
+    margin-bottom: 1rem;
+    overflow-x: auto;
+    scrollbar-width: none; /* Firefox */
+}
+
+.tabs-header::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Edge */
+}
+
+.tab-button {
+    padding: 0.75rem 1.25rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.tab-button:hover {
+    color: var(--color-text-primary);
+}
+
+.tab-button.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+}
+
+.tab-content {
+    display: none;
+    padding: 0.5rem 0;
+}
+
+.tab-content.active {
+    display: block;
+} 

@@ -64,8 +64,9 @@ def create_app(config=None):
         from backend.controllers.user_controller import user_bp
         app.register_blueprint(user_bp)
         
-        from backend.controllers.logs_controller import logs_bp
+        from backend.controllers.logs_controller import logs_bp, root_logs_bp
         app.register_blueprint(logs_bp)
+        app.register_blueprint(root_logs_bp)
         
         from backend.controllers.api_controller import init_app as init_api_controller
         init_api_controller(app)

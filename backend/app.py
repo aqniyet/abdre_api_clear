@@ -15,13 +15,11 @@ from backend import create_app
 app = create_app()
 
 if __name__ == '__main__':
-    # Get port from environment or use default
-    port = int(os.environ.get('PORT', 5000))
-    
-    # Get debug mode from environment
+    # Load configuration from environment variables
+    host = os.environ.get('HOST', '0.0.0.0')
+    port = int(os.environ.get('PORT', 5001))  # Use port 5001 to not conflict with realtime service
     debug = os.environ.get('DEBUG', 'False').lower() == 'true'
     
+    # Start the application
     logging.info(f"Starting ABDRE Chat Application on port {port}, debug={debug}")
-    
-    # Run application
-    app.run(host='0.0.0.0', port=port, debug=debug) 
+    app.run(host=host, port=port, debug=debug) 

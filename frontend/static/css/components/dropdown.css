@@ -1,0 +1,89 @@
+/**
+ * ABDRE Chat - Dropdown Component Styles
+ */
+
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-toggle {
+    cursor: pointer;
+    user-select: none;
+}
+
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 1000;
+    min-width: 220px;
+    padding: 0.5rem 0;
+    margin: 0.5rem 0 0;
+    background-color: var(--color-bg-card);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-md);
+    opacity: 0;
+    transform: translateY(-10px);
+    visibility: hidden;
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+}
+
+.dropdown-menu.show {
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+}
+
+.dropdown-header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--color-border-light);
+    margin-bottom: 0.5rem;
+}
+
+.dropdown-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.dropdown-list li {
+    padding: 0;
+    margin: 0;
+}
+
+.dropdown-list li a,
+.dropdown-list li button,
+.dropdown-btn {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 0.6rem 1rem;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.dropdown-list li a:hover,
+.dropdown-list li button:hover,
+.dropdown-btn:hover {
+    background-color: var(--color-bg-hover);
+}
+
+.dropdown-list li a svg,
+.dropdown-list li button svg,
+.dropdown-btn svg {
+    margin-right: 0.75rem;
+    color: var(--color-text-secondary);
+}
+
+.dropdown-divider {
+    height: 1px;
+    margin: 0.5rem 0;
+    background-color: var(--color-border-light);
+} 

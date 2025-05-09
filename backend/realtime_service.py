@@ -9,7 +9,7 @@ import logging
 import json
 import uuid
 import time
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import jwt
 
@@ -28,11 +28,17 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_for_development
 # JWT Secret key - should match the one in auth_middleware
 JWT_SECRET = 'your-secret-key-here'  # In production, use env var
 
-# Initialize Socket.IO without eventlet
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+# Initialize Socket.IO
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*", 
+    json=json,
+    async_mode='threading',
+    path='/socket.io'
+)
 
-# Connected clients
-connected_clients = {}
+# Active client connections
+active_clients = {}
 
 # Map of username to socket ID
 user_sockets = {}
@@ -48,6 +54,36 @@ def health_check():
     """Health check endpoint for the realtime service"""
     return {'status': 'healthy', 'service': 'realtime'}
 
+@app.route('/socket.io-test')
+def socket_io_test():
+    return jsonify({
+        "status": "success",
+        "message": "Socket.IO server is running",
+        "mode": socketio.async_mode
+    })
+
+@app.route('/logs/client-error', methods=['POST'])
+def log_client_error():
+    """Endpoint to log client-side errors"""
+    try:
+        error_data = request.json
+        logger.error(f"Client Error: {json.dumps(error_data)}")
+        return jsonify({"status": "success", "message": "Error logged"})
+    except Exception as e:
+        logger.error(f"Error logging client error: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/logs/file-log', methods=['POST'])
+def log_client_file():
+    """Endpoint to log client-side file logs"""
+    try:
+        log_data = request.json
+        logger.info(f"Client Log: {json.dumps(log_data)}")
+        return jsonify({"status": "success", "message": "Log recorded"})
+    except Exception as e:
+        logger.error(f"Error recording file log: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 def authenticate_token(token):
     """
     Authenticate JWT token and return user info
@@ -60,6 +96,14 @@ def authenticate_token(token):
     """
     if not token:
         return None
+    
+    # For testing/debugging, accept "guest" token
+    if token == 'guest':
+        return {
+            'user_id': f'guest_{str(uuid.uuid4())}',
+            'username': 'Guest',
+            'is_guest': True
+        }
         
     try:
         # Remove Bearer prefix if present
@@ -97,58 +141,33 @@ def authenticate_token(token):
 
 @socketio.on('connect')
 def handle_connect():
-    """Handle client connection"""
-    token = request.args.get('token')
-    client_id = request.sid
-    
-    # For testing/debugging, accept "guest" token
-    if token == 'guest':
-        user = {
-            'user_id': f'guest_{str(uuid.uuid4())}',
-            'username': 'Guest',
-            'is_guest': True
-        }
-    else:
-        # Authenticate client
-        user = authenticate_token(token)
-        
-    if not user:
-        logger.warning(f'Unauthorized connection attempt: {client_id}')
-        return False
-        
-    # Store client info
-    user_id = user.get('user_id')
-    connected_clients[client_id] = {
-        'user_id': user_id,
-        'username': user.get('username'),
-        'rooms': set(),
-        'is_guest': user.get('is_guest', False)
+    client_id = str(uuid.uuid4())
+    active_clients[client_id] = {
+        'sid': request.sid,
+        'authenticated': False,
+        'user_id': None,
+        'connected_at': time.time(),
+        'rooms': []
     }
     
-    # Map user to socket
-    user_sockets[user_id] = client_id
+    logger.info(f"Client connected: {request.sid}, total clients: {len(active_clients)}")
     
-    # Set initial status
-    user_status[user_id] = 'online'
-    
-    logger.info(f'Client connected: {client_id} (User: {user.get("username")})')
-    
-    # Notify client of successful connection
-    emit('connect_success', {
-        'user_id': user_id,
-        'is_guest': user.get('is_guest', False),
-        'username': user.get('username')
+    # Send welcome message
+    emit('connection_status', {
+        'status': 'connected',
+        'client_id': client_id, 
+        'server_time': time.time(),
+        'active_connections': len(active_clients),
+        'server_load': 'normal'
     })
-    
-    return True
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle client disconnection"""
     client_id = request.sid
     
-    if client_id in connected_clients:
-        client = connected_clients[client_id]
+    if client_id in active_clients:
+        client = active_clients[client_id]
         user_id = client.get('user_id')
         
         # Remove from user socket mapping
@@ -171,8 +190,8 @@ def handle_disconnect():
         # Set user status to offline
         user_status[user_id] = 'offline'
         
-        # Remove from connected clients
-        del connected_clients[client_id]
+        # Remove from active clients
+        del active_clients[client_id]
         
         logger.info(f'Client disconnected: {client_id}')
 
@@ -186,7 +205,7 @@ def handle_join(data):
     """
     client_id = request.sid
     
-    if client_id not in connected_clients:
+    if client_id not in active_clients:
         logger.warning(f'Unauthorized join attempt: {client_id}')
         emit('error', {'message': 'Unauthorized'})
         return
@@ -197,7 +216,7 @@ def handle_join(data):
         emit('error', {'message': 'Room ID required'})
         return
     
-    client = connected_clients[client_id]
+    client = active_clients[client_id]
     user_id = client.get('user_id')
     
     # Join room
@@ -236,7 +255,7 @@ def handle_leave(data):
     """
     client_id = request.sid
     
-    if client_id not in connected_clients:
+    if client_id not in active_clients:
         logger.warning(f'Unauthorized leave attempt: {client_id}')
         return
     
@@ -246,7 +265,7 @@ def handle_leave(data):
         emit('error', {'message': 'Room ID required'})
         return
     
-    client = connected_clients[client_id]
+    client = active_clients[client_id]
     user_id = client.get('user_id')
     
     # Leave room
@@ -278,7 +297,7 @@ def handle_message(data):
     """
     client_id = request.sid
     
-    if client_id not in connected_clients:
+    if client_id not in active_clients:
         emit('error', {'message': 'Unauthorized'})
         return
     
@@ -290,7 +309,7 @@ def handle_message(data):
         emit('error', {'message': 'Room ID and content required'})
         return
     
-    client = connected_clients[client_id]
+    client = active_clients[client_id]
     user_id = client.get('user_id')
     
     # Validate user is in the room
@@ -360,7 +379,7 @@ def handle_typing(data):
     """
     client_id = request.sid
     
-    if client_id not in connected_clients:
+    if client_id not in active_clients:
         return
     
     # Get info
@@ -370,7 +389,7 @@ def handle_typing(data):
     if not room_id:
         return
     
-    client = connected_clients[client_id]
+    client = active_clients[client_id]
     user_id = client.get('user_id')
     
     # Send to room except sender
@@ -390,7 +409,7 @@ def handle_read_receipt(data):
     """
     client_id = request.sid
     
-    if client_id not in connected_clients:
+    if client_id not in active_clients:
         return
     
     # Get info
@@ -400,7 +419,7 @@ def handle_read_receipt(data):
     if not room_id:
         return
     
-    client = connected_clients[client_id]
+    client = active_clients[client_id]
     user_id = client.get('user_id')
     
     # Validate user is in the room
@@ -435,10 +454,10 @@ def handle_unread_count():
     """
     client_id = request.sid
     
-    if client_id not in connected_clients:
+    if client_id not in active_clients:
         return
     
-    client = connected_clients[client_id]
+    client = active_clients[client_id]
     user_id = client.get('user_id')
     
     # In a real implementation, this would query a database
@@ -476,7 +495,7 @@ def handle_user_status(data):
     """
     client_id = request.sid
     
-    if client_id not in connected_clients:
+    if client_id not in active_clients:
         return
     
     # Get info
@@ -485,7 +504,7 @@ def handle_user_status(data):
     if not status:
         return
     
-    client = connected_clients[client_id]
+    client = active_clients[client_id]
     user_id = client.get('user_id')
     
     # Update status
@@ -526,16 +545,9 @@ def handle_error(data):
     logger.error(f'Error from client {client_id}: {data}')
 
 if __name__ == '__main__':
-    # Get port from environment or use default
-    port = int(os.environ.get('REALTIME_PORT', 5506))
-    
-    # Get host from environment or use default
-    host = os.environ.get('REALTIME_HOST', '0.0.0.0')
-    
-    # Get debug mode from environment
+    host = os.environ.get('HOST', '0.0.0.0')
+    port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('DEBUG', 'False').lower() == 'true'
     
-    logger.info(f"Starting ABDRE Chat Realtime Service on {host}:{port}, debug={debug}")
-    
-    # Run with Flask development server for simplicity
+    logger.info(f'Starting ABDRE Chat Realtime Service on {host}:{port}, debug={debug}')
     socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True) 
