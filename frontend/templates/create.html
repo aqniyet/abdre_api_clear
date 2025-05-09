@@ -81,12 +81,45 @@
                     }
                 });
                 
+                // Handle hash fragment in URL
+                if (window.location.hash) {
+                    const hash = window.location.hash.substring(1);
+                    if (hash === 'qr') {
+                        // Show QR code invitation modal
+                        setTimeout(function() {
+                            ABDRE.Services.QRInvitation.showQRInvitation();
+                        }, 300);
+                    }
+                }
+                
                 // Hook up the QR code button
                 const qrButton = document.getElementById('create-qr-btn');
                 if (qrButton) {
                     qrButton.addEventListener('click', function() {
                         ABDRE.Services.QRInvitation.showQRInvitation();
                     });
+                }
+            }
+            
+            // Handle hash fragment for direct and group options
+            if (window.location.hash) {
+                const hash = window.location.hash.substring(1);
+                
+                // Find the correct tab based on hash
+                if (hash === 'direct' || hash === 'group') {
+                    // Here we would activate the correct tab if using tabs,
+                    // or trigger a specific action based on the hash
+                    
+                    const directButton = document.getElementById('create-direct-btn');
+                    const groupButton = document.getElementById('create-group-btn');
+                    
+                    if (hash === 'direct' && directButton) {
+                        // Simulate a click on the direct chat button
+                        directButton.click();
+                    } else if (hash === 'group' && groupButton) {
+                        // Simulate a click on the group chat button
+                        groupButton.click();
+                    }
                 }
             }
         });

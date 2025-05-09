@@ -18,18 +18,23 @@
 
 {% block extra_css %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/chats.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/create_chat_popup.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/qr_invite.css') }}">
 {% endblock %}
 
 {% block app_content %}
     <div class="page-header">
         <h1>My Chats</h1>
         <div class="page-actions">
-            <a href="/create" class="btn btn-primary">
+            <a href="#" class="btn btn-primary" id="new-chat-btn">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M19 13H13V19H11V13H5V11H11V5H13V11H19V13Z" fill="currentColor"/>
                 </svg>
                 New Chat
             </a>
+            
+            <!-- Include Create Chat Popup -->
+            {% include 'components/create_chat_popup.html' %}
         </div>
     </div>
     
@@ -120,6 +125,9 @@
             </div>
         </div>
     </div>
+    
+    <!-- Include QR Code Modal -->
+    {% include 'components/qr_invite.html' %}
 {% endblock %}
 
 {% block app_js %}
@@ -153,6 +161,16 @@
             if (ABDRE.Enhancers.ChatList) {
                 ABDRE.Enhancers.ChatList.init(chatsData);
             }
+            
+            // Initialize Create Chat Popup
+            if (ABDRE.Enhancers.CreateChatPopup) {
+                ABDRE.Enhancers.CreateChatPopup.init();
+            }
+            
+            // Initialize QR Invitation Service
+            if (ABDRE.Services.QRInvitation) {
+                ABDRE.Services.QRInvitation.init();
+            }
         });
     </script>
 {% endblock %}
@@ -161,4 +179,6 @@
     {{ super() }}
     <script src="{{ url_for('static', filename='js/services/chat_service.js') }}"></script>
     <script src="{{ url_for('static', filename='js/enhancers/chat_list_enhancer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/enhancers/create_chat_popup_enhancer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/services/qr_invitation_service.js') }}"></script>
 {% endblock %} 
