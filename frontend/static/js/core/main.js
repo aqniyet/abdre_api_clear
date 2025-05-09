@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (ABDRE.ApiClient) {
         ABDRE.ApiClient.init({
             debug: isDebugMode,
-            baseUrl: window.location.protocol + '//' + window.location.hostname + ':5001/api'
+            baseUrl: window.location.protocol + '//' + window.location.host + '/api'
         });
         console.info('✓ ApiClient initialized');
     } else {
