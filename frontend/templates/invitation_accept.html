@@ -162,7 +162,6 @@
             const chatNameEl = document.getElementById('chat-name');
             const invitationNoteEl = document.getElementById('invitation-note');
             const inviterNameEl = document.getElementById('inviter-name');
-            const expirationDateEl = document.getElementById('expiration-date');
             const goToChatLink = document.getElementById('go-to-chat-link');
             const successGoToChatLink = document.getElementById('success-go-to-chat-link');
             
@@ -209,8 +208,8 @@
                     showState(validState);
                     
                     // Fill in details
-                    chatNameEl.textContent = invitation.chat_name;
-                    inviterNameEl.textContent = invitation.inviter_name;
+                    chatNameEl.textContent = invitation.chat_name || 'New Chat';
+                    inviterNameEl.textContent = invitation.creator_name || invitation.inviter_name || 'Someone';
                     
                     if (invitation.note) {
                         invitationNoteEl.textContent = `"${invitation.note}"`;
@@ -219,32 +218,29 @@
                         invitationNoteEl.style.display = 'none';
                     }
                     
-                    if (invitation.expires_at) {
-                        expirationDateEl.textContent = formatDate(invitation.expires_at);
-                    } else {
-                        expirationDateEl.textContent = 'Never';
+                    // If this is a QR code invitation, show the expiration time
+                    if (invitation.qr_enabled && invitation.expires_in_seconds) {
+                        const minutes = Math.floor(invitation.expires_in_seconds / 60);
+                        const seconds = invitation.expires_in_seconds % 60;
+                        const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                        
+                        const expirationEl = document.getElementById('expiration-date');
+                        if (expirationEl) {
+                            expirationEl.textContent = `Expires in ${timeStr}`;
+                        }
                     }
                     
-                    // Setup accept button
-                    acceptBtn.addEventListener('click', function() {
-                        acceptBtn.disabled = true;
-                        acceptBtn.textContent = 'Joining...';
-                        
-                        ABDRE.InvitationService.acceptInvitation(invitationCode)
-                            .then(result => {
-                                showState(successState);
-                                successGoToChatLink.href = `/chat/${result.chat_id}`;
-                            })
-                            .catch(error => {
-                                acceptBtn.disabled = false;
-                                acceptBtn.textContent = 'Accept & Join Chat';
-                                alert('Failed to join chat: ' + (error.message || 'Unknown error'));
-                            });
-                    });
+                    // Mark as scanned if it's a QR code invitation
+                    if (invitation.qr_enabled) {
+                        // Update the invitation status to mark it as scanned
+                        fetch(`/api/chats/invitation-status/${invitationCode}?mark_scanned=true`)
+                            .then(response => response.json())
+                            .catch(error => console.error('Error marking invitation as scanned:', error));
+                    }
                     
-                    // Setup decline button
-                    declineBtn.addEventListener('click', function() {
-                        window.location.href = '/chats';
+                    // Set up accept button
+                    acceptBtn.addEventListener('click', function() {
+                        acceptInvitation(invitationCode);
                     });
                 })
                 .catch(error => {
@@ -252,6 +248,35 @@
                     showState(invalidState);
                 });
         });
+
+        // Accept invitation function
+        function acceptInvitation(code) {
+            // Show loading state
+            showState(loadingState);
+            
+            // Accept invitation
+            ABDRE.InvitationService.acceptInvitation(code)
+                .then(response => {
+                    // Show success state
+                    showState(successState);
+                    
+                    // Set up chat link
+                    if (response.chat_id) {
+                        successGoToChatLink.href = `/chat/${response.chat_id}`;
+                        
+                        // Auto redirect after a delay for QR code invitations
+                        if (response.qr_enabled) {
+                            setTimeout(() => {
+                                window.location.href = `/chat/${response.chat_id}`;
+                            }, 2000);
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error accepting invitation:', error);
+                    showState(invalidState);
+                });
+        }
     </script>
 </body>
 </html> 

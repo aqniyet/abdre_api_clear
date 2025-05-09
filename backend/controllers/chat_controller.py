@@ -44,6 +44,7 @@ class ChatController:
         self.app.add_url_rule('/api/chats/generate-invitation', 'generate_invitation', self.generate_invitation, methods=['POST'])
         self.app.add_url_rule('/api/chats/invitation-status/<token>', 'get_invitation_status', self.get_invitation_status, methods=['GET'])
         self.app.add_url_rule('/api/chats/accept-invitation/<token>', 'accept_invitation', self.accept_invitation, methods=['POST'])
+        self.app.add_url_rule('/api/chats/qrcode/<token>', 'generate_qr_code', self.generate_qr_code, methods=['GET'])
     
     def get_user_chats(self):
         """Get all chats for current authenticated user"""
@@ -226,18 +227,32 @@ class ChatController:
         try:
             user_id = g.user.get('user_id')
             
+            # Get options from request
+            data = request.get_json() or {}
+            
+            # Get expiration time (default: 15 minutes)
+            expiration_minutes = data.get('expiration_minutes', 15)
+            expires_at = time.time() + (expiration_minutes * 60)
+            
             # Generate a unique token
             token = f"inv_{uuid.uuid4()}"
             
-            # Create invitation data - in a real app, this would be stored
+            # Create invitation data
             invitation = {
                 'token': token,
                 'invitation_token': token,  # Add both fields for compatibility
                 'created_by': user_id,
+                'creator_name': g.user.get('display_name') or g.user.get('username', 'User'),
                 'created_at': time.time(),
-                'expires_at': time.time() + 86400,  # 24 hours
-                'status': 'active'
+                'expires_at': expires_at,
+                'status': 'active',
+                'qr_enabled': True,
+                'expires_in_seconds': int(expires_at - time.time()),
+                'created_for_qr': data.get('for_qr', True)
             }
+            
+            # Store the invitation in a database (in a real implementation)
+            # For this demo, we'll assume it's stored
             
             return jsonify(invitation)
         except Exception as e:
@@ -247,13 +262,26 @@ class ChatController:
     def get_invitation_status(self, token):
         """Get the status of a chat invitation"""
         # For this simplified implementation, we'll always return active
+        # In a real implementation, we would look up the token in the database
+        
+        # Calculate time remaining
+        current_time = time.time()
+        # Normally this would be retrieved from the database
+        created_at = current_time - 60  # Assume created 1 minute ago
+        expires_at = created_at + (15 * 60)  # 15 minutes from creation
+        seconds_remaining = max(0, expires_at - current_time)
+        
         invitation = {
             'token': token,
             'invitation_token': token,  # Add for consistency
-            'status': 'active',
-            'seconds_remaining': 86400,  # 24 hours
-            'created_at': time.time() - 3600,  # 1 hour ago
-            'scanned': False
+            'status': 'active' if seconds_remaining > 0 else 'expired',
+            'seconds_remaining': int(seconds_remaining),
+            'created_at': created_at,
+            'expires_at': expires_at,
+            'scanned': request.args.get('mark_scanned', 'false').lower() == 'true',
+            'is_expired': seconds_remaining <= 0,
+            'expires_in_seconds': int(seconds_remaining),
+            'qr_enabled': True
         }
         
         return jsonify(invitation)
@@ -292,6 +320,50 @@ class ChatController:
         except Exception as e:
             logger.exception(f"Error in accept_invitation: {str(e)}")
             return jsonify({'error': 'Failed to accept invitation'}), 500
+
+    def generate_qr_code(self, token):
+        """Generate a QR code image for an invitation token"""
+        if not g.user:
+            return jsonify({'error': 'Unauthorized'}), 401
+        
+        try:
+            # Generate QR code with qrcode library
+            import qrcode
+            import io
+            import base64
+            
+            # Get invitation URL
+            host = request.host_url.rstrip('/')
+            invitation_url = f"{host}/invite/{token}"
+            
+            # Create QR code
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_H,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(invitation_url)
+            qr.make(fit=True)
+            
+            # Create an image from the QR code
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            # Convert image to base64
+            buffer = io.BytesIO()
+            img.save(buffer, format="PNG")
+            qr_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            
+            # Return JSON response with base64 image
+            return jsonify({
+                'token': token,
+                'qr_image': f"data:image/png;base64,{qr_base64}",
+                'invitation_url': invitation_url
+            })
+            
+        except Exception as e:
+            logger.exception(f"Error generating QR code: {str(e)}")
+            return jsonify({'error': 'Failed to generate QR code'}), 500
 
 # Initialize controller
 chat_controller = ChatController()

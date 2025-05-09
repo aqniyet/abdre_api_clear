@@ -3,7 +3,7 @@ Web Routes for ABDRE Chat Application
 Defines URL routes for server-rendered web pages
 """
 
-from flask import Blueprint, redirect, url_for
+from flask import Blueprint, redirect, url_for, request
 
 from backend.controllers.render_controller import render_controller
 
@@ -95,6 +95,8 @@ def invitation(invitation_code):
     Returns:
         Response: Invitation accept page template
     """
+    # Pass along the qr parameter if it exists
+    is_qr = request.args.get('qr', 'false').lower() == 'true'
     return render_controller.render_invitation(invitation_code)
 
 # Error routes

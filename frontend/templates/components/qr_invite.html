@@ -1,0 +1,99 @@
+<div class="qr-invite-modal" id="qr-invite-modal">
+    <div class="qr-invite-container">
+        <div class="qr-invite-header">
+            <h3>Scan QR Code to Join Chat</h3>
+            <button type="button" class="close-btn" id="qr-invite-close">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill="currentColor"/>
+                </svg>
+            </button>
+        </div>
+        
+        <div class="qr-invite-body">
+            <div class="qr-invite-status-container">
+                <div class="qr-invite-status">
+                    <span class="status-indicator status-active" id="qr-status-indicator"></span>
+                    <span class="status-text" id="qr-status-text">Active</span>
+                </div>
+                <div class="qr-invite-expires-in">
+                    Expires in: <span id="qr-countdown">15:00</span>
+                </div>
+            </div>
+            
+            <div class="qr-code-container" id="qr-code-container">
+                <div class="qr-loading" id="qr-loading">
+                    <div class="spinner"></div>
+                    <p>Generating QR code...</p>
+                </div>
+                <div class="qr-code" id="qr-code" style="display: none;"></div>
+                <div class="qr-error" id="qr-error" style="display: none;">
+                    <p>Failed to generate QR code. Please try again.</p>
+                    <button type="button" class="btn btn-primary" id="qr-retry-btn">Retry</button>
+                </div>
+                <div class="qr-expired" id="qr-expired" style="display: none;">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M11 15h2v2h-2v-2zm0-8h2v6h-2V7zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" fill="currentColor"/>
+                    </svg>
+                    <p>This QR code has expired.</p>
+                    <button type="button" class="btn btn-primary" id="qr-generate-new">Generate New QR Code</button>
+                </div>
+            </div>
+            
+            <div class="qr-invitation-info">
+                <div class="qr-invitation-token-container">
+                    <label>Invitation Code</label>
+                    <div class="qr-invitation-token">
+                        <input type="text" id="qr-invitation-token" class="form-control" readonly>
+                        <button type="button" class="btn btn-icon" id="qr-copy-token" title="Copy to clipboard">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M16 1H4C2.9 1 2 1.9 2 3V17H4V3H16V1ZM19 5H8C6.9 5 6 5.9 6 7V21C6 22.1 6.9 23 8 23H19C20.1 23 21 22.1 21 21V7C21 5.9 20.1 5 19 5ZM19 21H8V7H19V21Z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="qr-invitation-url-container">
+                    <label>Invitation Link</label>
+                    <div class="qr-invitation-url">
+                        <input type="text" id="qr-invitation-url" class="form-control" readonly>
+                        <button type="button" class="btn btn-icon" id="qr-copy-url" title="Copy to clipboard">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M16 1H4C2.9 1 2 1.9 2 3V17H4V3H16V1ZM19 5H8C6.9 5 6 5.9 6 7V21C6 22.1 6.9 23 8 23H19C20.1 23 21 22.1 21 21V7C21 5.9 20.1 5 19 5ZM19 21H8V7H19V21Z" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="qr-invitation-status-container">
+                    <label>Status</label>
+                    <div class="qr-invitation-status" id="qr-invitation-status">
+                        <div class="status-item">
+                            <div class="status-dot status-created"></div>
+                            <div class="status-label">Created</div>
+                        </div>
+                        <div class="status-connector"></div>
+                        <div class="status-item">
+                            <div class="status-dot status-scanned" id="status-scanned"></div>
+                            <div class="status-label">Scanned</div>
+                        </div>
+                        <div class="status-connector"></div>
+                        <div class="status-item">
+                            <div class="status-dot status-accepted" id="status-accepted"></div>
+                            <div class="status-label">Accepted</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="qr-invite-footer">
+            <button type="button" class="btn btn-outline" id="qr-cancel-btn">Cancel Invitation</button>
+            <button type="button" class="btn btn-primary" id="qr-refresh-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4C7.58 4 4.01 7.58 4.01 12C4.01 16.42 7.58 20 12 20C15.73 20 18.84 17.45 19.73 14H17.65C16.83 16.33 14.61 18 12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C13.66 6 15.14 6.69 16.22 7.78L13 11H20V4L17.65 6.35Z" fill="currentColor"/>
+                </svg>
+                Refresh
+            </button>
+        </div>
+    </div>
+</div> 

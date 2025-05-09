@@ -215,11 +215,48 @@ class RenderController:
     
     def render_invitation(self, invitation_code):
         """Render the invitation accept page"""
-        return template_service.render('invitation_accept.html',
-            invitation_code=invitation_code,
-            server_rendered=True,
-            user=g.user if hasattr(g, 'user') else None
-        )
+        try:
+            # Get invitation details from API
+            token = request.cookies.get('auth_token')
+            
+            # Determine if this is coming from a QR code scan
+            is_qr_scan = request.args.get('qr', 'false').lower() == 'true'
+            
+            # If authenticated, add the token to the request
+            headers = {}
+            if token:
+                headers['Authorization'] = f'Bearer {token}'
+            
+            # Check invitation status first
+            response = self._make_api_request(
+                'GET',
+                f'/api/chats/invitation-status/{invitation_code}',
+                headers=headers
+            )
+            
+            # If the invitation is from a QR code, mark it as scanned
+            if is_qr_scan and response.status_code == 200:
+                # Mark as scanned in a separate request
+                self._make_api_request(
+                    'GET',
+                    f'/api/chats/invitation-status/{invitation_code}?mark_scanned=true',
+                    headers=headers
+                )
+            
+            return template_service.render('invitation_accept.html',
+                invitation_code=invitation_code,
+                is_qr_scan=is_qr_scan,
+                server_rendered=True,
+                user=g.user if hasattr(g, 'user') else None
+            )
+        except Exception as e:
+            logger.exception(f"Error rendering invitation page: {str(e)}")
+            return template_service.render('error.html',
+                error='Failed to load invitation',
+                error_code='404',
+                error_message='The invitation you are looking for could not be found or has expired.',
+                back_url='/my-chats'
+            )
     
     def render_settings(self):
         """Render the settings page"""
