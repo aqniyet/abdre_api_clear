@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ABDRE Chat</title>
+    <link rel="stylesheet" href="css/chat.css">
+    <link rel="stylesheet" href="css/chat-fixes.css?v=1">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Alignment fixes for chat interface */
+        .chat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border-color);
+            height: 70px; /* Fixed height for header */
+        }
+        
+        .chat-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            height: 100%;
+        }
+        
+        .chat-header .chat-avatar {
+            width: 40px;
+            height: 40px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .chat-header .chat-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .chat-details {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 40px;
+            padding: 0;
+        }
+        
+        .chat-details h3 {
+            font-size: 16px;
+            margin: 0 0 4px 0;
+            line-height: 1.2;
+            padding: 0;
+        }
+        
+        .chat-details p {
+            font-size: 13px;
+            color: var(--light-text);
+            margin: 0;
+            line-height: 1.2;
+            padding: 0;
+        }
+        
+        /* Fix chat item alignment in sidebar */
+        .chat-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            height: 80px; /* Fixed height for chat items */
+        }
+        
+        .chat-avatar {
+            flex-shrink: 0;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .chat-item-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+            padding: 0;
+        }
+        
+        .chat-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 4px;
+        }
+        
+        .chat-item-name, 
+        .chat-item-time, 
+        .chat-item-message {
+            margin: 0;
+            line-height: 1.3;
+            padding: 0;
+        }
+        
+        /* Fix empty state alignment */
+        .no-chat-selected {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            height: 100%;
+        }
+        
+        .no-chat-selected i {
+            font-size: 40px;
+            margin-bottom: 12px;
+            color: var(--primary-color);
+            opacity: 0.7;
+        }
+        
+        .no-chat-selected p {
+            margin: 0;
+            font-size: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <!-- Left sidebar - Chat list -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>Chats</h2>
+                <div class="actions">
+                    <button id="sidebar-search-btn" title="Search Chats"><i class="fas fa-search"></i></button>
+                    <button id="settings-btn" title="Settings" onclick="window.location.href='settings.html'"><i class="fas fa-cog"></i></button>
+                    <button id="new-chat-btn" title="Scan QR Code"><i class="fas fa-qrcode"></i></button>
+                    <button id="logout-btn" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
+                </div>
+            </div>
+            <div class="chat-list" id="chat-list">
+                <!-- Chat list will be populated dynamically -->
+            </div>
+        </div>
+
+        <!-- Right side - Chat window -->
+        <div class="chat-window">
+            <div class="chat-header" id="chat-header" style="display: flex; align-items: center; height: 70px; padding: 15px 20px;">
+                <div class="chat-info" style="display: flex; align-items: center; gap: 12px; height: 100%;">
+                    <div class="chat-avatar" style="width: 40px; height: 40px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+                        <img src="https://via.placeholder.com/40" alt="Chat avatar" id="current-chat-avatar" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
+                    <div class="chat-details" style="display: flex; flex-direction: column; justify-content: center; padding: 0;">
+                        <h3 id="current-chat-name" style="margin: 0 0 4px 0; line-height: 1.2; padding: 0;">Select a chat</h3>
+                        <p id="current-chat-status" style="margin: 0; line-height: 1.2; padding: 0;">No chat selected</p>
+                    </div>
+                </div>
+                <div class="chat-actions">
+                    <button id="chat-search-btn" title="Search"><i class="fas fa-search"></i></button>
+                </div>
+            </div>
+            <div class="messages-container" id="messages-container">
+                <!-- Messages will be populated dynamically -->
+                <div class="no-chat-selected">
+                    <i class="fas fa-comments"></i>
+                    <p>Select a chat to start messaging</p>
+                </div>
+            </div>
+            <div class="message-input-container">
+                <div class="attachment-btn">
+                    <i class="fas fa-paperclip"></i>
+                </div>
+                <div class="message-input">
+                    <textarea id="message-text" placeholder="Type a message..."></textarea>
+                </div>
+                <div class="send-btn" id="send-message-btn">
+                    <i class="fas fa-paper-plane"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New chat modal -->
+    <div class="modal" id="new-chat-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create New Chat</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="new-chat-name">Chat Name:</label>
+                    <input type="text" id="new-chat-name" placeholder="Enter chat name">
+                </div>
+                <div class="form-group">
+                    <label for="new-chat-description">Description (optional):</label>
+                    <textarea id="new-chat-description" placeholder="Enter description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="new-chat-private">
+                        Private chat
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="create-chat-btn">Create</button>
+                <button class="cancel-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search overlay -->
+    <div class="search-overlay" id="search-overlay">
+        <div class="search-container">
+            <div class="search-header">
+                <h3>Search Chats</h3>
+                <button class="close-search" id="close-search">&times;</button>
+            </div>
+            <input type="text" id="search-input" placeholder="Search conversations...">
+            <div id="search-results"></div>
+        </div>
+    </div>
+
+    <!-- QR Code Modal -->
+    <div class="modal" id="qr-code-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Chat Invitation QR Code</h3>
+                <span class="close-modal" id="close-qr-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="qr-container" style="text-align: center; padding: 20px;">
+                    <div id="qr-code-display" style="margin-bottom: 20px;">
+                        <img id="qr-code-image" src="" alt="QR Code" style="max-width: 250px; display: none;">
+                        <div id="qr-loading" style="display: flex; justify-content: center; align-items: center; height: 250px;">
+                            <div class="spinner" style="border: 4px solid rgba(0, 0, 0, 0.1); border-radius: 50%; border-top: 4px solid #3498db; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
+                        </div>
+                        <style>
+                            @keyframes spin {
+                                0% { transform: rotate(0deg); }
+                                100% { transform: rotate(360deg); }
+                            }
+                        </style>
+                    </div>
+                    <p id="qr-expiry-time" style="font-size: 14px; color: #666;">
+                        Expires in: <span id="qr-expiry-countdown">15:00</span>
+                    </p>
+                    <p id="qr-instructions" style="margin-top: 15px; font-size: 15px;">
+                        Scan this QR code to start a chat with you. This code will expire after 15 minutes.
+                    </p>
+                </div>
+                <div id="qr-error" style="color: #e74c3c; text-align: center; display: none;">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <p>Failed to generate QR code. Please try again.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="regenerate-qr-btn">Generate New Code</button>
+                <button id="cancel-qr-btn" class="cancel-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load the microservices JS files -->
+    <!-- Socket.IO client library -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    
+    <script src="js/core/api_client.js?v=3"></script>
+    <script src="js/services/auth_service.js?v=2"></script>
+    <script src="js/services/chat_service.js?v=2"></script>
+    <script src="js/services/user_service.js?v=2"></script>
+    <script src="js/services/qr_service.js?v=3"></script>
+    <script src="js/services/socket_service.js?v=1"></script>
+    <script src="js/chat-app.js?v=3"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if user is logged in
+            const authToken = localStorage.getItem('auth_token');
+            if (!authToken) {
+                // No token found, redirect to login page
+                window.location.href = 'login.html';
+                return;
+            }
+
+            // Initialize API client with proper token
+            console.log('Initializing API client with token');
+            ABDRE.ApiClient.init({
+                baseUrl: "http://localhost:5000",
+                token: authToken
+            });
+            
+            // Initialize all services with the API client
+            console.log('Initializing services');
+            ABDRE.AuthService.init(ABDRE.ApiClient);
+            ABDRE.ChatService.init(ABDRE.ApiClient);
+            ABDRE.UserService.init(ABDRE.ApiClient);
+            ABDRE.QRService.init(ABDRE.ApiClient);
+            
+            // Log service initialization status
+            console.log('Services initialized:', {
+                Auth: ABDRE.AuthService.isInitialized,
+                Chat: ABDRE.ChatService.isInitialized,
+                User: ABDRE.UserService.isInitialized,
+                QR: ABDRE.QRService.isInitialized
+            });
+            
+            // Check if there's a chat_id in the URL to open (from QR scan)
+            const urlParams = new URLSearchParams(window.location.search);
+            const chatId = urlParams.get('chat_id') || localStorage.getItem('open_chat_id');
+            
+            if (chatId) {
+                // Will be handled by chat-app.js to select this chat
+                console.log("Opening chat from QR invitation:", chatId);
+                
+                // Remove chat_id from localStorage if it was there
+                if (localStorage.getItem('open_chat_id')) {
+                    console.log("Found chat_id in localStorage, clearing it");
+                    localStorage.removeItem('open_chat_id');
+                }
+                
+                // Remove chat_id from URL without reloading page
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        });
+    </script>
+</body>
+</html> 
