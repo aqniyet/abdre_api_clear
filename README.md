@@ -1,6 +1,83 @@
-# ABDRE Chat Application
+# ABDRE Chat API
 
-A modern real-time chat application built with server-side rendering for improved performance and reliability.
+A modern, real-time chat application with QR code connectivity and typing status indicators.
+
+## Features
+
+- **Real-time messaging**: Instant message delivery using WebSockets
+- **Typing indicators**: Shows when a user is typing in real-time
+- **Online status**: Displays when users are online
+- **QR code connections**: Connect to other users by scanning a QR code
+- **Microservice architecture**: Modular backend design for scalability
+
+## Recent Changes
+
+### Typing Status Indicator Feature
+
+The latest update implements a typing status indicator feature that:
+
+- Shows "Online" status when another user is connected
+- Displays "[Username] is typing..." when the other user is typing
+- Properly handles different message formats for backward compatibility
+- Excludes sending typing status back to the user who is typing
+
+## Project Structure
+
+```
+abdre_api/
+├── backend/                 # Backend services
+│   ├── api_gateway/         # API Gateway
+│   ├── chat_service/        # Chat service
+│   └── microservices/       # Microservices
+│       ├── auth_service/    # Authentication service
+│       ├── user_service/    # User management service
+│       └── qr_service/      # QR code connection service
+├── frontend/                # Frontend application
+│   └── templates/           # HTML templates
+└── realtime_service/        # WebSocket service for real-time features
+```
+
+## Setup and Installation
+
+1. Clone the repository:
+   ```
+   git clone https://github.com/aqniyet/abdre_api_clear.git
+   cd abdre_api_clear
+   ```
+
+2. Create and activate a virtual environment:
+   ```
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+4. Start the services:
+   ```
+   python service_launcher.py
+   ```
+
+5. Open your browser and navigate to http://localhost:8000
+
+## Technology Stack
+
+- **Backend**: Python, Flask, FastAPI
+- **Frontend**: HTML, CSS, JavaScript
+- **Real-time**: WebSockets
+- **Authentication**: JWT tokens
+- **Data Storage**: JSON files (for demo purposes)
+
+## Development
+
+For development purposes, you can run the application with hot-reloading enabled:
+
+```
+python service_launcher.py --dev
+```
 
 ## Architecture
 
