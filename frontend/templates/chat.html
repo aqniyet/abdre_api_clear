@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
     <title>ABDRE Chat - Messages</title>
-    <link rel="stylesheet" href="/static/css/main.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/typing-indicator.css') }}">
     <style>
         /* Additional inline styles to match chats.html layout */
         .chat-container {
@@ -947,32 +948,11 @@
             // Handle textarea auto resize
             const textarea = document.getElementById('message-text');
             textarea.addEventListener('input', function() {
+                // Auto-resize textarea to fit content
                 this.style.height = 'auto';
-                this.style.height = (this.scrollHeight < 120 ? this.scrollHeight : 120) + 'px';
+                this.style.height = (this.scrollHeight) + 'px';
                 
-                // Send typing status
-                if (this.value.trim().length > 0) {
-                    // Clear existing timeout if any
-                    if (typingTimeouts.status) {
-                        clearTimeout(typingTimeouts.status);
-                    }
-                    
-                    // Send typing active status - only to others, not shown in own UI
-                    sendTypingStatus(true);
-                    
-                    // Set timeout to clear typing status after 2 seconds of inactivity
-                    typingTimeouts.status = setTimeout(() => {
-                        sendTypingStatus(false);
-                        typingTimeouts.status = null;
-                    }, 2000);
-                } else {
-                    // If input is empty, clear typing status immediately
-                    if (typingTimeouts.status) {
-                        clearTimeout(typingTimeouts.status);
-                        typingTimeouts.status = null;
-                    }
-                    sendTypingStatus(false);
-                }
+                // The typing status functionality is now handled by the ABDRE.RealtimeStatus module
             });
             
             // Handle sidebar toggle
@@ -2835,52 +2815,8 @@
         }
         
         function updateTypingIndicator(chatId, userId, username, isTyping) {
-            // Only show typing indicator for the current active chat
-            const activeChat = document.getElementById('messages-container').dataset.chatId;
-            console.log(`Active chat: ${activeChat}, Message chatId: ${chatId}`);
-            
-            if (activeChat !== chatId) {
-                console.log(`Chat ID mismatch - not updating typing indicator`);
-                return;
-            }
-            
-            // Get current user ID
-            const currentUserId = localStorage.getItem('userId');
-            
-            console.log(`Current user: ${currentUserId}, Message sender: ${userId}, isTyping: ${isTyping}`);
-            
-            // Manually filter out our own typing status messages
-            // The server should exclude these but if we're still receiving them, filter them here
-            if (userId === currentUserId) {
-                console.log(`User ID matches current user - not showing typing indicator for self`);
-                return;
-            }
-            
-            // Log for debugging
-            console.log(`Typing status update: userId=${userId}, username=${username}, isTyping=${isTyping}, chatId=${chatId}`);
-            
-            // Update chat status in header
-            const chatStatusElement = document.querySelector('.chat-window .chat-info .chat-details p');
-            
-            if (!chatStatusElement) {
-                console.log('No chat status element found in the DOM');
-                return;
-            }
-            
-            // Update typing status in UI
-            if (isTyping) {
-                console.log(`Setting typing status to: "${username} is typing..."`);
-                chatStatusElement.textContent = `${username} is typing...`;
-                // Add typing class and remove other classes
-                chatStatusElement.classList.add('typing');
-                chatStatusElement.classList.remove('online', 'offline');
-            } else {
-                console.log(`Setting status back to Online`);
-                chatStatusElement.textContent = 'Online';
-                // Add online class and remove typing class
-                chatStatusElement.classList.add('online');
-                chatStatusElement.classList.remove('typing');
-            }
+            // This function has been replaced by the ABDRE.RealtimeStatus module
+            console.log("Using deprecated updateTypingIndicator - use ABDRE.RealtimeStatus instead");
         }
         
         function updateUserStatus(userId, status) {
@@ -2944,30 +2880,8 @@
         }
         
         function sendTypingStatus(isTyping) {
-            // Get current chat ID
-            const chatId = document.getElementById('messages-container').dataset.chatId;
-            if (!chatId) return;
-            
-            // Get user information
-            const userId = localStorage.getItem('userId');
-            const username = localStorage.getItem('userDisplayName') || localStorage.getItem('username') || 'User';
-            
-            console.log(`Sending typing status: user=${username} (${userId}), isTyping=${isTyping}, chatId=${chatId}`);
-            
-            // Send via WebSocket if available
-            if (window.chatSocket && window.chatSocket.readyState === WebSocket.OPEN) {
-                const payload = {
-                    type: 'status',
-                    event: 'typing',
-                    chat_id: chatId,
-                    user_id: userId,
-                    username: username,
-                    is_typing: isTyping
-                };
-                
-                console.log('Sending typing status payload:', payload);
-                window.chatSocket.send(JSON.stringify(payload));
-            }
+            // This function has been replaced by the ABDRE.RealtimeStatus module
+            console.log("Using deprecated sendTypingStatus - use ABDRE.RealtimeStatus.sendTypingStatus instead");
         }
         
         function sendChatMessage(chatId, content) {
@@ -3061,5 +2975,9 @@
             ws.send(JSON.stringify(authMessage));
         }
     </script>
+
+    <!-- Include the realtime status module before the closing body tag -->
+    <script src="{{ url_for('static', filename='js/realtime-status.js') }}"></script>
+
 </body>
 </html> 
