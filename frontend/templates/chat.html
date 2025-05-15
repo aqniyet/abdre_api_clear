@@ -1,318 +1,3065 @@
-{% extends "layouts/app.html" %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+    <title>ABDRE Chat - Messages</title>
+    <link rel="stylesheet" href="/static/css/main.min.css">
+    <style>
+        /* Additional inline styles to match chats.html layout */
+        .chat-container {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
 
-{% block page_title %}{{ chat_name }}{% endblock %}
+        .sidebar {
+            width: 300px;
+            background-color: #2c3e50;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid rgba(255,255,255,0.1);
+        }
 
-{% block body_class %}layout-app page-app page-chat{% endblock %}
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
-{% block extra_css %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/chat.css') }}">
-{% endblock %}
+        .sidebar-header h2 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
 
-{% block header_title %}
-    <div class="chat-header-info">
-        <div class="chat-avatar">
-            {% if chat.is_group %}
-                {% if chat.avatar_url %}
-                <img src="{{ chat.avatar_url }}" alt="{{ chat.name }}">
-                {% else %}
-                <div class="avatar-placeholder">{{ chat.name[0:1] }}</div>
-                {% endif %}
-            {% else %}
-                {% if chat.participant.avatar_url %}
-                <img src="{{ chat.participant.avatar_url }}" alt="{{ chat.participant.display_name or chat.participant.username }}">
-                {% else %}
-                <div class="avatar-placeholder">{{ (chat.participant.display_name or chat.participant.username)[0:1] }}</div>
-                {% endif %}
-            {% endif %}
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .actions button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.3s;
+        }
+
+        .actions button:hover {
+            background-color: rgba(255,255,255,0.1);
+        }
+
+        .chat-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .chat-item {
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .chat-item:hover, .chat-item.active {
+            background-color: rgba(255,255,255,0.05);
+        }
+
+        .chat-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #4a6fa5;
+            margin-right: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            position: relative;
+        }
+        
+        .chat-avatar.online::after {
+            content: '';
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #2ecc71;
+            border: 2px solid white;
+            bottom: 0;
+            right: 0;
+        }
+
+        .chat-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .chat-item-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        .chat-item-name {
+            font-weight: bold;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-item-time {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.6);
+            white-space: nowrap;
+        }
+
+        .chat-item-message {
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.8);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-window {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #f5f7fa;
+        }
+
+        .chat-header {
+            padding: 15px 20px;
+            background-color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .toggle-sidebar {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            margin-right: 15px;
+            cursor: pointer;
+            color: #555;
+        }
+
+        .chat-info {
+            display: flex;
+            align-items: center;
+            flex: 1;
+        }
+
+        .chat-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #4a6fa5;
+            margin-right: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            position: relative;
+        }
+        
+        .chat-avatar.online::after {
+            content: '';
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #2ecc71;
+            border: 2px solid white;
+            bottom: 0;
+            right: 0;
+        }
+
+        .chat-details {
+            flex: 1;
+        }
+
+        .chat-details h3 {
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        .chat-details p {
+            margin: 0;
+            font-size: 0.8rem;
+            color: #888;
+        }
+        
+        /* Status styles in chat header */
+        .chat-details p.online {
+            color: #2ecc71;
+        }
+        
+        .chat-details p.typing {
+            color: #3498db;
+        }
+        
+        .chat-details p.offline {
+            color: #7f8c8d;
+        }
+
+        .chat-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-actions button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.3s;
+            color: #555;
+        }
+
+        .chat-actions button:hover {
+            background-color: rgba(0,0,0,0.05);
+        }
+
+        .messages-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            max-width: 70%;
+        }
+
+        .message.incoming {
+            align-self: flex-start;
+        }
+
+        .message.outgoing {
+            align-self: flex-end;
+        }
+
+        .message-bubble {
+            padding: 12px 15px;
+            border-radius: 18px;
+            position: relative;
+        }
+
+        .message.incoming .message-bubble {
+            background-color: white;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .message.outgoing .message-bubble {
+            background-color: #4a6fa5;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message-info {
+            font-size: 0.7rem;
+            margin-top: 5px;
+            color: #888;
+            display: flex;
+            align-items: center;
+        }
+
+        .message.outgoing .message-info {
+            justify-content: flex-end;
+        }
+
+        .message-status {
+            margin-left: 5px;
+        }
+
+        .message-input-container {
+            padding: 15px;
+            background-color: white;
+            display: flex;
+            align-items: center;
+            border-top: 1px solid #eee;
+        }
+
+        .attachment-btn {
+            margin-right: 10px;
+            color: #888;
+            cursor: pointer;
+        }
+
+        .message-input {
+            flex: 1;
+            position: relative;
+        }
+
+        .message-input textarea {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            resize: none;
+            max-height: 120px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .message-input textarea:focus {
+            border-color: #4a6fa5;
+        }
+
+        .send-btn {
+            margin-left: 10px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #4a6fa5;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        /* Modal styles */
+        #qr-modal, #settings-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+        }
+
+        .modal-header button {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .form-actions {
+            text-align: right;
+            margin-top: 20px;
+        }
+
+        .form-actions button {
+            background-color: #4a6fa5;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .qr-options {
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .qr-type-selector {
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        .qr-countdown {
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .qr-container {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+            min-height: 200px;
+            align-items: center;
+        }
+
+        #qr-image {
+            max-width: 200px;
+            border: 1px solid #eee;
+            display: none;
+        }
+
+        .qr-status-container {
+            margin-bottom: 15px;
+        }
+
+        .qr-status {
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .qr-progress {
+            height: 6px;
+            background-color: #f3f3f3;
+            border-radius: 3px;
+            margin-top: 8px;
+        }
+
+        .qr-progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #4a6fa5;
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+
+        .qr-connection-info {
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .remote-user-details {
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+
+        .qr-description {
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+        }
+
+        #qr-loading {
+            text-align: center;
+        }
+
+        .loading-spinner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            margin-bottom: 10px;
+            animation: spin 2s linear infinite;
+        }
+
+        /* Responsive styles */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -100%;
+                width: 85%;
+                z-index: 100;
+                transition: left 0.3s ease;
+                height: 100%;
+            }
+            
+            .sidebar.open {
+                left: 0;
+            }
+            
+            .toggle-sidebar {
+                display: flex !important;
+            }
+
+            #qr-modal-content, #settings-modal > div {
+                width: 90% !important;
+                max-width: 350px !important;
+                margin: 20px auto;
+            }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Typing indicator styles */
+        .message.typing .message-bubble {
+            padding: 10px;
+            min-width: 40px;
+        }
+        
+        .message.typing .dots span {
+            animation: typing 1.4s infinite both;
+            font-size: 20px;
+            line-height: 0;
+        }
+        
+        .message.typing .dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .message.typing .dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes typing {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+        
+        /* Unread chat indicator */
+        .chat-item.unread .chat-item-name::after {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #4a90e2;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        
+        .chat-item.unread {
+            background-color: rgba(255,255,255,0.08);
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>ABDRE Chat</h2>
+                <div class="actions">
+                    <button id="search-btn" title="Search">🔍</button>
+                    <button id="qr-btn" title="QR Code">🔳</button>
+                    <button id="settings-btn" title="Settings">⚙️</button>
+                    <button id="logout-btn" title="Logout" onclick="logout()">🚪</button>
+                </div>
+            </div>
+            
+            <div class="chat-list">
+                <div class="chat-item active">
+                    <div class="chat-avatar">S</div>
+                    <div class="chat-item-info">
+                        <div class="chat-item-header">
+                            <div class="chat-item-name">Support Group</div>
+                            <div class="chat-item-time">10:30 AM</div>
+                        </div>
+                        <div class="chat-item-message">Welcome to ABDRE Chat!</div>
+                    </div>
+                </div>
+                
+                <div class="chat-item">
+                    <div class="chat-avatar">D</div>
+                    <div class="chat-item-info">
+                        <div class="chat-item-header">
+                            <div class="chat-item-name">Demo Chat</div>
+                            <div class="chat-item-time">10:15 AM</div>
+                        </div>
+                        <div class="chat-item-message">This is a demonstration chat</div>
+                    </div>
+                </div>
+                
+                <div class="chat-item">
+                    <div class="chat-avatar">T</div>
+                    <div class="chat-item-info">
+                        <div class="chat-item-header">
+                            <div class="chat-item-name">Tech Team</div>
+                            <div class="chat-item-time">Yesterday</div>
+                        </div>
+                        <div class="chat-item-message">Let's discuss the new features</div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="chat-details">
-            <h1 class="chat-name">{{ chat_name }}</h1>
-            <div class="chat-status">
-                {% if is_group %}
-                    {{ chat.participants|length }} members
-                {% else %}
-                    {% if is_online %}
-                    <span class="status-indicator online"></span> Online
-                    {% else %}
-                    <span class="status-indicator offline"></span> Offline
-                    {% endif %}
-                {% endif %}
+
+        <div class="chat-window">
+            <div class="chat-header">
+                <button id="toggle-sidebar" class="toggle-sidebar" style="display: none;">☰</button>
+                <div class="chat-info">
+                    <div class="chat-avatar">S</div>
+                    <div class="chat-details">
+                        <h3>Support Group</h3>
+                        <p>3 participants</p>
+                    </div>
+                </div>
+                <div class="chat-actions">
+                    <button id="chat-search-btn" title="Search">🔍</button>
+                    <button id="chat-menu-btn" title="Menu">⋮</button>
+                </div>
+            </div>
+            
+            <div class="messages-container" id="messages-container">
+                <div class="message incoming">
+                    <div class="message-bubble">
+                        Hello! Welcome to ABDRE Chat.
+                    </div>
+                    <div class="message-info">
+                        System • 10:30 AM
+                    </div>
+                </div>
+                
+                <div class="message outgoing">
+                    <div class="message-bubble">
+                        Thanks! This is a demo message.
+                    </div>
+                    <div class="message-info">
+                        You • 10:31 AM <span class="message-status">✓✓</span>
+                    </div>
+                </div>
+                
+                <div class="message incoming">
+                    <div class="message-bubble">
+                        Feel free to explore the interface. This is a demonstration of the ABDRE Chat application.
+                    </div>
+                    <div class="message-info">
+                        System • 10:32 AM
+                    </div>
+                </div>
+                
+                <div class="message incoming">
+                    <div class="message-bubble">
+                        You can send messages using the input box below.
+                    </div>
+                    <div class="message-info">
+                        Admin • 10:35 AM
+                    </div>
+                </div>
+                
+                <div class="message outgoing">
+                    <div class="message-bubble">
+                        Got it! The interface looks great.
+                    </div>
+                    <div class="message-info">
+                        You • 10:36 AM <span class="message-status">✓✓</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="message-input-container">
+                <div class="attachment-btn">📎</div>
+                <div class="message-input">
+                    <textarea id="message-text" placeholder="Type a message..." rows="1"></textarea>
+                </div>
+                <div class="send-btn" id="send-message-btn">➤</div>
             </div>
         </div>
     </div>
-{% endblock %}
 
-{% block app_content %}
-    <div class="chat-container">
-        <div class="message-container" id="message-container">
-            <div class="messages" id="messages">
-                {% if is_empty %}
-                    <div class="chat-start">
-                        <div class="chat-start-content">
-                            <div class="chat-start-icon">
-                                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2ZM20 16H5.17L4 17.17V4H20V16Z" fill="currentColor"/>
-                                </svg>
-                            </div>
-                            <h2>Start a conversation</h2>
-                            <p>Send a message to begin chatting with {{ chat_name }}.</p>
-                        </div>
-                    </div>
-                {% else %}
-                    {% if day_separators %}
-                        {% for day in day_separators %}
-                        <div class="day-separator" id="day-{{ day.date }}">
-                            <span class="day-text">{{ day.display }}</span>
-                        </div>
-                        {% endfor %}
-                    {% endif %}
-                    
-                    {% for message in messages %}
-                    <div class="message-wrapper {% if message.is_self %}self{% else %}other{% endif %}" id="message-{{ message.message_id }}" data-timestamp="{{ message.created_at }}">
-                        <div class="message {% if message.is_self %}message-self{% else %}message-other{% endif %}">
-                            {% if not message.is_self %}
-                            <div class="message-sender">
-                                <div class="message-avatar">
-                                    {% if message.sender.avatar_url %}
-                                    <img src="{{ message.sender.avatar_url }}" alt="{{ message.sender.display_name or message.sender.username }}">
-                                    {% else %}
-                                    <div class="avatar-placeholder">{{ (message.sender.display_name or message.sender.username)[0:1] }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            {% endif %}
-                            <div class="message-content">
-                                <div class="message-bubble">
-                                    <div class="message-text">{{ message.content }}</div>
-                                </div>
-                                <div class="message-meta">
-                                    <span class="message-time">{{ message.created_at_formatted }}</span>
-                                    {% if message.is_self %}
-                                        {% if message.is_delivered %}
-                                        <span class="message-status delivered" title="Delivered">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <path d="M18 7L9.5 15.5L6 12L4.5 13.5L9.5 18.5L19.5 8.5L18 7Z" fill="currentColor"/>
-                                            </svg>
-                                        </span>
-                                        {% elif message.is_read %}
-                                        <span class="message-status read" title="Read">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <path d="M18 7L9.5 15.5L6 12L4.5 13.5L9.5 18.5L19.5 8.5L18 7Z" fill="currentColor"/>
-                                            </svg>
-                                        </span>
-                                        {% else %}
-                                        <span class="message-status sent" title="Sent">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <path d="M9 16.17L4.83 12L3.41 13.41L9 19L21 7L19.59 5.59L9 16.17Z" fill="currentColor"/>
-                                            </svg>
-                                        </span>
-                                        {% endif %}
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="message-actions dropdown">
-                                <button class="message-actions-toggle dropdown-toggle" aria-label="Message actions" aria-expanded="false">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M12 8C13.1 8 14 7.1 14 6C14 4.9 13.1 4 12 4C10.9 4 10 4.9 10 6C10 7.1 10.9 8 12 8ZM12 10C10.9 10 10 10.9 10 12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12C14 10.9 13.1 10 12 10ZM12 16C10.9 16 10 16.9 10 18C10 19.1 10.9 20 12 20C13.1 20 14 19.1 14 18C14 16.9 13.1 16 12 16Z" fill="currentColor"/>
-                                    </svg>
-                                </button>
-                                <div class="dropdown-menu">
-                                    <ul class="dropdown-list">
-                                        <li><button class="dropdown-btn copy-message-btn">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <path d="M16 1H4C2.9 1 2 1.9 2 3V17H4V3H16V1ZM19 5H8C6.9 5 6 5.9 6 7V21C6 22.1 6.9 23 8 23H19C20.1 23 21 22.1 21 21V7C21 5.9 20.1 5 19 5ZM19 21H8V7H19V21Z" fill="currentColor"/>
-                                            </svg>
-                                            Copy
-                                        </button></li>
-                                        {% if message.is_self %}
-                                        <li><button class="dropdown-btn edit-message-btn">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <path d="M3 17.25V21H6.75L17.81 9.94L14.06 6.19L3 17.25ZM20.71 7.04C21.1 6.65 21.1 6.02 20.71 5.63L18.37 3.29C17.98 2.9 17.35 2.9 16.96 3.29L15.13 5.12L18.88 8.87L20.71 7.04Z" fill="currentColor"/>
-                                            </svg>
-                                            Edit
-                                        </button></li>
-                                        <li><button class="dropdown-btn delete-message-btn text-danger">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <path d="M6 19C6 20.1 6.9 21 8 21H16C17.1 21 18 20.1 18 19V7H6V19ZM19 4H15.5L14.5 3H9.5L8.5 4H5V6H19V4Z" fill="currentColor"/>
-                                            </svg>
-                                            Delete
-                                        </button></li>
-                                        {% else %}
-                                        <li><button class="dropdown-btn reply-message-btn">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <path d="M10 9V5L3 12L10 19V15C15 15 18.5 16.5 21 20C20 15 17 10 10 9Z" fill="currentColor"/>
-                                            </svg>
-                                            Reply
-                                        </button></li>
-                                        <li><button class="dropdown-btn report-message-btn text-danger">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <path d="M15.73 3H8.27L3 8.27V15.73L8.27 21H15.73L21 15.73V8.27L15.73 3ZM19 14.9L14.9 19H9.1L5 14.9V9.1L9.1 5H14.9L19 9.1V14.9Z" fill="currentColor"/>
-                                                <path d="M12 17C12.83 17 13.5 16.33 13.5 15.5C13.5 14.67 12.83 14 12 14C11.17 14 10.5 14.67 10.5 15.5C10.5 16.33 11.17 17 12 17Z" fill="currentColor"/>
-                                                <path d="M13 7H11V13H13V7Z" fill="currentColor"/>
-                                            </svg>
-                                            Report
-                                        </button></li>
-                                        {% endif %}
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                {% endif %}
+    <!-- QR Code Modal -->
+    <div id="qr-modal">
+        <div id="qr-modal-content" class="modal-content">
+            <div class="modal-header">
+                <h3>Connect via QR Code</h3>
+                <button id="close-qr-modal">✕</button>
             </div>
-            
-            <div id="scroll-to-bottom" class="scroll-to-bottom">
-                <button class="scroll-btn" aria-label="Scroll to bottom">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M16.59 8.59L12 13.17L7.41 8.59L6 10L12 16L18 10L16.59 8.59Z" fill="currentColor"/>
-                    </svg>
-                </button>
+            <p>Scan this QR code to create a direct chat with this device.</p>
+            <div class="qr-options">
+                <label class="qr-type-selector">
+                    <input type="radio" name="qr-type" value="abdre" checked> ABDRE App
+                </label>
+                <label class="qr-type-selector">
+                    <input type="radio" name="qr-type" value="http"> Web Browser
+                </label>
             </div>
+            <div id="qr-countdown" class="qr-countdown">
+                <span id="countdown-minutes">15</span>:<span id="countdown-seconds">00</span> remaining
+            </div>
+            <div id="qr-container" class="qr-container">
+                <div id="qr-loading" class="loading-spinner">
+                    <div class="spinner"></div>
+                    <p>Loading QR code...</p>
+                </div>
+                <img id="qr-image" src="" alt="QR Code">
+            </div>
+            <div id="qr-status-container" class="qr-status-container">
+                <div id="qr-status" class="qr-status">Ready to scan</div>
+                <div id="qr-progress" class="qr-progress">
+                    <div id="qr-progress-bar" class="qr-progress-bar"></div>
+                </div>
+            </div>
+            <div id="qr-connection-info" class="qr-connection-info">
+                <div id="remote-user-details" class="remote-user-details"></div>
+                <div id="connection-message" class="connection-message"></div>
+            </div>
+            <p class="qr-description">When someone scans this QR code, a new chat will be created between you and them.</p>
         </div>
-        
-        <div class="message-input-container">
-            <div class="message-reply" id="reply-container" style="display: none;">
-                <div class="reply-preview">
-                    <div class="reply-content">
-                        <div class="reply-sender" id="reply-sender"></div>
-                        <div class="reply-text" id="reply-text"></div>
-                    </div>
-                </div>
-                <button type="button" class="reply-close-btn" id="reply-close-btn" aria-label="Close reply">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill="currentColor"/>
-                    </svg>
-                </button>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Settings</h3>
+                <button id="close-settings-modal">✕</button>
             </div>
-            
-            <form id="message-form" class="message-form">
-                <div class="message-input-wrapper">
-                    <div class="message-attachments">
-                        <button type="button" class="attachment-btn" aria-label="Add attachment">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M16.5 6V17.5C16.5 19.71 14.71 21.5 12.5 21.5C10.29 21.5 8.5 19.71 8.5 17.5V5C8.5 3.62 9.62 2.5 11 2.5C12.38 2.5 13.5 3.62 13.5 5V15.5C13.5 16.05 13.05 16.5 12.5 16.5C11.95 16.5 11.5 16.05 11.5 15.5V6H10V15.5C10 16.88 11.12 18 12.5 18C13.88 18 15 16.88 15 15.5V5C15 2.79 13.21 1 11 1C8.79 1 7 2.79 7 5V17.5C7 20.54 9.46 23 12.5 23C15.54 23 18 20.54 18 17.5V6H16.5Z" fill="currentColor"/>
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="message-editor">
-                        <textarea 
-                            id="message-input" 
-                            class="message-input" 
-                            placeholder="Type a message..." 
-                            rows="1"
-                            autofocus
-                        ></textarea>
-                    </div>
-                    <div class="message-actions">
-                        <button type="button" class="emoji-btn" aria-label="Add emoji">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M11.99 2C6.47 2 2 6.48 2 12C2 17.52 6.47 22 11.99 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 11.99 2ZM12 20C7.58 20 4 16.42 4 12C4 7.58 7.58 4 12 4C16.42 4 20 7.58 20 12C20 16.42 16.42 20 12 20ZM15.5 11C16.33 11 17 10.33 17 9.5C17 8.67 16.33 8 15.5 8C14.67 8 14 8.67 14 9.5C14 10.33 14.67 11 15.5 11ZM8.5 11C9.33 11 10 10.33 10 9.5C10 8.67 9.33 8 8.5 8C7.67 8 7 8.67 7 9.5C7 10.33 7.67 11 8.5 11ZM12 17.5C14.33 17.5 16.31 16.04 17.11 14H6.89C7.69 16.04 9.67 17.5 12 17.5Z" fill="currentColor"/>
-                            </svg>
-                        </button>
-                    </div>
+            <form id="settings-form">
+                <div class="form-group">
+                    <label for="user-name">Display Name</label>
+                    <input type="text" id="user-name">
                 </div>
-                <button type="submit" class="send-btn" aria-label="Send message">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M2.01 21L23 12L2.01 3L2 10L17 12L2 14L2.01 21Z" fill="currentColor"/>
-                    </svg>
-                </button>
+                <div class="form-group">
+                    <label for="user-email">Email</label>
+                    <input type="email" id="user-email" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="theme-select">Theme</label>
+                    <select id="theme-select">
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                        <option value="system">System Default</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="notifications">Notifications</label>
+                    <select id="notifications">
+                        <option value="all">All Messages</option>
+                        <option value="mentions">Mentions Only</option>
+                        <option value="none">None</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" id="save-settings">Save Settings</button>
+                </div>
             </form>
         </div>
     </div>
-{% endblock %}
 
-{% block header_actions %}
-    <div id="connection-status" class="connection-status connection-status--{{ initial_connection_status|default('connecting') }}">
-        <div class="connection-status__indicator"></div>
-        <div class="connection-status__details">
-            <span class="connection-status__text">
-                {% if initial_connection_status == 'connected' %}
-                Connected
-                {% elif initial_connection_status == 'connecting' %}
-                Connecting...
-                {% else %}
-                Disconnected
-                {% endif %}
-            </span>
-            <span class="connection-status__latency"></span>
-        </div>
-        <button id="connection-reconnect" class="connection-status__reconnect-btn" title="Reconnect">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4C7.58 4 4.01 7.58 4.01 12C4.01 16.42 7.58 20 12 20C15.73 20 18.84 17.45 19.73 14H17.65C16.83 16.33 14.61 18 12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C13.66 6 15.14 6.69 16.22 7.78L13 11H20V4L17.65 6.35Z" fill="currentColor"/>
-            </svg>
-        </button>
-    </div>
-    <div class="chat-menu dropdown">
-        <button class="chat-menu-toggle dropdown-toggle" aria-label="Chat menu" aria-expanded="false" aria-controls="chat-dropdown">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 8C13.1 8 14 7.1 14 6C14 4.9 13.1 4 12 4C10.9 4 10 4.9 10 6C10 7.1 10.9 8 12 8ZM12 10C10.9 10 10 10.9 10 12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12C14 10.9 13.1 10 12 10ZM12 16C10.9 16 10 16.9 10 18C10 19.1 10.9 20 12 20C13.1 20 14 19.1 14 18C14 16.9 13.1 16 12 16Z" fill="currentColor"/>
-            </svg>
-        </button>
-        <div id="chat-dropdown" class="dropdown-menu">
-            <ul class="dropdown-list">
-                {% if chat.is_group %}
-                <li><a href="/chat/{{ chat_id }}/members">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M16 11C17.66 11 18.99 9.66 18.99 8C18.99 6.34 17.66 5 16 5C14.34 5 13 6.34 13 8C13 9.66 14.34 11 16 11ZM8 11C9.66 11 10.99 9.66 10.99 8C10.99 6.34 9.66 5 8 5C6.34 5 5 6.34 5 8C5 9.66 6.34 11 8 11ZM8 13C5.67 13 1 14.17 1 16.5V19H15V16.5C15 14.17 10.33 13 8 13ZM16 13C15.71 13 15.38 13.02 15.03 13.05C16.19 13.89 17 15.02 17 16.5V19H23V16.5C23 14.17 18.33 13 16 13Z" fill="currentColor"/>
-                    </svg>
-                    Manage Members
-                </a></li>
-                <li><a href="/chat/{{ chat_id }}/share">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M18 16.08C17.24 16.08 16.56 16.38 16.04 16.85L8.91 12.7C8.96 12.47 9 12.24 9 12C9 11.76 8.96 11.53 8.91 11.3L15.96 7.19C16.5 7.69 17.21 8 18 8C19.66 8 21 6.66 21 5C21 3.34 19.66 2 18 2C16.34 2 15 3.34 15 5C15 5.24 15.04 5.47 15.09 5.7L8.04 9.81C7.5 9.31 6.79 9 6 9C4.34 9 3 10.34 3 12C3 13.66 4.34 15 6 15C6.79 15 7.5 14.69 8.04 14.19L15.16 18.35C15.11 18.56 15.08 18.78 15.08 19C15.08 20.61 16.39 21.92 18 21.92C19.61 21.92 20.92 20.61 20.92 19C20.92 17.39 19.61 16.08 18 16.08Z" fill="currentColor"/>
-                    </svg>
-                    Share Group
-                </a></li>
-                {% else %}
-                <li><a href="/chat/{{ chat_id }}/info">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM11 17H13V11H11V17ZM11 9H13V7H11V9Z" fill="currentColor"/>
-                    </svg>
-                    Contact Info
-                </a></li>
-                {% endif %}
-                <li><a href="#" id="clear-chat-btn">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M15 16H19V18H15V16ZM15 8H22V10H15V8ZM15 12H21V14H15V12ZM3 18C3 19.1 3.9 20 5 20H11C12.1 20 13 19.1 13 18V8H3V18ZM5 10H11V18H5V10ZM10 4H6L5 5H2V7H14V5H11L10 4Z" fill="currentColor"/>
-                    </svg>
-                    Clear Chat
-                </a></li>
-                <li class="dropdown-divider"></li>
-                <li><a href="#" id="block-chat-btn" class="text-danger">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 4C16.42 4 20 7.58 20 12C20 13.85 19.37 15.55 18.31 16.9L7.1 5.69C8.45 4.63 10.15 4 12 4ZM4 12C4 10.15 4.63 8.45 5.69 7.1L16.9 18.31C15.55 19.37 13.85 20 12 20C7.58 20 4 16.42 4 12Z" fill="currentColor"/>
-                    </svg>
-                    Block & Report
-                </a></li>
-            </ul>
-        </div>
-    </div>
-{% endblock %}
-
-{% block app_js %}
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Initialize modules
-            ABDRE.EventBus.init();
-            ABDRE.RealtimeService.init().connect();
-            ABDRE.Enhancers.ConnectionStatus.init();
-            ABDRE.Enhancers.Dropdown.init();
+        // Global variables - using var to avoid redeclaration issues
+        var websocket = null;
+        var pingInterval = null;
+        var activeTypingTimeout = null;
+        var typingTimeouts = {};
+        var socketHeartbeat = null;
+        
+        // Declare all function definitions first
+        function logout() {
+            localStorage.removeItem('authToken');
+            window.location.href = '/templates/login.html';
+        }
+        
+        function closeQRModal() {
+            document.getElementById('qr-modal').style.display = 'none';
             
-            // Initialize chat data with properly formatted JSON
-            var chatId = "{{ chat_id }}";
-            var messagesData = JSON.parse('{{ messages_json|safe }}');
-            
-            ABDRE.Enhancers.Chat.init(chatId, messagesData);
-            ABDRE.Enhancers.MessageInput.init();
-        });
-    </script>
-{% endblock %}
+            // Clear countdown interval if it exists
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+        }
 
-{% block extra_js %}
-    {{ super() }}
-    <script src="{{ url_for('static', filename='js/services/api_service.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/services/chat_service.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/enhancers/chat_enhancer.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/enhancers/message_input_enhancer.js') }}"></script>
-{% endblock %} 
+        // Function to open settings modal
+        function openSettingsModal() {
+            // Get user information
+            const userId = localStorage.getItem('userId');
+            const displayName = localStorage.getItem('userDisplayName');
+            const email = localStorage.getItem('userEmail') || '';
+            
+            // Populate form with existing user data
+            document.getElementById('user-name').value = displayName || '';
+            document.getElementById('user-email').value = email || userId + '@example.com';
+            
+            // Get user settings from server
+            if (userId) {
+                fetch(`/api/settings/${userId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.settings) {
+                            // Populate form with settings
+                            if (data.settings.theme) {
+                                document.getElementById('theme-select').value = data.settings.theme;
+                            }
+                            if (data.settings.notifications) {
+                                document.getElementById('notifications').value = data.settings.notifications;
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading settings:', error);
+                    });
+            }
+            
+            // Show modal
+            document.getElementById('settings-modal').style.display = 'flex';
+        }
+        
+        // Function to close settings modal
+        function closeSettingsModal() {
+            document.getElementById('settings-modal').style.display = 'none';
+        }
+        
+        // Check authentication on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("Document loaded, initializing chat application...");
+            
+            // Setup user information
+            if (!localStorage.getItem('userId')) {
+                // Generate new user info if none exists
+                const userId = 'user_' + Math.random().toString(36).substring(2, 10);
+                const userDisplayName = 'User ' + userId.substring(5, 9);
+                
+                localStorage.setItem('userId', userId);
+                localStorage.setItem('userDisplayName', userDisplayName);
+                localStorage.setItem('authToken', 'demo-token'); // Set auth token to prevent redirects
+                
+                console.log(`Created new user: ${userId} (${userDisplayName})`);
+            } else {
+                console.log(`Using existing user: ${localStorage.getItem('userId')} (${localStorage.getItem('userDisplayName')})`);
+            }
+            
+            // Always ensure auth token exists
+            if (!localStorage.getItem('authToken')) {
+                localStorage.setItem('authToken', 'demo-token');
+            }
+            
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                // Not authenticated, redirect to login
+                console.log("No auth token found, redirecting to login");
+                window.location.href = '/templates/login.html';
+                return;
+            }
+            
+            // Initialize WebSocket connection
+            connectWebSocket();
+            
+            // Load user's existing chats
+            loadUserChats();
+            
+            // Check if we're connecting via QR code
+            const urlParams = new URLSearchParams(window.location.search);
+            const qrToken = urlParams.get('qr_token');
+            const qrTimestamp = urlParams.get('timestamp');
+            const qrAction = urlParams.get('action');
+            
+            if (qrToken && qrTimestamp) {
+                console.log(`Connecting via QR code: token=${qrToken}, timestamp=${qrTimestamp}, action=${qrAction}`);
+                
+                if (qrAction === 'scan') {
+                    // We are the scanner, register the scan
+                    console.log("Starting QR scan registration process");
+                    
+                    // Get user information (for guest user if not logged in)
+                    let userId = localStorage.getItem('userId');
+                    let displayName = localStorage.getItem('userDisplayName');
+                    
+                    // Create timestamp to track this scan attempt
+                    const scanAttemptTime = Date.now();
+                    localStorage.setItem('lastQRScanAttempt', scanAttemptTime);
+                    
+                    // Delay slightly to ensure page is fully loaded
+                    setTimeout(() => {
+                        // Process the QR scan - this will handle guest creation if needed
+                        registerQrScan(qrToken);
+                    }, 1000);
+                } else {
+                    // We are the creator, check for status updates
+                    console.log("Starting QR status checking process");
+                    setTimeout(() => {
+                        startQrStatusChecking(qrToken);
+                    }, 500);
+                }
+                
+                // Clean up the URL to remove the QR parameters to prevent reprocessing on page refresh
+                try {
+                    const url = new URL(window.location.href);
+                    url.search = '';
+                    window.history.replaceState({}, document.title, url);
+                } catch(e) {
+                    console.error("Error cleaning URL:", e);
+                }
+            }
+            
+            // Set up message sending
+            document.getElementById('send-message-btn').addEventListener('click', sendMessage);
+            document.getElementById('message-text').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault(); // Prevent new line
+                    sendMessage();
+                }
+            });
+            
+            // Handle textarea auto resize
+            const textarea = document.getElementById('message-text');
+            textarea.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight < 120 ? this.scrollHeight : 120) + 'px';
+                
+                // Send typing status
+                if (this.value.trim().length > 0) {
+                    // Clear existing timeout if any
+                    if (typingTimeouts.status) {
+                        clearTimeout(typingTimeouts.status);
+                    }
+                    
+                    // Send typing active status - only to others, not shown in own UI
+                    sendTypingStatus(true);
+                    
+                    // Set timeout to clear typing status after 2 seconds of inactivity
+                    typingTimeouts.status = setTimeout(() => {
+                        sendTypingStatus(false);
+                        typingTimeouts.status = null;
+                    }, 2000);
+                } else {
+                    // If input is empty, clear typing status immediately
+                    if (typingTimeouts.status) {
+                        clearTimeout(typingTimeouts.status);
+                        typingTimeouts.status = null;
+                    }
+                    sendTypingStatus(false);
+                }
+            });
+            
+            // Handle sidebar toggle
+            const toggleBtn = document.getElementById('toggle-sidebar');
+            const sidebar = document.getElementById('sidebar');
+            
+            toggleBtn.addEventListener('click', function() {
+                sidebar.classList.toggle('open');
+            });
+            
+            // Handle window resize
+            function handleResize() {
+                if (window.innerWidth <= 768) {
+                    toggleBtn.style.display = 'flex';
+                } else {
+                    toggleBtn.style.display = 'none';
+                    sidebar.classList.remove('open');
+                }
+            }
+            
+            window.addEventListener('resize', handleResize);
+            handleResize(); // Initial call
+            
+            // Handle chat selection
+            const chatItems = document.querySelectorAll('.chat-item');
+            chatItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    chatItems.forEach(chat => chat.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Update chat header
+                    const chatName = this.querySelector('.chat-item-name').textContent;
+                    document.querySelector('.chat-details h3').textContent = chatName;
+                    
+                    // Close sidebar on mobile
+                    if (window.innerWidth <= 768) {
+                        sidebar.classList.remove('open');
+                    }
+                });
+            });
+
+            // QR code functionality
+            const qrBtn = document.getElementById('qr-btn');
+            const qrModal = document.getElementById('qr-modal');
+            
+            qrBtn.addEventListener('click', function() {
+                openQRModal();
+            });
+            
+            // Setup QR modal close button
+            document.getElementById('close-qr-modal').addEventListener('click', function() {
+                closeQRModal();
+            });
+            
+            // Add event listeners to QR type radio buttons
+            document.querySelectorAll('input[name="qr-type"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    console.log('QR type changed to:', this.value);
+                    if (qrModal.style.display === 'flex') {
+                        // Regenerate QR code when type changes
+                        openQRModal();
+                    }
+                });
+            });
+            
+            // Settings functionality
+            const settingsBtn = document.getElementById('settings-btn');
+            const settingsModal = document.getElementById('settings-modal');
+            const closeSettingsModal = document.getElementById('close-settings-modal');
+            const settingsForm = document.getElementById('settings-form');
+            
+            settingsBtn.addEventListener('click', function() {
+                openSettingsModal();
+            });
+            
+            closeSettingsModal.addEventListener('click', function() {
+                document.getElementById('settings-modal').style.display = 'none';
+            });
+            
+            settingsForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Get form values
+                const userId = localStorage.getItem('userId');
+                if (!userId) {
+                    console.error('No user ID found');
+                    return;
+                }
+                
+                const displayName = document.getElementById('user-name').value;
+                const theme = document.getElementById('theme-select').value;
+                const notifications = document.getElementById('notifications').value;
+                
+                // Save new display name to localStorage
+                if (displayName) {
+                    localStorage.setItem('userDisplayName', displayName);
+                }
+                
+                // Apply theme
+                applyTheme(theme);
+                
+                // Save settings to server
+                fetch(`/api/settings/${userId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        display_name: displayName,
+                        theme: theme,
+                        notifications: notifications
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Settings saved:', data);
+                    
+                    // Close modal
+                    document.getElementById('settings-modal').style.display = 'none';
+                    
+                    // Show confirmation
+                    showNotification('Settings saved successfully!', 'success');
+                })
+                .catch(error => {
+                    console.error('Error saving settings:', error);
+                    showNotification('Error saving settings', 'error');
+                });
+            });
+        });
+        
+        function sendMessage() {
+            const textarea = document.getElementById('message-text');
+            const message = textarea.value.trim();
+            
+            if (message) {
+                // Get current chat ID from the messages container
+                const messagesContainer = document.getElementById('messages-container');
+                const chatId = messagesContainer.dataset.chatId;
+                
+                // Don't send if no chat is active
+                if (!chatId) {
+                    console.error('No active chat to send message to');
+                    return;
+                }
+                
+                // Get user information
+                const userId = localStorage.getItem('userId');
+                const displayName = localStorage.getItem('displayName') || localStorage.getItem('username') || 'Anonymous';
+                
+                // Generate a temporary ID for this message
+                const tempMessageId = 'temp_' + Date.now();
+                
+                // Create message payload
+                const messagePayload = {
+                    id: tempMessageId,
+                    user_id: userId,
+                    username: displayName,
+                    content: message,
+                    timestamp: Date.now()
+                };
+                
+                // First try to send via WebSocket for real-time delivery
+                let sentViaWebSocket = false;
+                
+                if (window.chatSocket && window.chatSocket.readyState === WebSocket.OPEN) {
+                    try {
+                        window.chatSocket.send(JSON.stringify({
+                            type: 'chat',
+                            chat_id: chatId,
+                            data: messagePayload
+                        }));
+                        sentViaWebSocket = true;
+                
+                        // Add message to UI immediately for better UX
+                        // The server will echo it back for confirmation
+                        appendMessageToUI(messagePayload);
+                
+                        // Clear textarea
+                        textarea.value = '';
+                        textarea.style.height = 'auto';
+                
+                        // Clear typing indicator
+                        sendTypingStatus(false);
+                    } catch (error) {
+                        console.error('Error sending message via WebSocket:', error);
+                        sentViaWebSocket = false;
+                    }
+                }
+                
+                // Fall back to HTTP API if WebSocket fails
+                if (!sentViaWebSocket) {
+                    console.log('WebSocket send failed, falling back to HTTP API');
+                    fetch(`/api/chats/${chatId}/messages`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            user_id: userId,
+                            content: message
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Clear textarea
+                            textarea.value = '';
+                            textarea.style.height = 'auto';
+                            
+                            // Add message to UI
+                            appendMessageToUI({
+                                id: data.message_id || 'msg_' + Date.now(),
+                                user_id: userId,
+                                username: displayName,
+                                content: message,
+                                timestamp: Date.now(),
+                                status: 'sent'
+                            });
+                            
+                            // Clear typing indicator
+                            sendTypingStatus(false);
+                        } else {
+                            console.error('Error sending message:', data.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error sending message:', error);
+                    });
+                }
+            }
+        }
+
+        // Helper functions for QR code
+        function generateToken() {
+            return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        }
+        
+        let countdownInterval = null;
+        let qrExpiryTime = null;
+        let connectionStatus = 'pending'; // pending, scanned, accepted, rejected, expired
+        
+        function startQrCountdown(durationMinutes = 15) {
+            // Clear any existing countdown
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+            
+            // Set expiry time
+            qrExpiryTime = new Date();
+            qrExpiryTime.setMinutes(qrExpiryTime.getMinutes() + durationMinutes);
+            
+            // Update countdown display
+            updateCountdownDisplay();
+            
+            // Set progress bar to 100%
+            document.getElementById('qr-progress-bar').style.width = '100%';
+            
+            // Start countdown interval
+            countdownInterval = setInterval(() => {
+                const remaining = updateCountdownDisplay();
+                
+                // Update progress bar width based on remaining time
+                const progressPercent = (remaining / (durationMinutes * 60)) * 100;
+                document.getElementById('qr-progress-bar').style.width = progressPercent + '%';
+                
+                // Check if countdown has expired
+                if (remaining <= 0) {
+                    clearInterval(countdownInterval);
+                    connectionStatus = 'expired';
+                    updateConnectionStatus('expired');
+                }
+                }, 1000);
+        }
+        
+        function updateCountdownDisplay() {
+            // Calculate remaining time
+            const now = new Date();
+            const diffMs = qrExpiryTime - now;
+            const diffSec = Math.max(0, Math.floor(diffMs / 1000));
+            
+            // Convert to minutes and seconds
+            const minutes = Math.floor(diffSec / 60);
+            const seconds = diffSec % 60;
+            
+            // Update display
+            document.getElementById('countdown-minutes').textContent = String(minutes).padStart(2, '0');
+            document.getElementById('countdown-seconds').textContent = String(seconds).padStart(2, '0');
+            
+            return diffSec;
+        }
+        
+        function updateConnectionStatus(status, userData = null) {
+            connectionStatus = status;
+            const statusText = document.getElementById('qr-status');
+            const progressBar = document.getElementById('qr-progress-bar');
+            const connectionInfo = document.getElementById('qr-connection-info');
+            
+            switch (status) {
+                case 'pending':
+                    statusText.textContent = 'Ready to scan';
+                    statusText.style.color = '#666';
+                    progressBar.style.backgroundColor = '#4a6fa5';
+                    connectionInfo.style.display = 'none';
+                    break;
+                case 'scanned':
+                    statusText.textContent = 'QR code scanned!';
+                    statusText.style.color = '#3498db';
+                    progressBar.style.backgroundColor = '#3498db';
+                    
+                    if (userData) {
+                        connectionInfo.style.display = 'block';
+                        document.getElementById('remote-user-details').textContent = userData.displayName || 'Unknown user';
+                        document.getElementById('connection-message').textContent = 'Waiting for acceptance...';
+                    }
+                    break;
+                case 'accepted':
+                    statusText.textContent = 'Connection accepted! Opening chat...';
+                    statusText.style.color = '#2ecc71';
+                    progressBar.style.backgroundColor = '#2ecc71';
+                    
+                    if (userData) {
+                        connectionInfo.style.display = 'block';
+                        document.getElementById('remote-user-details').textContent = userData.displayName || 'Unknown user';
+                        document.getElementById('connection-message').textContent = 'Creating chat connection...';
+                    }
+                    
+                    // Auto-close QR modal after a short delay
+                    setTimeout(() => {
+                        if (document.getElementById('qr-modal').style.display === 'flex') {
+                            document.getElementById('close-qr-modal').click();
+                        }
+                    }, 3000);
+                    break;
+                case 'rejected':
+                    statusText.textContent = 'Connection rejected';
+                    statusText.style.color = '#e74c3c';
+                    progressBar.style.backgroundColor = '#e74c3c';
+                    
+                    if (userData) {
+                        connectionInfo.style.display = 'block';
+                        document.getElementById('remote-user-details').textContent = userData.displayName || 'Unknown user';
+                        document.getElementById('connection-message').textContent = 'Connection request was rejected';
+                    }
+                    break;
+                case 'expired':
+                    statusText.textContent = 'QR code expired';
+                    statusText.style.color = '#e74c3c';
+                    progressBar.style.backgroundColor = '#e74c3c';
+                    progressBar.style.width = '0%';
+                    connectionInfo.style.display = 'none';
+                    
+                    // Clear the countdown interval
+                    if (countdownInterval) {
+                        clearInterval(countdownInterval);
+                        countdownInterval = null;
+                    }
+                    break;
+                case 'error':
+                    statusText.textContent = 'Error loading QR code';
+                    statusText.style.color = '#e74c3c';
+                    progressBar.style.backgroundColor = '#e74c3c';
+                    connectionInfo.style.display = 'none';
+                    progressBar.style.width = '0%';
+                    
+                    // Clear the countdown interval
+                    if (countdownInterval) {
+                        clearInterval(countdownInterval);
+                        countdownInterval = null;
+                    }
+                    break;
+            }
+            
+            // Log connection status change for important statuses
+            if (['scanned', 'accepted', 'rejected', 'expired'].includes(status)) {
+                logSecurityEvent('qr_connection_status_changed', {
+                    status: status,
+                    timestamp: Date.now(),
+                    userData: userData ? {
+                        displayName: userData.displayName,
+                        userId: userData.userId
+                    } : null
+                });
+            }
+        }
+        
+        function startQrScanPolling(token) {
+            // Reset connection status
+            updateConnectionStatus('pending');
+            
+            // Start countdown timer
+            startQrCountdown(15); // 15 minutes expiry
+            
+            let pollCount = 0;
+            const maxPolls = 15 * 60; // Poll for maximum 15 minutes (once per second)
+            
+            const pollInterval = setInterval(() => {
+                pollCount++;
+                
+                // Check if polling should stop
+                if (pollCount >= maxPolls || document.getElementById('qr-modal').style.display === 'none') {
+                    clearInterval(pollInterval);
+                    
+                    // If we stopped because of maxPolls, update status to expired
+                    if (qrExpiryTime && pollCount >= maxPolls) {
+                        updateConnectionStatus('expired');
+                    }
+                    return;
+                }
+                
+                // In a real app, this would call an API to check scan status
+                // For this demo, simulate different connection stages randomly
+                if (connectionStatus === 'pending' && Math.random() < 0.05 && pollCount > 5) {
+                    // Simulate a scan
+                    updateConnectionStatus('scanned', {
+                        displayName: 'Demo User',
+                        userId: 'demo-user-' + Math.floor(Math.random() * 1000)
+                    });
+                    
+                    // After scan, simulate either acceptance or rejection
+                    setTimeout(() => {
+                        if (connectionStatus === 'scanned') {
+                            if (Math.random() < 0.8) { // 80% chance of acceptance
+                                updateConnectionStatus('accepted', {
+                                    displayName: 'Demo User',
+                                    userId: 'demo-user-' + Math.floor(Math.random() * 1000)
+                                });
+                                
+                                // Create a new chat after acceptance
+                                setTimeout(() => {
+                                    if (connectionStatus === 'accepted') {
+                                        createChatFromQRScan(token);
+                                    }
+                                }, 1500);
+                            } else {
+                                updateConnectionStatus('rejected', {
+                                    displayName: 'Demo User',
+                                    userId: 'demo-user-' + Math.floor(Math.random() * 1000)
+                                });
+                            }
+                        }
+                    }, 3000 + Math.random() * 2000);
+                }
+            }, 1000);
+        }
+        
+        function createChatFromQRScan(token) {
+            // Create a new chat from QR scan
+            console.log('Creating chat from QR scan with token:', token);
+            
+            // Log the security event
+            logSecurityEvent('qr_code_chat_created', {
+                token: token,
+                timestamp: Date.now(),
+                connection_status: connectionStatus
+            });
+            
+            // Create a new chat item
+            const chatList = document.querySelector('.chat-list');
+            let chatItem = document.querySelector(`.chat-item[data-chat-id="${token}"]`);
+            
+            // Get user details if available from connection info
+            let userInitial = 'Q';
+            let userName = 'QR Connection';
+            const remoteUserDetails = document.getElementById('remote-user-details');
+            if (remoteUserDetails && remoteUserDetails.textContent) {
+                userName = remoteUserDetails.textContent;
+                userInitial = userName.charAt(0).toUpperCase();
+            }
+            
+            // Format time
+            const timeFormatted = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            // Get last message text
+            let lastMessageText = 'New conversation';
+            
+            // Check if chat has messages
+            if (chatList.children.length > 1) {
+                const lastMsg = chatList.children[chatList.children.length - 2].querySelector('.chat-item-message');
+                lastMessageText = lastMsg.textContent || 'New message';
+            }
+            
+            if (!chatItem) {
+                // Create new chat item
+                chatItem = document.createElement('div');
+                chatItem.className = 'chat-item';
+                chatItem.setAttribute('data-chat-id', token);
+                
+                // Add to chat list at the top
+                if (chatList.firstChild) {
+                    chatList.insertBefore(chatItem, chatList.firstChild);
+                } else {
+                    chatList.appendChild(chatItem);
+                }
+            }
+            
+            // Update chat item content
+            chatItem.innerHTML = `
+                <div class="chat-avatar">${userInitial}</div>
+                <div class="chat-item-info">
+                    <div class="chat-item-header">
+                        <div class="chat-item-name">${userName}</div>
+                        <div class="chat-item-time">${timeFormatted}</div>
+                    </div>
+                    <div class="chat-item-message">${lastMessageText}</div>
+                </div>
+            `;
+            
+            // Set data attributes for user IDs to enable online status updates
+            if (Array.isArray(chat)) {
+                if (chat[8]) chatItem.setAttribute('data-creator-id', chat[8]);
+                if (chat[9]) chatItem.setAttribute('data-scanner-id', chat[9]);
+            } else {
+                if (chat.creator_id) chatItem.setAttribute('data-creator-id', chat.creator_id);
+                if (chat.scanner_id) chatItem.setAttribute('data-scanner-id', chat.scanner_id);
+            }
+            
+            // Add click handler
+            chatItem.addEventListener('click', function() {
+                // Remove active class from all chat items
+                document.querySelectorAll('.chat-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                
+                // Add active class to this chat item
+                this.classList.add('active');
+                
+                // Get chat ID
+                const chatId = this.getAttribute('data-chat-id');
+                
+                // Store active chat ID
+                localStorage.setItem('activeChatId', chatId);
+                
+                // Load the chat
+                getChatAndCreateUI(chatId);
+                
+                // Close sidebar on mobile
+                if (window.innerWidth <= 768) {
+                    document.getElementById('sidebar').classList.remove('open');
+                }
+            });
+            
+            // Simulate automatic click to open the new chat
+            chatItem.click();
+        }
+
+        // Security logging function
+        function logSecurityEvent(eventType, eventData) {
+            // In a real app, this would call an API to log security events
+            console.log(`[Security Event] ${eventType}:`, eventData);
+        }
+
+        // Functions for QR code connection management
+        function registerQrScan(token) {
+            // Get user information
+            const userId = localStorage.getItem('userId') || 'guest_' + Math.random().toString(36).substring(2, 10);
+            const displayName = localStorage.getItem('userDisplayName') || 'Guest User';
+            
+            // Save for future use if not already saved
+            if (!localStorage.getItem('userId')) {
+                localStorage.setItem('userId', userId);
+                localStorage.setItem('userDisplayName', displayName);
+                localStorage.setItem('authToken', 'demo-token'); // Set auth token to prevent redirects
+            }
+            
+            // Show QR connection dialog for scanner
+            const qrModal = document.getElementById('qr-modal');
+            qrModal.style.display = 'flex';
+            
+            // Update status
+            document.getElementById('qr-status').textContent = 'Connecting...';
+            document.getElementById('qr-progress-bar').style.width = '50%';
+            document.getElementById('qr-progress-bar').style.backgroundColor = '#3498db';
+            
+            // Hide QR code image and show connection info
+            document.getElementById('qr-loading').style.display = 'none';
+            document.getElementById('qr-image').style.display = 'none';
+            document.getElementById('qr-connection-info').style.display = 'block';
+            
+            // Register scan with server
+            fetch('/api/qr/scan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    token: token,
+                    user_id: userId,
+                    display_name: displayName
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Scan registered:', data);
+                
+                if (data.success) {
+                    // Update connection info
+                    document.getElementById('remote-user-details').textContent = data.creator_name || 'Unknown user';
+                    document.getElementById('connection-message').textContent = 'Would you like to connect with this user?';
+                    
+                    // Add accept/reject buttons
+                    const connectionInfo = document.getElementById('qr-connection-info');
+                    
+                    // Check if buttons already exist
+                    if (!document.getElementById('accept-connection')) {
+                        const buttonsContainer = document.createElement('div');
+                        buttonsContainer.style.marginTop = '15px';
+                        buttonsContainer.style.display = 'flex';
+                        buttonsContainer.style.justifyContent = 'center';
+                        buttonsContainer.style.gap = '10px';
+                        buttonsContainer.innerHTML = `
+                            <button id="accept-connection" style="background-color: #2ecc71; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">Accept</button>
+                            <button id="reject-connection" style="background-color: #e74c3c; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">Reject</button>
+                        `;
+                        connectionInfo.appendChild(buttonsContainer);
+                        
+                        // Add button event listeners
+                        document.getElementById('accept-connection').addEventListener('click', () => {
+                            respondToQrConnection(token, 'accept');
+                        });
+                        
+                        document.getElementById('reject-connection').addEventListener('click', () => {
+                            respondToQrConnection(token, 'reject');
+                        });
+                    }
+                } else {
+                    // Show error
+                    document.getElementById('qr-status').textContent = 'Error: ' + (data.error || 'Something went wrong');
+                    document.getElementById('qr-progress-bar').style.width = '0%';
+                    document.getElementById('qr-progress-bar').style.backgroundColor = '#e74c3c';
+                    document.getElementById('connection-message').textContent = data.error || 'Failed to connect with QR code';
+                }
+            })
+            .catch(error => {
+                console.error('Error registering scan:', error);
+                document.getElementById('qr-status').textContent = 'Error connecting to server';
+                document.getElementById('qr-progress-bar').style.width = '0%';
+                document.getElementById('qr-progress-bar').style.backgroundColor = '#e74c3c';
+                document.getElementById('connection-message').textContent = 'Server connection failed';
+            });
+        }
+        
+        function respondToQrConnection(token, response) {
+            // Get user information
+            const userId = localStorage.getItem('userId');
+            const displayName = localStorage.getItem('userDisplayName');
+            
+            // Update UI based on response
+            if (response === 'accept') {
+                document.getElementById('qr-status').textContent = 'Connecting...';
+                document.getElementById('qr-progress-bar').style.width = '75%';
+                document.getElementById('qr-progress-bar').style.backgroundColor = '#2ecc71';
+                document.getElementById('connection-message').textContent = 'Creating secure connection...';
+            } else {
+                document.getElementById('qr-status').textContent = 'Connection rejected';
+                document.getElementById('qr-progress-bar').style.width = '0%';
+                document.getElementById('qr-progress-bar').style.backgroundColor = '#e74c3c';
+                document.getElementById('connection-message').textContent = 'You declined this connection';
+                
+                // Close modal after delay
+                setTimeout(() => {
+                    document.getElementById('close-qr-modal').click();
+                }, 2000);
+                
+                return;
+            }
+            
+            // Remove buttons
+            const buttonsContainer = document.getElementById('accept-connection').parentNode;
+            if (buttonsContainer) {
+                buttonsContainer.remove();
+            }
+            
+            // Send response to server
+            fetch('/api/qr/respond', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    token: token,
+                    user_id: userId,
+                    display_name: displayName,
+                    response: response
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Connection response:', data);
+                
+                if (data.success && data.status === 'accepted') {
+                    // Connection accepted, create chat
+                    document.getElementById('qr-status').textContent = 'Connection established! Opening chat...';
+                    
+                    // If we have a chat ID, open it
+                    if (data.chat_id) {
+                        console.log('QR connection accepted with chat ID:', data.chat_id);
+                        
+                        // Wait a moment for visual feedback, then redirect to chat
+                        setTimeout(() => {
+                            // Close modal
+                            closeQRModal();
+                            
+                            // Get and open the chat
+                            getChatAndCreateUI(data.chat_id);
+                        }, 1500);
+                    }
+                } else {
+                    // Show error or rejection
+                    document.getElementById('qr-status').textContent = response === 'accept' ? 'Error creating connection' : 'Connection rejected';
+                    document.getElementById('qr-progress-bar').style.width = '0%';
+                    document.getElementById('qr-progress-bar').style.backgroundColor = '#e74c3c';
+                    
+                    // Close modal after delay
+                    setTimeout(() => {
+                        document.getElementById('close-qr-modal').click();
+                    }, 2000);
+                }
+            })
+            .catch(error => {
+                console.error('Error responding to connection:', error);
+                document.getElementById('qr-status').textContent = 'Error connecting to server';
+                document.getElementById('qr-progress-bar').style.width = '0%';
+                document.getElementById('qr-progress-bar').style.backgroundColor = '#e74c3c';
+            });
+        }
+        
+        function startQrStatusChecking(token) {
+            console.log('Starting QR status checking for token:', token);
+            
+            // Reset progress
+            let progress = 0;
+            document.getElementById('qr-progress-bar').style.width = '0%';
+            document.getElementById('qr-progress-bar').style.backgroundColor = '#3498db';
+            
+            // Set up timer (2 minutes)
+            const maxTime = 120; // seconds
+            const checkInterval = 2; // seconds
+            
+            // Store interval ID so we can clear it later
+            if (window.qrStatusInterval) {
+                clearInterval(window.qrStatusInterval);
+            }
+            
+            window.qrStatusInterval = setInterval(() => {
+                // Update progress bar
+                progress += (checkInterval / maxTime) * 100;
+                if (progress >= 100) {
+                    clearInterval(window.qrStatusInterval);
+                    updateConnectionStatus('expired');
+                    return;
+                }
+                
+                document.getElementById('qr-progress-bar').style.width = `${progress}%`;
+                
+                // Check QR status with server
+                fetch(`/api/qr/status/${token}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('QR status check response:', data);
+                        
+                        if (data.success) {
+                            // Update status based on response
+                            updateConnectionStatus(data.status);
+                            
+                            // If scanned, update scanner info
+                            if (data.status === 'scanned' && data.scanner_name) {
+                                document.getElementById('qr-status').textContent = `Scanned by ${data.scanner_name}. Waiting for connection...`;
+                                // Show connection info
+                                document.getElementById('qr-connection-info').style.display = 'block';
+                                document.getElementById('remote-user-details').textContent = data.scanner_name || 'Unknown user';
+                                document.getElementById('connection-message').textContent = 'Waiting for acceptance...';
+                            }
+                            
+                            // If accepted, redirect to chat
+                            if (data.status === 'accepted') {
+                                // Clear interval
+                                clearInterval(window.qrStatusInterval);
+                                
+                                // Show success status
+                                document.getElementById('qr-status').textContent = 'Connection accepted! Opening chat...';
+                                
+                                // If we have a chat ID, open it
+                                if (data.chat_id) {
+                                    console.log('QR connection accepted with chat ID:', data.chat_id);
+                                    
+                                    // Show connection info
+                                    document.getElementById('qr-connection-info').style.display = 'block';
+                                    document.getElementById('remote-user-details').textContent = data.scanner_name || 'Unknown user';
+                                    document.getElementById('connection-message').textContent = 'Creating chat connection...';
+                                    
+                                    // Wait a moment for visual feedback, then redirect to chat
+                                    setTimeout(() => {
+                                        // Close modal
+                                        closeQRModal();
+                                        
+                                        // Get and open the chat
+                                        getChatAndCreateUI(data.chat_id);
+                                    }, 1000);
+                                } else {
+                                    console.error('No chat_id received for accepted connection!');
+                                    document.getElementById('connection-message').textContent = 'Error: No chat ID received';
+                                }
+                            }
+                            
+                            // If rejected, stop checking
+                            if (data.status === 'rejected') {
+                                clearInterval(window.qrStatusInterval);
+                                document.getElementById('qr-status').textContent = 'Connection rejected';
+                                document.getElementById('connection-message').textContent = 'Connection was rejected';
+                            }
+                        } else {
+                            // QR code invalid or expired
+                            clearInterval(window.qrStatusInterval);
+                            updateConnectionStatus('error');
+                            document.getElementById('qr-status').textContent = data.error || 'Error checking QR status';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error checking QR status:', error);
+                        // Don't stop checking, just log the error
+                    });
+            }, checkInterval * 1000);
+        }
+        
+        function getChatAndCreateUI(chatId) {
+            console.log('Getting chat data for:', chatId);
+            
+            // Show loading notification
+            showNotification('Loading chat...', 'info');
+            
+            // Get chat data from server
+            fetch(`/api/chats/${chatId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Chat data response:', data);
+                    
+                    if (data.success) {
+                        // Store the active chat ID
+                        localStorage.setItem('activeChatId', chatId);
+                        
+                        // Create or update chat in the sidebar
+                        updateChatInSidebar(data.chat, data.participants);
+                        
+                        // Load messages
+                        loadChatMessages(data.chat, data.messages, data.participants);
+                        
+                        // Show success notification
+                        showNotification('Connected to chat successfully', 'success');
+                    } else {
+                        showNotification('Failed to load chat data', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error getting chat data:', error);
+                    showNotification('Error loading chat: ' + error.message, 'error');
+                });
+        }
+        
+        function updateChatInSidebar(chat, participants) {
+            console.log('Updating chat in sidebar:', chat);
+            
+            // Get chat list element
+            const chatList = document.querySelector('.chat-list');
+            
+            // Get chat ID (handle different formats)
+            let chatId;
+            
+            if (Array.isArray(chat)) {
+                // Array format from get_chats endpoint: [0] is the id
+                chatId = chat[0];
+            } else if (chat.id) {
+                // Object format with id property
+                chatId = chat.id;
+            } else if (chat.chat_id) {
+                // Object format with chat_id property
+                chatId = chat.chat_id;
+            } else {
+                console.error('No chat ID found in chat object:', chat);
+                return null;
+            }
+            
+            // Check if chat already exists in sidebar
+            let chatItem = document.querySelector(`.chat-item[data-chat-id="${chatId}"]`);
+            
+            // Get current user ID
+            const currentUserId = localStorage.getItem('userId');
+            
+            // Find chat creator and other participants
+            const creator = participants ? participants.find(p => p.user_id === (Array.isArray(chat) ? chat[1] : chat.creator_id)) : null;
+            const currentUserParticipant = participants ? participants.find(p => p.user_id === currentUserId) : null;
+            
+            // Determine who to show (not the current user)
+            let otherParticipants = participants ? participants.filter(p => p.user_id !== currentUserId) : [];
+            let displayParticipant = otherParticipants.length > 0 ? otherParticipants[0] : creator;
+            
+            // Get display name and initial
+            let displayName = 'QR Connection';
+            
+            if (Array.isArray(chat)) {
+                // Array format: [2] is title, [8] is creator_name
+                displayName = chat[2] || 'Chat';
+            } else {
+                if (chat.scanner_name && chat.scanner_id !== currentUserId) {
+                    // Show scanner name if current user is the creator
+                    displayName = chat.scanner_name;
+                } else if (chat.creator_name && chat.creator_id !== currentUserId) {
+                    // Show creator name if current user is the scanner
+                    displayName = chat.creator_name;
+                } else if (displayParticipant) {
+                    // Fall back to participant info if available
+                    displayName = displayParticipant.display_name || displayParticipant.username || 'User';
+                } else if (chat.title) {
+                    // Use chat title if available
+                    displayName = chat.title;
+                }
+            }
+                
+            const initial = displayName.charAt(0).toUpperCase();
+            
+            // Format time
+            const timeFormatted = Array.isArray(chat) ? 
+                formatTimestamp(new Date(chat[3] || Date.now())) :  // [3] is created_at
+                (chat.created_at ? 
+                    formatTimestamp(new Date(chat.created_at)) : 
+                    new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+            
+            // Get last message text
+            let lastMessageText = 'New conversation';
+            
+            // Check if chat has messages
+            if (chat.messages && chat.messages.length > 0) {
+                const lastMsg = chat.messages[chat.messages.length - 1];
+                lastMessageText = lastMsg.content || 'New message';
+            }
+            // Check if chat has last_message field (array format index 10)
+            else if (Array.isArray(chat) && chat[10]) {
+                lastMessageText = chat[10];
+            }
+            
+            if (!chatItem) {
+                // Create new chat item
+                chatItem = document.createElement('div');
+                chatItem.className = 'chat-item';
+                chatItem.setAttribute('data-chat-id', chatId);
+                
+                // Add to chat list at the top
+                if (chatList.firstChild) {
+                    chatList.insertBefore(chatItem, chatList.firstChild);
+                } else {
+                    chatList.appendChild(chatItem);
+                }
+            }
+            
+            // Update chat item content
+            chatItem.innerHTML = `
+                <div class="chat-avatar">${initial}</div>
+                <div class="chat-item-info">
+                    <div class="chat-item-header">
+                        <div class="chat-item-name">${displayName}</div>
+                        <div class="chat-item-time">${timeFormatted}</div>
+                    </div>
+                    <div class="chat-item-message">${lastMessageText}</div>
+                </div>
+            `;
+            
+            // Set data attributes for user IDs to enable online status updates
+            if (Array.isArray(chat)) {
+                if (chat[8]) chatItem.setAttribute('data-creator-id', chat[8]);
+                if (chat[9]) chatItem.setAttribute('data-scanner-id', chat[9]);
+            } else {
+                if (chat.creator_id) chatItem.setAttribute('data-creator-id', chat.creator_id);
+                if (chat.scanner_id) chatItem.setAttribute('data-scanner-id', chat.scanner_id);
+            }
+            
+            // Add click handler
+            chatItem.addEventListener('click', function() {
+                // Remove active class from all chat items
+                document.querySelectorAll('.chat-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                
+                // Add active class to this chat item
+                this.classList.add('active');
+                
+                // Get chat ID
+                const chatId = this.getAttribute('data-chat-id');
+                
+                // Store active chat ID
+                localStorage.setItem('activeChatId', chatId);
+                
+                // Load the chat
+                getChatAndCreateUI(chatId);
+                
+                // Close sidebar on mobile
+                if (window.innerWidth <= 768) {
+                    document.getElementById('sidebar').classList.remove('open');
+                }
+            });
+            
+            // Set as active chat
+            document.querySelectorAll('.chat-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            chatItem.classList.add('active');
+            
+            return chatItem;
+        }
+        
+        function loadChatMessages(chat, messages, participants) {
+            console.log('Loading messages for chat:', chat);
+            
+            // Get current user info
+            const currentUserId = localStorage.getItem('userId');
+            
+            // Get chat ID (handle different formats)
+            let chatId;
+            
+            if (Array.isArray(chat)) {
+                // Array format from get_chats endpoint: [0] is the id
+                chatId = chat[0];
+            } else if (chat.id) {
+                // Object format with id property
+                chatId = chat.id;
+            } else if (chat.chat_id) {
+                // Object format with chat_id property
+                chatId = chat.chat_id;
+            } else {
+                console.error('No chat ID found in chat object:', chat);
+                return;
+            }
+            
+            // Find current user and other participants
+            const otherParticipants = participants ? participants.filter(p => p.user_id !== currentUserId) : [];
+            let displayParticipant = otherParticipants.length > 0 ? otherParticipants[0] : null;
+            
+            // Get display name and initial for the chat header
+            let displayName = 'QR Connection';
+            
+            if (Array.isArray(chat)) {
+                // Array format: [2] is title, [8] is creator_name
+                displayName = chat[2] || 'Chat';
+            } else {
+                if (chat.scanner_name && chat.scanner_id !== currentUserId) {
+                    // Show scanner name if current user is the creator
+                    displayName = chat.scanner_name;
+                } else if (chat.creator_name && chat.creator_id !== currentUserId) {
+                    // Show creator name if current user is the scanner
+                    displayName = chat.creator_name;
+                } else if (displayParticipant) {
+                    // Fall back to participant info if available
+                    displayName = displayParticipant.display_name || displayParticipant.username || 'User';
+                } else if (chat.title) {
+                    // Use chat title if available
+                    displayName = chat.title;
+                }
+            }
+                
+            const initial = displayName.charAt(0).toUpperCase();
+            
+            // Update chat header
+            const chatAvatarElement = document.querySelector('.chat-window .chat-info .chat-avatar');
+            const chatNameElement = document.querySelector('.chat-window .chat-info .chat-details h3');
+            const chatStatusElement = document.querySelector('.chat-window .chat-info .chat-details p');
+            
+            if (chatAvatarElement) {
+                chatAvatarElement.textContent = initial;
+                
+                // Set online class based on the status if we can determine the user
+                const otherUserId = chat.scanner_id !== currentUserId ? chat.scanner_id : chat.creator_id;
+                if (otherUserId) {
+                    // Check if user is online (will be updated later via WebSocket)
+                    // For now, just assume they're online since we're in a chat with them
+                    chatAvatarElement.classList.add('online');
+                }
+            }
+            
+            if (chatNameElement) {
+                chatNameElement.textContent = displayName;
+            }
+            
+            if (chatStatusElement) {
+                if (Array.isArray(chat)) {
+                    if (chat[5]) { // is_qr_created
+                        chatStatusElement.textContent = 'Online'; // Changed from 'Connected via QR Code'
+                        // Set other user ID for status updates - use dataset consistently
+                        chatStatusElement.dataset.otherUserId = chat[8] === currentUserId ? chat[9] : chat[8];
+                        console.log(`Setting otherUserId in array format to: ${chatStatusElement.dataset.otherUserId} (current user is ${currentUserId})`);
+                        
+                        // Add CSS class for styling
+                        chatStatusElement.classList.add('online');
+                        chatStatusElement.classList.remove('offline', 'typing');
+                    } else if (participants) {
+                        chatStatusElement.textContent = `${participants.length} participant${participants.length !== 1 ? 's' : ''}`;
+                    } else {
+                        chatStatusElement.textContent = 'New conversation';
+                    }
+                } else if (chat.scanner_name || chat.creator_name) {
+                    chatStatusElement.textContent = 'Online'; // Changed from 'Connected via QR Code'
+                    // Store other user ID for status updates
+                    if (chat.scanner_id && chat.scanner_id !== currentUserId) {
+                        chatStatusElement.dataset.otherUserId = chat.scanner_id;
+                        console.log(`Setting otherUserId to scanner_id: ${chat.scanner_id} (current user is ${currentUserId})`);
+                    } else if (chat.creator_id && chat.creator_id !== currentUserId) {
+                        chatStatusElement.dataset.otherUserId = chat.creator_id;
+                        console.log(`Setting otherUserId to creator_id: ${chat.creator_id} (current user is ${currentUserId})`);
+                    }
+                    // Add CSS class for styling
+                    chatStatusElement.classList.add('online');
+                    chatStatusElement.classList.remove('offline', 'typing');
+                } else if (participants) {
+                    chatStatusElement.textContent = `${participants.length} participant${participants.length !== 1 ? 's' : ''}`;
+                    
+                    // Find other participant and set as otherUserId
+                    const otherParticipant = participants.find(p => p.user_id !== currentUserId);
+                    if (otherParticipant) {
+                        chatStatusElement.dataset.otherUserId = otherParticipant.user_id;
+                        console.log(`Setting otherUserId from participant: ${otherParticipant.user_id} (current user is ${currentUserId})`);
+                    }
+                } else {
+                    chatStatusElement.textContent = 'New conversation';
+                }
+                
+                // Debug the data attributes
+                console.log("Chat status element after setting attributes:", {
+                    otherUserId: chatStatusElement.dataset.otherUserId,
+                    classes: chatStatusElement.className,
+                    text: chatStatusElement.textContent
+                });
+            }
+            
+            // Clear messages container
+            const messagesContainer = document.querySelector('.messages-container');
+            messagesContainer.innerHTML = '';
+            
+            // Set chat ID as a data attribute for sending messages
+            messagesContainer.dataset.chatId = chatId;
+            
+            // If we already have messages, add them
+            if (messages && messages.length > 0) {
+                console.log(`Adding ${messages.length} messages to UI`);
+                messages.forEach(message => {
+                    appendMessageToUI(message);
+                });
+                
+                // Scroll to bottom
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            } else {
+                // Otherwise, fetch messages from the server
+                console.log(`Fetching messages for chat ${chatId}`);
+                fetch(`/api/chats/${chatId}/messages`)
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log(`Fetched ${data.messages?.length || 0} messages from server`);
+                        if (data.success && data.messages && data.messages.length > 0) {
+                            // Add messages to UI
+                            data.messages.forEach(message => {
+                                appendMessageToUI(message);
+                            });
+                            
+                            // Scroll to bottom
+                            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                        } else {
+                            // If no messages, show welcome message
+                            const welcomeMessage = document.createElement('div');
+                            welcomeMessage.className = 'message system';
+                            welcomeMessage.innerHTML = `
+                                <div class="message-bubble">
+                                    Start a new conversation in this chat.
+                                </div>
+                                <div class="message-info">
+                                    System • ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                </div>
+                            `;
+                            messagesContainer.appendChild(welcomeMessage);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading messages:', error);
+                        
+                        // Show error message
+                        const errorMessage = document.createElement('div');
+                        errorMessage.className = 'message system error';
+                        errorMessage.innerHTML = `
+                            <div class="message-bubble">
+                                Error loading messages. Please try again.
+                            </div>
+                            <div class="message-info">
+                                System • ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            </div>
+                        `;
+                        messagesContainer.appendChild(errorMessage);
+                    });
+            }
+        }
+        
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            
+            // Check if today
+            if (date.toDateString() === now.toDateString()) {
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+            
+            // Check if yesterday
+            const yesterday = new Date(now);
+            yesterday.setDate(now.getDate() - 1);
+            if (date.toDateString() === yesterday.toDateString()) {
+                return 'Yesterday';
+            }
+            
+            // Otherwise return short date
+            return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        }
+
+        // Function to append a message to the UI
+        function appendMessageToUI(message) {
+            // Validate and normalize message object
+            if (!message) return;
+            
+            // Ensure message has required fields
+            if (!message.content && !message.text) {
+                console.warn('Message missing content field:', message);
+                message.content = "No content available";
+            } else if (!message.content && message.text) {
+                message.content = message.text;
+            }
+            
+            // Get messages container
+            const messagesContainer = document.getElementById('messages-container');
+            
+            // Generate a consistent message ID if not provided
+            const messageId = message.id || `msg_${message.timestamp}`;
+            
+            // Check if this message already exists in the UI to prevent duplicates
+            const existingMessage = document.querySelector(`.message[data-message-id="${messageId}"]`);
+            if (existingMessage) {
+                console.log(`Message ${messageId} already exists in UI, not adding duplicate`);
+                return existingMessage;
+            }
+            
+            // Get current user ID
+            const currentUserId = localStorage.getItem('userId');
+            
+            // Check if message is from current user - handle multiple formats
+            // The database stores UUIDs, but the frontend uses a user_xxxx format
+            let isOutgoing = false;
+            
+            // First check the original user_id string comparison
+            if (message.user_id === currentUserId) {
+                isOutgoing = true;
+            } 
+            // Look for username match (for messages loaded from database)
+            else if (message.username) {
+                const currentUsername = localStorage.getItem('username');
+                if (currentUsername && message.username === currentUsername) {
+                    isOutgoing = true;
+                }
+            }
+            
+            // Create message element
+            const messageElement = document.createElement('div');
+            messageElement.className = isOutgoing ? 'message outgoing' : 'message incoming';
+            messageElement.dataset.messageId = messageId;
+            messageElement.dataset.userId = message.user_id;
+            messageElement.dataset.timestamp = message.timestamp;
+            
+            // Format timestamp
+            const timestamp = message.timestamp ? new Date(message.timestamp) : new Date();
+            const time = timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            // Get safe content value
+            const content = message.content || message.text || "No content available";
+            
+            // Set message HTML
+            messageElement.innerHTML = `
+                <div class="message-bubble">${content}</div>
+                <div class="message-info">
+                    ${isOutgoing ? 'You' : (message.username || 'User')} • ${time}
+                    ${isOutgoing ? '<span class="message-status">✓✓</span>' : ''}
+                </div>
+            `;
+            
+            // Add to container
+            messagesContainer.appendChild(messageElement);
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            // Update chat list with latest message
+            updateChatLastMessage(messagesContainer.dataset.chatId, message);
+            
+            return messageElement;
+        }
+        
+        // Function to update last message in chat list
+        function updateChatLastMessage(chatId, message) {
+            if (!chatId || !message) return;
+            
+            // Find chat item in sidebar
+            const chatItem = document.querySelector(`.chat-item[data-chat-id="${chatId}"]`);
+            if (!chatItem) return;
+            
+            // Make sure message has content
+            const messageContent = message.content || message.text || "No content available";
+            
+            // Update last message text
+            const messageElement = chatItem.querySelector('.chat-item-message');
+            if (messageElement) {
+                // Truncate message if too long
+                const truncated = messageContent.length > 30 ? 
+                    messageContent.substring(0, 30) + '...' : 
+                    messageContent;
+                    
+                messageElement.textContent = truncated;
+            }
+            
+            // Update time
+            const timeElement = chatItem.querySelector('.chat-item-time');
+            if (timeElement) {
+                timeElement.textContent = formatTimestamp(message.timestamp);
+            }
+            
+            // Add unread indicator if this chat is not active
+            if (!chatItem.classList.contains('active')) {
+                chatItem.classList.add('unread');
+                
+                // Move chat to top of list
+                const chatList = chatItem.parentElement;
+                chatList.insertBefore(chatItem, chatList.firstChild);
+            }
+        }
+
+        // Function to open QR modal and generate a new QR code
+        function openQRModal() {
+            // Get user information
+            const userId = localStorage.getItem('userId');
+            const displayName = localStorage.getItem('userDisplayName');
+            
+            if (!userId || !displayName) {
+                // If not logged in, prompt for login or create guest
+                alert('Please log in or create a guest account first.');
+                
+                // Redirect to login page
+                window.location.href = '/templates/login.html';
+                return;
+            }
+            
+            // Show QR modal
+            document.getElementById('qr-modal').style.display = 'flex';
+            
+            // Show loading state
+            document.getElementById('qr-loading').style.display = 'flex';
+            document.getElementById('qr-image').style.display = 'none';
+            
+            // Reset status
+            updateConnectionStatus('pending');
+            
+            // Generate QR code
+            console.log('Generating QR code...');
+            
+            // Get selected QR type
+            const useHttpUrl = document.querySelector('input[name="qr-type"][value="http"]').checked;
+            console.log('Using HTTP URL:', useHttpUrl);
+            
+            // Generate new token every time
+            const token = generateToken();
+            const timestamp = Date.now();
+            
+            console.log('Generated new QR token:', token);
+            
+            // Register QR code with server
+            fetch('/api/qr/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    token: token,
+                    timestamp: timestamp,
+                    user_id: userId,
+                    display_name: displayName
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('QR generation response:', data);
+                
+                if (data.success) {
+                    // Update QR code image - use_http should be a string ("true" or "false")
+                    const qrUrl = `/qrcode?token=${data.token}&timestamp=${timestamp}&use_http=${useHttpUrl}`;
+                    document.getElementById('qr-image').src = qrUrl;
+                    
+                    // Hide loading, show QR code
+                    document.getElementById('qr-loading').style.display = 'none';
+                    document.getElementById('qr-image').style.display = 'block';
+                    
+                    // Set up QR status check polling
+                    startQrStatusChecking(data.token);
+                    
+                    // Start countdown timer
+                    startQrCountdown(15);
+                } else {
+                    console.error('QR generation failed:', data.error);
+                    updateConnectionStatus('error');
+                    document.getElementById('qr-status').textContent = data.error || 'Failed to generate QR code';
+                }
+            })
+            .catch(error => {
+                console.error('Error generating QR code:', error);
+                document.getElementById('qr-loading').style.display = 'none';
+                document.getElementById('qr-status').textContent = 'Error connecting to server';
+                document.getElementById('qr-progress-bar').style.width = '0%';
+                document.getElementById('qr-progress-bar').style.backgroundColor = '#e74c3c';
+            });
+        }
+
+        // Function to apply theme
+        function applyTheme(theme) {
+            // Apply selected theme
+            if (theme === 'dark') {
+                document.body.classList.add('dark-theme');
+                document.body.classList.remove('light-theme');
+            } else if (theme === 'light') {
+                document.body.classList.add('light-theme');
+                document.body.classList.remove('dark-theme');
+            } else {
+                // Handle system default - check user preference
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                if (prefersDark) {
+                    document.body.classList.add('dark-theme');
+                    document.body.classList.remove('light-theme');
+                } else {
+                    document.body.classList.add('light-theme');
+                    document.body.classList.remove('dark-theme');
+                }
+            }
+        }
+
+        // Function to show notifications
+        function showNotification(message, type = 'info') {
+            // Check if notification container exists
+            let notificationContainer = document.getElementById('notification-container');
+            
+            if (!notificationContainer) {
+                // Create container if it doesn't exist
+                notificationContainer = document.createElement('div');
+                notificationContainer.id = 'notification-container';
+                notificationContainer.style.position = 'fixed';
+                notificationContainer.style.top = '20px';
+                notificationContainer.style.right = '20px';
+                notificationContainer.style.zIndex = '1000';
+                document.body.appendChild(notificationContainer);
+            }
+            
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.style.padding = '10px 15px';
+            notification.style.marginBottom = '10px';
+            notification.style.borderRadius = '4px';
+            notification.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+            notification.style.transition = 'all 0.3s ease';
+            notification.style.maxWidth = '300px';
+            
+            // Set notification color based on type
+            switch(type) {
+                case 'error':
+                    notification.style.backgroundColor = '#f8d7da';
+                    notification.style.borderLeft = '4px solid #dc3545';
+                    break;
+                case 'success':
+                    notification.style.backgroundColor = '#d4edda';
+                    notification.style.borderLeft = '4px solid #28a745';
+                    break;
+                case 'info':
+                default:
+                    notification.style.backgroundColor = '#d1ecf1';
+                    notification.style.borderLeft = '4px solid #17a2b8';
+                    break;
+            }
+            
+            notification.textContent = message;
+            
+            // Add to container
+            notificationContainer.appendChild(notification);
+            
+            // Remove after timeout
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => {
+                    notification.remove();
+                }, 300);
+            }, 5000);
+        }
+        
+        // Function to load user's existing chats
+        function loadUserChats() {
+            const userId = localStorage.getItem('userId');
+            if (!userId) {
+                console.error('No user ID found');
+                return;
+            }
+            
+            console.log('Loading chats for user:', userId);
+            
+            fetch(`/api/chats?user_id=${userId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('User chats response:', data);
+                    
+                    if (data.success && data.chats && data.chats.length > 0) {
+                        // Clear existing demo chats
+                        const chatList = document.querySelector('.chat-list');
+                        chatList.innerHTML = '';
+                        
+                        // Add each chat to sidebar
+                        data.chats.forEach(chat => {
+                            addChatToSidebar(chat);
+                        });
+                        
+                        // Load the first chat or the active chat if set
+                        const activeChatId = localStorage.getItem('activeChatId');
+                        if (activeChatId) {
+                            // Try to find and click the active chat
+                            const activeChatItem = document.querySelector(`.chat-item[data-chat-id="${activeChatId}"]`);
+                            if (activeChatItem) {
+                                activeChatItem.click();
+                            } else {
+                                // If not found, click the first chat
+                                document.querySelector('.chat-item')?.click();
+                            }
+                        } else if (data.chats.length > 0) {
+                            // Click the first chat
+                            document.querySelector('.chat-item')?.click();
+                        }
+                    } else {
+                        console.log('No chats found or error loading chats');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading user chats:', error);
+                });
+        }
+        
+        function addChatToSidebar(chat) {
+            // Get chat list element
+            const chatList = document.querySelector('.chat-list');
+            
+            // Detect if chat is in array format (from get_chats endpoint)
+            const isArrayFormat = Array.isArray(chat);
+            
+            // Get chat ID based on format
+            const chatId = isArrayFormat ? chat[0] : (chat.id || chat.chat_id);
+            
+            if (!chatId) {
+                console.error('No chat ID found in chat object:', chat);
+                return null;
+            }
+            
+            // Create new chat item
+            const chatItem = document.createElement('div');
+            chatItem.className = 'chat-item';
+            chatItem.setAttribute('data-chat-id', chatId);
+            
+            // Extract chat data based on format
+            // When in array format, properties are at specific indices:
+            // [0]: id, [1]: title, [2]: created_at, [3]: updated_at, 
+            // [4]: is_qr_created, [5]: qr_token, [6]: creator_username
+            
+            // Determine chat name and initial
+            const chatName = isArrayFormat ? chat[1] : (chat.title || 'Chat');
+            const initial = chatName.charAt(0).toUpperCase();
+            
+            // Format time
+            const createdAt = isArrayFormat ? chat[2] : chat.created_at;
+            const timeFormatted = createdAt ? 
+                formatTimestamp(new Date(createdAt)) : 
+                new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            // Get last message text
+            let lastMessageText = 'New conversation';
+            
+            // Check if chat has messages field with data
+            if (chat.messages && chat.messages.length > 0) {
+                const lastMsg = chat.messages[chat.messages.length - 1];
+                lastMessageText = lastMsg.content || 'New message';
+            } 
+            // Check if chat has last_message field (array format index 10)
+            else if (isArrayFormat && chat[10]) {
+                lastMessageText = chat[10];
+            }
+            
+            // Create chat item HTML
+            chatItem.innerHTML = `
+                <div class="chat-avatar">${initial}</div>
+                <div class="chat-item-info">
+                    <div class="chat-item-header">
+                        <div class="chat-item-name">${chatName}</div>
+                        <div class="chat-item-time">${timeFormatted}</div>
+                    </div>
+                    <div class="chat-item-message">${lastMessageText}</div>
+                </div>
+            `;
+            
+            // Set data attributes for user IDs to enable online status updates
+            if (Array.isArray(chat)) {
+                if (chat[8]) chatItem.setAttribute('data-creator-id', chat[8]);
+                if (chat[9]) chatItem.setAttribute('data-scanner-id', chat[9]);
+            } else {
+                if (chat.creator_id) chatItem.setAttribute('data-creator-id', chat.creator_id);
+                if (chat.scanner_id) chatItem.setAttribute('data-scanner-id', chat.scanner_id);
+            }
+            
+            // Add click handler to load the chat
+            chatItem.addEventListener('click', function() {
+                // Remove active class from all chat items
+                document.querySelectorAll('.chat-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                
+                // Add active class to this chat item
+                this.classList.add('active');
+                
+                // Get chat ID
+                const chatId = this.getAttribute('data-chat-id');
+                
+                // Store active chat ID
+                localStorage.setItem('activeChatId', chatId);
+                
+                // Load the chat
+                getChatAndCreateUI(chatId);
+                
+                // Close sidebar on mobile
+                if (window.innerWidth <= 768) {
+                    document.getElementById('sidebar').classList.remove('open');
+                }
+            });
+            
+            // Add to chat list
+            chatList.appendChild(chatItem);
+            
+            return chatItem;
+        }
+
+        // WebSocket connection and handlers
+        // Using global variables declared at the top
+        
+        function connectWebSocket() {
+            // Get server info
+            let protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            let host = window.location.host;
+            let wsUrl = `${protocol}//${host}/ws`;
+            
+            console.log(`Connecting to WebSocket: ${wsUrl}`);
+            
+            // Create WebSocket connection
+            const socket = new WebSocket(wsUrl);
+            
+            socket.onopen = function(e) {
+                console.log('WebSocket connection established');
+                
+                // Send authentication
+                const userId = localStorage.getItem('userId');
+                const displayName = localStorage.getItem('userDisplayName');
+                socket.send(JSON.stringify({
+                    type: 'auth',
+                    user_id: userId,
+                    username: displayName,
+                    token: localStorage.getItem('authToken')
+                }));
+                
+                // Start heartbeat
+                socketHeartbeat = setInterval(function() {
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({type: 'ping'}));
+                    }
+                }, 30000); // Every 30 seconds
+            };
+            
+            socket.onmessage = function(event) {
+                console.log('WebSocket message received:', event.data);
+                
+                try {
+                    // Parse message
+                    const message = JSON.parse(event.data);
+                    
+                    // Handle different message types
+                    if (message.type === 'system') {
+                        handleSystemMessage(message);
+                    } else if (message.type === 'chat') {
+                        handleChatMessage(message);
+                    } else if (message.type === 'status') {
+                        handleStatusMessage(message);
+                    } else if (message.type === 'pong') {
+                        // Heartbeat response
+                        console.log('Heartbeat acknowledged');
+                    }
+                } catch (error) {
+                    console.error('Error processing WebSocket message:', error);
+                }
+            };
+            
+            socket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+            
+            socket.onclose = function(event) {
+                console.log(`WebSocket connection closed: ${event.code} ${event.reason}`);
+                
+                // Clear heartbeat
+                if (socketHeartbeat) {
+                    clearInterval(socketHeartbeat);
+                    socketHeartbeat = null;
+                }
+                
+                // Attempt to reconnect with exponential backoff
+                if (!window.isReconnecting) {
+                    window.isReconnecting = true;
+                    const reconnectDelay = 5000; // 5 seconds delay
+                    console.log(`Attempting to reconnect WebSocket in ${reconnectDelay/1000} seconds...`);
+                    
+                setTimeout(function() {
+                        window.isReconnecting = false;
+                        connectWebSocket();
+                    }, reconnectDelay);
+                }
+            };
+            
+            // Store socket reference
+            window.chatSocket = socket;
+            return socket;
+        }
+        
+        function handleSystemMessage(message) {
+            const event = message.event;
+            const data = message.data || {};
+            
+            if (event === 'connected') {
+                console.log('System: Connected to chat server');
+            } else if (event === 'authenticated') {
+                console.log(`System: Authenticated as ${data.username}`);
+            } else if (event === 'error') {
+                console.error(`System Error: ${data.message}`);
+                showNotification(data.message, 'error');
+            }
+        }
+        
+        function handleChatMessage(message) {
+            const chatId = message.chat_id;
+            const data = message.data;
+            
+            // Ignore if no chat ID or message data
+            if (!chatId || !data) return;
+            
+            // Get current active chat
+            const activeChat = document.getElementById('messages-container').dataset.chatId;
+            
+            // Check if this message already exists in the UI (to prevent duplicates)
+            const messageId = data.id || `msg_${data.timestamp}`;
+            if (document.querySelector(`.message[data-message-id="${messageId}"]`)) {
+                console.log(`Message ${messageId} already exists in UI, not adding duplicate`);
+                return;
+            }
+            
+            // If the message has a temp ID format, check if we have an equivalent temp message
+            if (data.user_id === localStorage.getItem('userId')) {
+                // Look for temporary messages with same content and timestamp within 3 seconds
+                const tempMessages = document.querySelectorAll('.message.outgoing');
+                for (const tempMsg of tempMessages) {
+                    const tempContent = tempMsg.querySelector('.message-bubble')?.textContent;
+                    if (tempContent === data.content) {
+                        const timeElement = tempMsg.querySelector('.message-info')?.textContent;
+                        console.log(`Found possible duplicate: temp="${tempContent}" server="${data.content}"`);
+                        
+                        // Update the temp message with the server ID instead of creating a new one
+                        tempMsg.dataset.messageId = messageId;
+                        return;
+                    }
+                }
+            }
+            
+            // Update UI if this is for the current chat
+            if (activeChat === chatId) {
+                // Insert message into UI
+                appendMessageToUI(data);
+            }
+            
+            // Update chat sidebar to show new message
+            updateChatLastMessage(chatId, data);
+        }
+        
+        function handleStatusMessage(message) {
+            const event = message.event;
+            
+            console.log("Received status message:", JSON.stringify(message));
+            
+            if (event === 'typing') {
+                // Extract data from the message object with detailed logging
+                let chatId, userId, username, isTyping;
+                
+                if (message.chat_id && message.user_id !== undefined) {
+                    // Flat structure (chat_id and user_id are direct properties)
+                    console.log("Handling typing status in flat format");
+                    chatId = message.chat_id;
+                    userId = message.user_id;
+                    username = message.username || 'User';
+                    isTyping = message.is_typing;
+                } else if (message.data) {
+                    // Nested structure (data property contains the values)
+                    console.log("Handling typing status in nested data format");
+                    const data = message.data;
+                    chatId = data.chat_id;
+                    userId = data.user_id;
+                    username = data.username || 'User';
+                    isTyping = data.is_typing;
+                } else {
+                    console.log("Invalid typing status message format:", message);
+                    return;
+                }
+                
+                console.log(`Extracted typing data: chatId=${chatId}, userId=${userId}, username=${username}, isTyping=${isTyping}`);
+                
+                // Update typing indicator in UI
+                updateTypingIndicator(chatId, userId, username, isTyping);
+            } else if (event === 'user_status') {
+                // Handle user status update (online/offline)
+                let data = message.data || message;
+                
+                if (data) {
+                    const userId = data.user_id;
+                    const status = data.status;
+                    
+                    console.log(`User status update received for ${userId}: ${status}`);
+                    
+                    // Update user status in UI
+                    updateUserStatus(userId, status);
+                }
+            }
+        }
+        
+        function updateTypingIndicator(chatId, userId, username, isTyping) {
+            // Only show typing indicator for the current active chat
+            const activeChat = document.getElementById('messages-container').dataset.chatId;
+            console.log(`Active chat: ${activeChat}, Message chatId: ${chatId}`);
+            
+            if (activeChat !== chatId) {
+                console.log(`Chat ID mismatch - not updating typing indicator`);
+                return;
+            }
+            
+            // Get current user ID
+            const currentUserId = localStorage.getItem('userId');
+            
+            console.log(`Current user: ${currentUserId}, Message sender: ${userId}, isTyping: ${isTyping}`);
+            
+            // Manually filter out our own typing status messages
+            // The server should exclude these but if we're still receiving them, filter them here
+            if (userId === currentUserId) {
+                console.log(`User ID matches current user - not showing typing indicator for self`);
+                return;
+            }
+            
+            // Log for debugging
+            console.log(`Typing status update: userId=${userId}, username=${username}, isTyping=${isTyping}, chatId=${chatId}`);
+            
+            // Update chat status in header
+            const chatStatusElement = document.querySelector('.chat-window .chat-info .chat-details p');
+            
+            if (!chatStatusElement) {
+                console.log('No chat status element found in the DOM');
+                return;
+            }
+            
+            // Update typing status in UI
+            if (isTyping) {
+                console.log(`Setting typing status to: "${username} is typing..."`);
+                chatStatusElement.textContent = `${username} is typing...`;
+                // Add typing class and remove other classes
+                chatStatusElement.classList.add('typing');
+                chatStatusElement.classList.remove('online', 'offline');
+            } else {
+                console.log(`Setting status back to Online`);
+                chatStatusElement.textContent = 'Online';
+                // Add online class and remove typing class
+                chatStatusElement.classList.add('online');
+                chatStatusElement.classList.remove('typing');
+            }
+        }
+        
+        function updateUserStatus(userId, status) {
+            // Find all chat items for this user
+            const chatItems = document.querySelectorAll(`.chat-item[data-creator-id="${userId}"], .chat-item[data-scanner-id="${userId}"]`);
+            
+            chatItems.forEach(chatItem => {
+                const avatar = chatItem.querySelector('.chat-avatar');
+                
+                // Add status indicator
+                if (status === 'online') {
+                    if (!avatar.classList.contains('online')) {
+                        avatar.classList.add('online');
+                    }
+                } else {
+                    avatar.classList.remove('online');
+                }
+            });
+            
+            // Update chat status in header if this is the current chat partner
+            const chatStatusElement = document.querySelector('.chat-window .chat-info .chat-details p');
+            const chatAvatar = document.querySelector('.chat-window .chat-info .chat-avatar');
+            
+            // Log for debugging
+            console.log(`User status update: userId=${userId}, status=${status}`);
+            if (chatStatusElement) {
+                console.log(`Chat status element data: otherUserId=${chatStatusElement.dataset.otherUserId}`);
+            }
+            
+            // Debug all attributes
+            console.log(`All chat status data attributes:`, chatStatusElement ? chatStatusElement.dataset : 'No chat status element');
+            
+            if (chatStatusElement && chatStatusElement.dataset.otherUserId === userId) {
+                console.log(`MATCH FOUND! Setting user status to: ${status}`);
+                
+                // Don't override typing status
+                if (!chatStatusElement.classList.contains('typing')) {
+                    if (status === 'online') {
+                        chatStatusElement.textContent = 'Online';
+                        // Add the appropriate CSS class
+                        chatStatusElement.classList.add('online');
+                        chatStatusElement.classList.remove('offline');
+                        // Also update avatar
+                        if (chatAvatar) {
+                            chatAvatar.classList.add('online');
+                        }
+                    } else {
+                        chatStatusElement.textContent = 'Offline';
+                        // Add the appropriate CSS class
+                        chatStatusElement.classList.add('offline');
+                        chatStatusElement.classList.remove('online');
+                        // Also update avatar
+                        if (chatAvatar) {
+                            chatAvatar.classList.remove('online');
+                        }
+                    }
+                }
+            } else {
+                console.log('No match for userId in chat status element');
+            }
+        }
+        
+        function sendTypingStatus(isTyping) {
+            // Get current chat ID
+            const chatId = document.getElementById('messages-container').dataset.chatId;
+            if (!chatId) return;
+            
+            // Get user information
+            const userId = localStorage.getItem('userId');
+            const username = localStorage.getItem('userDisplayName') || localStorage.getItem('username') || 'User';
+            
+            console.log(`Sending typing status: user=${username} (${userId}), isTyping=${isTyping}, chatId=${chatId}`);
+            
+            // Send via WebSocket if available
+            if (window.chatSocket && window.chatSocket.readyState === WebSocket.OPEN) {
+                const payload = {
+                    type: 'status',
+                    event: 'typing',
+                    chat_id: chatId,
+                    user_id: userId,
+                    username: username,
+                    is_typing: isTyping
+                };
+                
+                console.log('Sending typing status payload:', payload);
+                window.chatSocket.send(JSON.stringify(payload));
+            }
+        }
+        
+        function sendChatMessage(chatId, content) {
+            if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                console.error('WebSocket not connected, using fallback method');
+                return false; // Not sent via WebSocket, fallback to HTTP
+            }
+            
+            const userId = localStorage.getItem('userId');
+            const displayName = localStorage.getItem('userDisplayName');
+            
+            websocket.send(JSON.stringify({
+                type: 'chat',
+                chat_id: chatId,
+                data: {
+                    user_id: userId,
+                    username: displayName,
+                    content: content,
+                    timestamp: Date.now()
+                }
+            }));
+            
+            return true; // Sent via WebSocket
+        }
+        
+        function playNotificationSound() {
+            // Create and play a notification sound
+            try {
+                const audio = new Audio('data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAADmADd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjU0AAAAAAAAAAAAAAAAJAAAAAAAAAAAA5jsYNhxAAAAAAD/+9DEAAAJtPl69BEAJRxDq/85EAJGMHg5HAkA4ccjh+cHAAAABh8fweD4IAQBAQBAEBAD/4PggBAEAQBA+D4Pg+CAEAQBAEDnAEAQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0HQdB0Hen3sgYLEH1f7N/hvP9lvdvMPcbvX+6D/2T6vbIthj5fWvZ0v2LkG2HKjSj+wVCQFkCgYDz//jV73KCgXlAgNv1g7F7zt+3PgiJgjJw4xo4/5j6O9pJkkBKFW3LhjnnPH3O3U3ugmERgVGASDJkZOryIXJgQzT8FUFl3TC3tVOPS5nRZokSl5DtSyO++2V9D9ez88j2/lGZs9TVNFGWcd9KY7xFmtyPb+3ZrDntXtViMFnYtBURgwImCBAYDVHfWMnp9fsSf7Pt7LmX8/5/p735PscNL/t/r/R0rVncySXUzZEcyQGPBDqPfbT0+z6eWtZ/fL8f3/ncv8/f+hv/f/v/+/3+sdrUoez+iUlJSUlJSUMkRIiRMiJESIAAEAADIARYJASgR2LBRgubJEhGfGIhEMVEYmZI3ZjNqRRLzBFBaJlRQWuUC4Bi4UjOoL2Jl7kx2lIRhIKIxhBGVNVLRnRUGpigVGJBEYGBJgIBmDgKGAECSAQAUg7jAxdTGYFMJgEwCADAYDMAAxgQ2ATFiqykBzGwaTAACUgYGsAgMmHAjmQcWNYZEA4QOAAQGBQBHQRIgNLxEQk5URVJVVSRERERESMRIiMiMRIyIiIiRgcHBwcHLBYqqqqqh4qqqpXiwWC4WCwWCwXixaLBaLqxaKqqqqqqqqqLBYLLxYLFosWCwWCwWCqqqqqqqqqrFiwWCwWCwWLFiwXixYLBYLFovFixXixYsFixYLBYLBYLBVVVVVVVVVVYLFgsFixYsWLFiwWiqqqqosWLFosWCwWCwWCwVVVVVVVVVYsWCwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVUxBTUUzLjk5LjWqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqg=');
+                audio.volume = 0.2;
+                audio.play();
+            } catch (e) {
+                console.error('Error playing notification sound:', e);
+            }
+        }
+
+        function initializeUser() {
+            // Check for existing user
+            const userId = localStorage.getItem('userId');
+            const username = localStorage.getItem('username');
+            
+            if (userId) {
+                // Use existing user
+                const displayName = localStorage.getItem('displayName') || username || 'User';
+                console.log(`Using existing user: ${userId} (${displayName})`);
+                return {
+                    userId: userId,
+                    username: displayName
+                };
+            }
+            
+            // Generate new user ID
+            const newUserId = 'user_' + Math.random().toString(36).substring(2, 10);
+            const defaultName = 'User' + newUserId.substring(5, 9);
+            
+            // Store in localStorage
+            localStorage.setItem('userId', newUserId);
+            localStorage.setItem('username', defaultName);
+            localStorage.setItem('displayName', defaultName);
+            localStorage.setItem('userCreatedAt', Date.now());
+            
+            console.log(`Created new user: ${newUserId} (${defaultName})`);
+            
+            return {
+                userId: newUserId,
+                username: defaultName
+            };
+        }
+
+        function authenticateWebSocket(ws) {
+            const userId = localStorage.getItem('userId');
+            const username = localStorage.getItem('displayName') || localStorage.getItem('username') || 'Anonymous';
+            
+            if (!userId) {
+                console.error('No user ID found, cannot authenticate WebSocket');
+                return;
+            }
+            
+            // Store username in localStorage (in case it was updated)
+            localStorage.setItem('username', username);
+            
+            // Send authentication message
+            const authMessage = {
+                type: 'auth',
+                user_id: userId,
+                username: username,
+                timestamp: Date.now()
+            };
+            
+            // Send as string
+            ws.send(JSON.stringify(authMessage));
+        }
+    </script>
+</body>
+</html> 
