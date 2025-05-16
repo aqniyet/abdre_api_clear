@@ -21,6 +21,63 @@ The latest update implements a typing status indicator feature that:
 - Properly handles different message formats for backward compatibility
 - Excludes sending typing status back to the user who is typing
 
+### Code Cleanup and Consolidation
+
+The codebase has been streamlined to improve maintainability:
+
+- Removed redundant files and unused assets
+- Consolidated authentication logic to use microservices
+- Standardized WebSocket handling in a dedicated service
+- Improved JavaScript organization with modular patterns
+- Better organized template structure
+
+For details on the cleanup process, see:
+- `consolidate_recommendations.md`
+- `codebase_cleanup_checklist.md`
+
+## Architecture
+
+### Microservices
+
+ABDRE Chat uses a microservice architecture for better scalability and separation of concerns:
+
+- **API Gateway**: Routes requests to appropriate services
+- **Auth Service**: Handles user authentication and session management
+- **User Service**: Manages user profiles and settings
+- **Chat Service**: Handles chat rooms, messages, and QR connections
+- **Realtime Service**: WebSocket service for real-time messaging and status updates
+
+### Frontend
+
+The frontend is built with a clean HTML/CSS/JavaScript stack:
+
+- Pure JavaScript with modular organization
+- ABDRE namespace pattern for encapsulation
+- Flask templating for server-side rendering
+- Modern CSS with responsive design
+
+## Setup and Installation
+
+See the [Setup Guide](docs/setup.md) for detailed instructions.
+
+## Development
+
+To start the development environment:
+
+```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Start all services
+python service_launcher.py
+```
+
+The application will be available at http://localhost:8000
+
+## Contributing
+
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+
 ## Project Structure
 
 ```
@@ -37,32 +94,6 @@ abdre_api/
 └── realtime_service/        # WebSocket service for real-time features
 ```
 
-## Setup and Installation
-
-1. Clone the repository:
-   ```
-   git clone https://github.com/aqniyet/abdre_api_clear.git
-   cd abdre_api_clear
-   ```
-
-2. Create and activate a virtual environment:
-   ```
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. Install dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
-
-4. Start the services:
-   ```
-   python service_launcher.py
-   ```
-
-5. Open your browser and navigate to http://localhost:8000
-
 ## Technology Stack
 
 - **Backend**: Python, Flask, FastAPI
@@ -78,47 +109,6 @@ For development purposes, you can run the application with hot-reloading enabled
 ```
 python service_launcher.py --dev
 ```
-
-## Architecture
-
-### Backend
-
-The backend is organized into the following components:
-
-- **Controllers**: Handle HTTP requests and render responses
-  - `render_controller.py`: Handles rendering of HTML templates
-  - `chat_controller.py`: Handles chat-specific API requests
-
-- **Services**: Business logic layer
-  - `template_service.py`: Manages template rendering functionality
-  - `chat_service.py`: Core chat functionality
-  - `chat_preview_service.py`: Generates preview data for chat listings
-
-- **Repositories**: Data access layer
-  - `chat_repository.py`: Handles chat data persistence and retrieval
-
-- **Utils**: Helper utilities
-  - `template_context.py`: Prepares context data for templates
-  - `message_formatter.py`: Formats chat messages for display
-  - `chat_list_formatter.py`: Formats chat lists for display
-  - `asset_versioner.py`: Manages asset versioning for cache busting
-
-- **Routes**: URL routing
-  - `web_routes.py`: Defines the web application routes
-
-### Frontend
-
-The frontend is organized as follows:
-
-- **Templates**: Server-rendered HTML templates
-  - Page templates: `chat.html`, `my_chats.html`
-  - Components: `message_list.html`, `chat_list.html`
-
-- **Static**: Static assets
-  - JavaScript
-    - Enhancers: `chat_enhancer.js`, `chat_list_enhancer.js`
-  - CSS
-    - `style.css`: Main stylesheet
 
 ## Server-Side Rendering
 

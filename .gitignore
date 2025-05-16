@@ -69,3 +69,8 @@ cleanup_recommendation.md
 # Temporary directories
 tmp/
 temp/
+
+# Cleanup files
+remove_redundant_files.sh
+consolidate_recommendations.md
+codebase_cleanup_checklist.md
